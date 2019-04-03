@@ -1,6 +1,7 @@
 vendor/
 .vscode/
 build/
+*.code-workspace
 
 # Prerequisites
 *.d

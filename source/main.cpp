@@ -17,7 +17,7 @@
 
 struct GameContext {
 	SDLApplication* app = nullptr;
-	std::atomic<bool> done = false;
+	std::atomic_bool done = false; // TODO: consider using SDL atomics instead of std to avoid the template
 	//*game
 	//*engine
 };
@@ -218,7 +218,7 @@ bool initOpenGL(SDLApplication& app)
 	for (int i = 0; i < numExtensions; ++i) {
 		const char* extStr = (const char*)glGetStringi(GL_EXTENSIONS, i);
 		size_t extStrLen = strlen(extStr);
-		strncpy_s(dStr, totalLen, extStr, extStrLen-1);
+		_strncpy_s(dStr, totalLen, extStr, extStrLen-1);
 		dStr += extStrLen;
 		*dStr = ' ';
 		++dStr;

@@ -50,3 +50,10 @@ void yieldThread();
 void showErrorBox(const char* text, const char* caption);
 
 void setWindowIcon(const WindowData *windowData);
+
+
+#if defined(_MSC_VER)
+    #define _strncpy_s(dest,destsz,src,count)   strncpy_s(dest,destsz,src,count)
+#else
+    #define _strncpy_s(dest,destsz,src,count)   strncpy(dest,src,count)
+#endif

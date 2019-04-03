@@ -1,4 +1,4 @@
-#if defined(QUAGMIRE_WIN32) && QUAGMIRE_WIN32 != 0
+#if defined(_WIN32)
 
 #if defined(QUAGMIRE_SLOWCHECKS) && QUAGMIRE_SLOWCHECKS != 0
 #define ASSERT_TIMER_INITIALIZED	assert(qpc_countsPerSecond != 0 && "High performance timer not initialized")
