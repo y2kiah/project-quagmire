@@ -22,21 +22,48 @@ typedef double   r64;
 typedef float    f32;
 typedef double   f64;
 
+
 // Assert macros
 #if defined(QUAGMIRE_SLOWCHECKS) && QUAGMIRE_SLOWCHECKS != 0
-#define assert(a)	if(!(a)) {*(int *)0 = 0;}
+
+#ifdef SDL_assert_h_
+#define assert(a)	        SDL_assert((a))
 #else
-#define assert(a)
+#define assert(a)	        if(!(a)) {*(int *)0 = 0;}
 #endif
 
-#if defined(QUAGMIRE_SLOWCHECKS) && QUAGMIRE_SLOWCHECKS != 0
 #define ASSERT_GL_ERROR		assert(glGetError() == GL_NO_ERROR)
+
 #else
+
+#define assert(a)
 #define ASSERT_GL_ERROR
+
 #endif
+
 
 // Alignment macros, use only with pow2 alignments
 #define is_aligned(addr, bytes)     (((uintptr_t)(const void *)(addr)) % (bytes) == 0)
 
 #define _align_mask(addr, mask)     (((uintptr_t)(addr)+(mask))&~(mask))
 #define align(addr, bytes)          _align_mask(addr,(bytes)-1)
+
+
+// min/max functions, should avoid using macros for this due to possible double-evaluation
+inline u8  min(u8 a, u8 b)   { return (a < b ? a : b); }
+inline i8  min(i8 a, i8 b)   { return (a < b ? a : b); }
+inline u16 min(u16 a, u16 b) { return (a < b ? a : b); }
+inline i16 min(i16 a, i16 b) { return (a < b ? a : b); }
+inline u32 min(u32 a, u32 b) { return (a < b ? a : b); }
+inline i32 min(i32 a, i32 b) { return (a < b ? a : b); }
+inline u64 min(u64 a, u64 b) { return (a < b ? a : b); }
+inline i64 min(i64 a, i64 b) { return (a < b ? a : b); }
+
+inline u8  max(u8 a, u8 b)   { return (a > b ? a : b); }
+inline i8  max(i8 a, i8 b)   { return (a > b ? a : b); }
+inline u16 max(u16 a, u16 b) { return (a > b ? a : b); }
+inline i16 max(i16 a, i16 b) { return (a > b ? a : b); }
+inline u32 max(u32 a, u32 b) { return (a > b ? a : b); }
+inline i32 max(i32 a, i32 b) { return (a > b ? a : b); }
+inline u64 max(u64 a, u64 b) { return (a > b ? a : b); }
+inline i64 max(i64 a, i64 b) { return (a > b ? a : b); }

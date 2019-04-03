@@ -2,7 +2,7 @@
 #define _HANDLE_MAP_H
 
 /**
- * @struct id_t
+ * @struct Id_t
  * @var	free		0 if active, 1 if slot is part of freelist, only applicable to inner ids
  * @var	typeId		relates to itemTypeId parameter of handle_map
  * @var	generation	incrementing generation of data at the index, for tracking accesses to old data
@@ -13,7 +13,7 @@
  *						free==1, index of next free slot, forming an embedded linked list
  * @var	value		unioned with the above four vars, used for direct comparison of ids
  */
-struct id_t {
+struct Id_t {
 	union {
 		/**
 		* the order of this bitfield is important for sorting prioritized by free, then typeId,
@@ -29,15 +29,15 @@ struct id_t {
 	};
 };
 
-#define null_id_t	id_t{}
+#define null_Id_t	Id_t{}
 
 
-// id_t comparison functions
+// Id_t comparison functions
 
-bool operator==(const id_t& a, const id_t& b) { return (a.value == b.value); }
-bool operator!=(const id_t& a, const id_t& b) { return (a.value != b.value); }
-bool operator< (const id_t& a, const id_t& b) { return (a.value < b.value); }
-bool operator> (const id_t& a, const id_t& b) { return (a.value > b.value); }
+bool operator==(const Id_t& a, const Id_t& b) { return (a.value == b.value); }
+bool operator!=(const Id_t& a, const Id_t& b) { return (a.value != b.value); }
+bool operator< (const Id_t& a, const Id_t& b) { return (a.value < b.value); }
+bool operator> (const Id_t& a, const Id_t& b) { return (a.value > b.value); }
 
 
 /**
@@ -51,7 +51,7 @@ bool operator> (const id_t& a, const id_t& b) { return (a.value > b.value); }
 struct handle_map {
 	// Variables
 	void*	items = nullptr;			// array of stored objects, must have one extra element above capacity used in defragment
-	id_t*	sparseIds = nullptr;		// array of id_ts, these are "inner" ids indexing into items
+	Id_t*	sparseIds = nullptr;		// array of Id_ts, these are "inner" ids indexing into items
 	u32*	denseToSparse = nullptr;	// array of indices into sparseIds array
 
 	u32		length = 0;					// current number of objects contained in map
@@ -72,9 +72,9 @@ struct handle_map {
 	 * @param[in]	handle		id of the item
 	 * @returns pointer to the item
 	 */
-	void* at(id_t handle);
+	void* at(Id_t handle);
 	
-	void* operator[](id_t handle) {
+	void* operator[](Id_t handle) {
 		return at(handle);
 	}
 
@@ -83,7 +83,7 @@ struct handle_map {
 	 * @param[in]	handle		id of the item
 	 * @returns true if item removed, false if not found
 	 */
-	bool erase(id_t handle);
+	bool erase(Id_t handle);
 
 	/**
 	 * Add one item to the store, return the id, optionally return pointer to the new object for
@@ -92,7 +92,7 @@ struct handle_map {
 	 * @param[out]	out		optional return pointer to the new object
 	 * @returns the id
 	 */
-	id_t insert(void* src = nullptr, void** out = nullptr);
+	Id_t insert(void* src = nullptr, void** out = nullptr);
 
 	/**
 	 * Removes all items, leaving the sparseIds set intact by adding each entry to the free-
@@ -115,7 +115,7 @@ struct handle_map {
 	/**
 	* @returns true if handle handle refers to a valid item
 	*/
-	bool has(id_t handle);
+	bool has(Id_t handle);
 
 	/**
 	 * defragment uses the comparison function @c comp to establish an ideal order for the dense
@@ -137,12 +137,12 @@ struct handle_map {
 	/**
 	 * @returns index into the inner DenseSet for a given outer id
 	 */
-	u32 getInnerIndex(id_t handle);
+	u32 getInnerIndex(Id_t handle);
 
 	/**
 	 * @return the outer id (handle) for a given dense set index
 	 */
-	id_t getHandleForInnerIndex(size_t innerIndex);
+	Id_t getHandleForInnerIndex(size_t innerIndex);
 
 	inline void* item(u32 innerIndex)
 	{
@@ -178,7 +178,7 @@ struct handle_map {
 	 * Constructor
 	 * @param	elementSizeB	size in bytes of individual objects stored
 	 * @param	capacity		maximum number of objects that can be stored
-	 * @param	itemTypeId		typeId used by the id_t::typeId variable for this container
+	 * @param	itemTypeId		typeId used by the Id_t::typeId variable for this container
 	 * @param	buffer
 	 *	Optional pre-allocated buffer for all dynamic storage used in the handle_map, with ample
 	 *	size (obtained by call to getTotalBufferSize). If passed, the memory is not owned by
@@ -202,8 +202,8 @@ struct handle_map {
 		items = buffer;
 		// round up to aligned storage
 		// add an extra item to the items array for scratch memory used by defragment sort
-		sparseIds = (id_t*)align((uintptr_t)items + (elementSizeB * (capacity+1)), 8);
-		denseToSparse = (u32*)align((uintptr_t)sparseIds + (sizeof(id_t) * capacity), 4);
+		sparseIds = (Id_t*)align((uintptr_t)items + (elementSizeB * (capacity+1)), 8);
+		denseToSparse = (u32*)align((uintptr_t)sparseIds + (sizeof(Id_t) * capacity), 4);
 
 		// check resulting alignment in case element storage plus padding doesn't leave us 8-byte aligned
 		assert(is_aligned(sparseIds, 8) && "sparseIds not properly aligned");
@@ -214,7 +214,7 @@ struct handle_map {
 		reset();
 	}
 
-	handle_map::~handle_map() {
+	~handle_map() {
 		if (_memoryOwned && items) {
 			free(items);
 		}
@@ -227,20 +227,20 @@ size_t handle_map::getTotalBufferSize(u16 elementSizeB, u32 capacity)
 	// handle aligned storage, which may increase total size due to padding between buffers
 	// add an extra item to the items array for scratch memory used by defragment sort
 	size_t size = align(elementSizeB * (capacity+1), 8);
-	size = align(size + (sizeof(id_t) * capacity), 4);
+	size = align(size + (sizeof(Id_t) * capacity), 4);
 	size += (sizeof(u32) * capacity);
 	return size;
 }
 
 
-id_t handle_map::insert(void* src, void** out)
+Id_t handle_map::insert(void* src, void** out)
 {
 	assert(length < capacity && "handle_map is full");
-	id_t handle = null_id_t;
+	Id_t handle = null_Id_t;
 	
 	if (length < capacity) {
 		u32 sparseIndex = freeListFront;
-		id_t innerId = sparseIds[sparseIndex];
+		Id_t innerId = sparseIds[sparseIndex];
 
 		freeListFront = innerId.index; // the index of a free slot refers to the next free slot
 
@@ -275,13 +275,13 @@ id_t handle_map::insert(void* src, void** out)
 }
 
 
-bool handle_map::erase(id_t handle)
+bool handle_map::erase(Id_t handle)
 {
 	if (!has(handle)) {
 		return false;
 	}
 
-	id_t innerId = sparseIds[handle.index];
+	Id_t innerId = sparseIds[handle.index];
 	u32 innerIndex = innerId.index;
 
 	// put this slot at the front of the freelist
@@ -319,7 +319,7 @@ void handle_map::clear()
 	if (length > 0) {
 		for (u32 i = 0; i < length; ++i) {
 			u32 sparseIndex = denseToSparse[i];
-			id_t innerId = sparseIds[sparseIndex];
+			Id_t innerId = sparseIds[sparseIndex];
 			innerId.free = 1;
 			innerId.index = freeListFront;
 			sparseIds[sparseIndex] = innerId;
@@ -339,14 +339,14 @@ void handle_map::clear()
 
 void handle_map::reset()
 {
-	id_t innerId = { 0, 0, sparseIds[0].typeId, 1 };
+	Id_t innerId = { 0, 0, sparseIds[0].typeId, 1 };
 	for (u32 i = 0; i < capacity; ++i) {
 		++innerId.index;
 		sparseIds[i].value = innerId.value;
 	}
 
 	freeListFront = 0;
-	sparseIds[capacity-1].index = ULONG_MAX;
+	sparseIds[capacity-1].index = UINT_MAX;
 	
 	length = 0;
 	_fragmented = 0;
@@ -358,22 +358,22 @@ void handle_map::reset()
 }
 
 
-void* handle_map::at(id_t handle)
+void* handle_map::at(Id_t handle)
 {
 	void* pItem = nullptr;
 	if (has(handle)) {
-		id_t innerId = sparseIds[handle.index];
+		Id_t innerId = sparseIds[handle.index];
 		pItem = item(innerId.index);
 	}
 	return pItem;
 }
 
 
-bool handle_map::has(id_t handle)
+bool handle_map::has(Id_t handle)
 {
 	assert(handle.index < capacity && "handle index out of range");
 	
-	id_t innerId = sparseIds[handle.index];
+	Id_t innerId = sparseIds[handle.index];
 	
 	assert(innerId.free == 0 && "handle to a removed object");
 	assert(innerId.index < length && "inner index out of range");
@@ -388,9 +388,9 @@ bool handle_map::has(id_t handle)
 }
 
 
-u32 handle_map::getInnerIndex(id_t handle)
+u32 handle_map::getInnerIndex(Id_t handle)
 {
-	u32 index = ULONG_MAX;
+	u32 index = UINT_MAX;
 	if (has(handle)) {
 		index = sparseIds[handle.index].index;
 	}
@@ -398,12 +398,12 @@ u32 handle_map::getInnerIndex(id_t handle)
 }
 
 
-id_t handle_map::getHandleForInnerIndex(size_t innerIndex)
+Id_t handle_map::getHandleForInnerIndex(size_t innerIndex)
 {
 	assert(innerIndex < length && innerIndex >= 0 && "inner index out of range");
 	
 	u32 sparseIndex = denseToSparse[innerIndex];
-	id_t handle = sparseIds[sparseIndex];
+	Id_t handle = sparseIds[sparseIndex];
 	handle.index = sparseIndex;
 	
 	return handle;

@@ -112,7 +112,7 @@ struct dense_queue {
 		items = buffer;
 	}
 
-	dense_queue::~dense_queue() {
+	~dense_queue() {
 		if (_memoryOwned && items) {
 			free(items);
 		}

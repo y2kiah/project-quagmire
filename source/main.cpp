@@ -10,14 +10,14 @@
 //#include <utility/Logger.h>
 //#include <tests/Test.h>
 #include "platform/platform.cpp"
-#include "platform/win32_timer.cpp"
+#include "platform/timer.cpp"
 #include "engine.cpp"
 #include "game.cpp"
 
 
 struct GameContext {
 	SDLApplication* app = nullptr;
-	std::atomic_bool done = false; // TODO: consider using SDL atomics instead of std to avoid the template
+	std::atomic_bool done; // TODO: consider using SDL atomics instead of std to avoid the template
 	//*game
 	//*engine
 };
@@ -29,6 +29,7 @@ struct GameContext {
 int gameProcess(void* ctx)
 {
 	GameContext& gameContext = *(GameContext*)ctx;
+	gameContext.done = false;
 	SDLApplication& app = *(gameContext.app);
 	Timer timer;
 	uint64_t frame = 0;
@@ -213,23 +214,23 @@ bool initOpenGL(SDLApplication& app)
 	for (int i = 0; i < numExtensions; ++i) {
 		totalLen += strlen((const char*)glGetStringi(GL_EXTENSIONS, i)) + 1;
 	}
+	
 	char* glExtensions = (char*)malloc(totalLen);
-	char* dStr = glExtensions;
+	memset(glExtensions, 0, totalLen);
 	for (int i = 0; i < numExtensions; ++i) {
 		const char* extStr = (const char*)glGetStringi(GL_EXTENSIONS, i);
-		size_t extStrLen = strlen(extStr);
-		_strncpy_s(dStr, totalLen, extStr, extStrLen-1);
-		dStr += extStrLen;
-		*dStr = ' ';
-		++dStr;
+		_strcat_s(glExtensions, totalLen, extStr);
+		if (i < numExtensions-1) {
+			_strcat_s(glExtensions, totalLen, " ");
+		}
 	}
-	glExtensions[totalLen-1] = '\0';
+	printf("%s\n", glExtensions);
 	//logger.debug(Logger::Category_Video, "OpenGL Extensions: %s\n", glExtensions.c_str());
 
 	// give the extensions string to the SOIL library
 	//SOIL_set_gl_extensions_string(glExtensions.c_str());
+	
 	free(glExtensions);
-
 
 	// This makes our buffer swap syncronized with the monitor's vertical refresh
 	SDL_GL_SetSwapInterval(1);
@@ -296,26 +297,26 @@ int main(int argc, char *argv[])
 	//struct Something {
 	//	u32 a, b, c, d;
 	//};
-	typedef id_t Something;
+	using Something = Id_t;
 	Something s = { 1, 1, 1, 1 };
 	handle_map testMap(sizeof(Something), 100, 1);
 	Something* items = (Something*)testMap.items;
-	id_t h1 = testMap.insert();
-	id_t h2 = testMap.insert(&s);
+	Id_t h1 = testMap.insert();
+	Id_t h2 = testMap.insert(&s);
 	Something* s3 = nullptr;
-	id_t h3 = testMap.insert(&s, (void**)&s3);
-	*s3 = { 3, 3, 3, 3 }; 
+	Id_t h3 = testMap.insert(&s, (void**)&s3);
+	*s3 = { 3, 3, 3, 1 }; 
 	testMap.erase(h3);
 
-	auto component_insert = [](handle_map& hm, Something&& val)->id_t {
+	auto component_insert = [](handle_map& hm, Something&& val)->Id_t {
 		return hm.insert((void*)&val);
 	};
 
-	id_t h4 = component_insert(testMap, { 4, 4, 4, 4 });
+	Id_t h4 = component_insert(testMap, { 4, 4, 4, 1 });
 	
 	testMap.erase(h4);
 	testMap.insert();
-	component_insert(testMap, { 5, 5, 5, 5 });
+	component_insert(testMap, { 5, 5, 5, 1 });
 	testMap.defragment([](void*a, void*b)->bool {
 		return a && b && ((Something*)a)->index > ((Something*)b)->index;
 	});

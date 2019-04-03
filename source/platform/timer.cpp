@@ -1,5 +1,3 @@
-#if defined(_WIN32)
-
 #if defined(QUAGMIRE_SLOWCHECKS) && QUAGMIRE_SLOWCHECKS != 0
 #define ASSERT_TIMER_INITIALIZED	assert(qpc_countsPerSecond != 0 && "High performance timer not initialized")
 #else
@@ -9,14 +7,42 @@
 static i64 qpc_countsPerSecond = 0;
 static f64 qpc_secondsPerCount = 0.0;
 
+#if defined(_WIN32)
+
+inline i64 getPerformanceFrequency() {
+	i64 freq = 0;
+	SetThreadAffinityMask(GetCurrentThread(), 1);
+
+	// get high performance counter frequency
+	BOOL result = QueryPerformanceFrequency((LARGE_INTEGER*)&freq);
+	return (result == 0 ? 0 : freq);
+}
+
+inline i64 getPerformanceCounter() {
+	ASSERT_TIMER_INITIALIZED;
+	i64 now = 0;
+	BOOL result = QueryPerformanceCounter((LARGE_INTEGER*)&now);
+	return (result == 0 ? -1 : now);
+}
+
+#else
+
+inline i64 getPerformanceFrequency() {
+	return (i64)SDL_GetPerformanceFrequency();
+}
+
+inline i64 getPerformanceCounter() {
+	ASSERT_TIMER_INITIALIZED;
+	return (i64)SDL_GetPerformanceCounter();
+}
+
+#endif
+
+
 
 i64 timer_queryCounts()
 {
-	ASSERT_TIMER_INITIALIZED;
-
-	i64 now = 0;
-	QueryPerformanceCounter((LARGE_INTEGER *)&now);
-	return now;
+	return getPerformanceCounter();
 }
 
 i64 timer_queryCountsSince(i64 startCounts)
@@ -48,11 +74,9 @@ f64 timer_millisBetween(i64 startCounts, i64 stopCounts)
 
 bool initHighPerfTimer()
 {
-	SetThreadAffinityMask(GetCurrentThread(), 1);
-
 	// get high performance counter frequency
-	BOOL result = QueryPerformanceFrequency((LARGE_INTEGER *)&qpc_countsPerSecond);
-	if (result == 0 || qpc_countsPerSecond == 0) {
+	qpc_countsPerSecond = getPerformanceFrequency();
+	if (qpc_countsPerSecond == 0) {
 		//debugPrintf("Timer::initTimer: QueryPerformanceFrequency failed (error %d)\n", GetLastError());
 		return false;
 	}
@@ -60,9 +84,7 @@ bool initHighPerfTimer()
 	qpc_secondsPerCount = 1.0 / (f64)(qpc_countsPerSecond);
 
 	// test counter function
-	i64 dummy = 0;
-	result = QueryPerformanceCounter((LARGE_INTEGER *)&dummy);
-	if (result == 0) {
+	if (getPerformanceCounter() == -1) {
 		//debugPrintf("Timer::initTimer: QueryPerformanceCounter failed (error %d)\n", GetLastError());
 		return false;
 	}
@@ -90,8 +112,8 @@ i64 Timer::start()
 	countsPassed = 0;
 	millisPassed = 0;
 	secondsPassed = 0;
-
-	QueryPerformanceCounter((LARGE_INTEGER *)&startCounts);
+	
+	startCounts = getPerformanceCounter();
 
 	stopCounts = startCounts;
 	return startCounts;
@@ -99,13 +121,11 @@ i64 Timer::start()
 
 i64 Timer::stop()
 {
-	ASSERT_TIMER_INITIALIZED;
-
 	// query the current counts from QPC
-	QueryPerformanceCounter((LARGE_INTEGER *)&stopCounts);
+	stopCounts = getPerformanceCounter();
 
 	// get time passed since start
-	countsPassed = __max(stopCounts - startCounts, 0LL);
+	countsPassed = max(stopCounts - startCounts, 0LL);
 
 	secondsPassed = (f64)(countsPassed) * secondsPerCount;
 	millisPassed = secondsPassed * 1000.0;
@@ -125,14 +145,11 @@ i64 Timer::queryCurrentCounts()
 {
 	ASSERT_TIMER_INITIALIZED;
 
-	i64 now = 0;
-	QueryPerformanceCounter((LARGE_INTEGER *)&now);
-	return now - startCounts;
+	i64 now = getPerformanceCounter();
+	return max(now - startCounts, 0LL);
 }
 
 f64 Timer::queryCurrentSeconds()
 {
 	return (queryCurrentCounts() * secondsPerCount);
 }
-
-#endif

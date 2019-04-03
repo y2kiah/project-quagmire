@@ -6,10 +6,18 @@
 #define GLEW_STATIC
 #define GLEW_NO_GLU
 #define NANOVG_GL3_IMPLEMENTATION
+
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 
 #define _VERTEX_
 #define _TESS_CONTROL_
 #define _TESS_EVAL_
 #define _GEOMETRY_
 #define _FRAGMENT_
+
+#if defined(QUAGMIRE_SLOWCHECKS) && QUAGMIRE_SLOWCHECKS != 0
+#define SDL_ASSERT_LEVEL 3
+#else
+#define SDL_ASSERT_LEVEL 1
+#endif

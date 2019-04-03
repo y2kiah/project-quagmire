@@ -2,8 +2,10 @@
 static void getPreferencesPath_utf8(char* dst)
 {
 	char* path = SDL_GetPrefPath(PROGRAM_NAME, PROGRAM_NAME);
-	strcpy_s(dst, MAXPATH, path);
-	SDL_free(path);
+	if (path) {
+        _strcpy_s(dst, MAXPATH, path);
+	    SDL_free(path);
+    }
 }
 
 // TODO: rewrite this when we have a way to convert char* to wchar_t* without wstring
@@ -20,21 +22,15 @@ static void getPreferencesPath_utf8(char* dst)
 
 #ifdef _WIN32
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-
 #include "Windows.h"
-#undef min
-#undef max
 
-static void getCurrentWorkingDirectory(char* dst)
+static void getCurrentWorkingDirectory(char* dst, int max)
 {
-	GetCurrentDirectoryA(MAXPATH, dst);
+	GetCurrentDirectoryA(max, dst);
 }
 
 // TODO: rewrite this when we have a way to convert char* to wchar_t* without wstring
-/*static wchar_t* getCurrentWorkingDirectoryW()
+/*static void getCurrentWorkingDirectoryW(wchar_t* dst)
 {
 	std::wstring ws;
 
@@ -70,16 +66,17 @@ void setWindowIcon(const WindowData* windowData)
 
 #else
 
-std::string getCurrentWorkingDirectory()
+static void getCurrentWorkingDirectory(char* dst, int max)
 {
-	std::string s;
-	auto c = SDL_GetBasePath();
-	s.assign(c);
-	SDL_free(c);
-	return s;
+	char* path = SDL_GetBasePath();
+	if (path) {
+        _strcpy_s(dst, max, path);
+	    SDL_free(path);
+    }
 }
 
-std::wstring getCurrentWorkingDirectoryW()
+// TODO: rewrite this when we have a way to convert char* to wchar_t* without wstring
+/*static void getCurrentWorkingDirectoryW(wchar_t* dst)
 {
 	std::wstring ws;
 
@@ -87,15 +84,28 @@ std::wstring getCurrentWorkingDirectoryW()
 	ws.assign(s.begin(), s.end());
 
 	return ws;
-}
+}*/
+
+#include <unistd.h>
+#ifdef _SC_PRIORITY_SCHEDULING
+#include <sched.h>
 
 void yieldThread()
 {
-	// TODO: look for SDL yield or posix yield
-	//std::this_thread::yield();
+	sched_yield();
 }
 
-void showErrorBox(char *text, char *caption)
+#else
+
+#include <thread>
+void yieldThread()
+{
+	std::this_thread::yield();
+}
+
+#endif
+
+void showErrorBox(const char* text, const char* caption)
 {
 	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, caption, text, nullptr);
 }
@@ -125,8 +135,8 @@ bool getEnvironmentInfo(Environment* env)
 {
 	// TODO: probably need to convert this UTF8 string to wchar_t for windows
 	getPreferencesPath_utf8(env->preferencesPath);
-	getCurrentWorkingDirectory(env->currentWorkingDirectory);
+	getCurrentWorkingDirectory(env->currentWorkingDirectory, sizeof(env->currentWorkingDirectory));
 	
-	return env->preferencesPath != nullptr
-		&& env->currentWorkingDirectory != nullptr;
+	return strlen(env->preferencesPath) 
+		&& strlen(env->currentWorkingDirectory);
 }

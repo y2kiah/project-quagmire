@@ -53,7 +53,11 @@ void setWindowIcon(const WindowData *windowData);
 
 
 #if defined(_MSC_VER)
+    #define _strcpy_s(dest,destsz,src)          strcpy_s(dest,destsz,src)
     #define _strncpy_s(dest,destsz,src,count)   strncpy_s(dest,destsz,src,count)
+    #define _strcat_s(dest,destsz,src)          strcat_s(dest,destsz,src)
 #else
-    #define _strncpy_s(dest,destsz,src,count)   strncpy(dest,src,count)
+    #define _strcpy_s(dest,destsz,src)          strcpy(dest,src)
+    #define _strncpy_s(dest,destsz,src,count)   strncpy(dest,src,min(destsz,count))
+    #define _strcat_s(dest,destsz,src)          strcat(dest,src)
 #endif
