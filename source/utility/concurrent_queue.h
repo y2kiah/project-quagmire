@@ -1,24 +1,29 @@
 /**
 * @struct concurrent_queue
-* concurrent_queue provides functionality for thread-safe enqueue and dequeue operations. This
-* implementation is purposely similar to the MS PPL class (probably the eventual standard)
-* except that the thread safe iterator is not provided, and a wait_pop method is added.
+* concurrent_queue provides functionality for thread-safe enqueue and dequeue operations.
 * @see http://www.justsoftwaresolutions.co.uk/threading/implementing-a-thread-safe-queue-using-condition-variables.html
 * @see http://stackoverflow.com/questions/15278343/c11-thread-safe-queue
 */
 struct concurrent_queue {
-	SDL_mutex		lock;
-	SDL_cond    	cond;
-	vector_queue	queue;
+	SDL_mutex*	lock = nullptr;
+	SDL_cond*	cond = nullptr;
 	
-	// padding added for 64 byte total size, to avoid false sharing of the concurrent_queue's cache
-	// line when they are kept in an array
-	u32     			_padding[4];
+	dense_queue queue;
+	
+	// padding added for 64 byte total size, to avoid potential false sharing of the concurrent_queue's cache line
+	u8     		_padding[16] = {};
+
 
 	/**
 	* Constructors
 	*/
-	explicit concurrent_queue() {
+	explicit concurrent_queue(u16 elementSizeB,
+							  u32 capacity,
+							  void* buffer = nullptr) :
+		queue(elementSizeB, capacity, buffer)
+	{
+		assert(sizeof(concurrent_queue) == 64);
+
 		lock = SDL_CreateMutex();
 		cond = SDL_CreateCond();
 	}
@@ -55,10 +60,10 @@ struct concurrent_queue {
 	* Pops an item from the queue, or waits for specified timeout period for an item.
 	* Most likely would use this in the main thread to pop items pushed from a worker thread.
 	* @param	outData	   memory location to move item into, only modified if true is returned
-	* @param	timeout    timeout period in milliseconds
+	* @param	timeoutMS  timeout period in milliseconds
 	* @returns true if pop succeeds, false if queue is empty for duration
 	*/
-	bool try_pop(void** outData, const std::chrono::milliseconds& timeout);
+	bool try_pop(void** outData, u32 timeoutMS);
 
 	/**
 	* Pops several items from the queue, or returns immediately without waiting if the list is
@@ -112,22 +117,22 @@ struct concurrent_queue {
 	* concurrently with calls to push*, pop*, and empty methods.
 	* @returns size of the queue
 	*/
-	size_t unsafe_size() { return queue.size(); }
+	size_t unsafe_size() { return queue.length; }
 
 	/**
 	* unsafe_capacity is not concurrency-safe and can produce incorrect results if called
 	* concurrently with calls to push*, pop*, and empty methods.
 	* @returns capacity of the queue
 	*/
-	size_t unsafe_capacity() { return queue.capacity(); }
+	size_t unsafe_capacity() { return queue.capacity; }
 };
 
 
-inline void concurrent_queue::push(void* inData)
+void concurrent_queue::push(void* inData)
 {
 	SDL_LockMutex(lock);
 	
-	queue.push(inData);
+	queue.push_back(inData);
 	
 	SDL_UnlockMutex(lock);
 	SDL_CondSignal(cond);
@@ -136,10 +141,14 @@ inline void concurrent_queue::push(void* inData)
 
 void concurrent_queue::push_all(void* inData, int count)
 {
+	void* src = inData;
+	
 	SDL_LockMutex(lock);
 
-	queue.reserve(queue.size() + inData.size());
-	std::copy(inData.begin(), inData.end(), std::back_inserter(queue));
+	for (int c = 0; c < count; ++c) {
+		queue.push_back(src);
+		src = (void*)((uintptr_t)src + queue.elementSizeB);
+	}
 
 	SDL_UnlockMutex(lock);
 	SDL_CondSignal(cond);
@@ -148,12 +157,13 @@ void concurrent_queue::push_all(void* inData, int count)
 
 bool concurrent_queue::try_pop(void** outData)
 {
+	assert(outData);
+
 	SDL_LockMutex(lock);
 
 	bool result = !queue.empty();
 	if (result) {
-		outData = std::move(queue.front());
-		queue.pop();
+		queue.pop_front(outData);
 	}
 
 	SDL_UnlockMutex(lock);
@@ -162,14 +172,19 @@ bool concurrent_queue::try_pop(void** outData)
 }
 
 
-bool concurrent_queue::try_pop(void** outData, const std::chrono::milliseconds& timeout)
+bool concurrent_queue::try_pop(void** outData, u32 timeoutMS)
 {
 	SDL_LockMutex(lock);
 
-	bool result = cond.wait_for(lock, timeout, [this]{ return !queue.empty(); }));
+	// continue waiting while the queue is empty, even on spurious wakeup
+	// stop waiting if timeout is returned
+	while (SDL_CondWaitTimeout(cond, lock, timeoutMS) == 0 && queue.empty()) {
+		continue;
+	}
+
+	bool result = !queue.empty();
 	if (result) {
-		outData = std::move(queue.front());
-		queue.pop();
+		queue.pop_front(outData);
 	}
 
 	SDL_UnlockMutex(lock);
@@ -181,15 +196,16 @@ bool concurrent_queue::try_pop(void** outData, const std::chrono::milliseconds& 
 int concurrent_queue::try_pop_all(void** outData, int max)
 {
 	int numPopped = 0;
+	void** dst = outData;
 
 	SDL_LockMutex(lock);
 
 	while (!queue.empty() &&
 		(max <= 0 || numPopped < max))
 	{
-		outData.emplace_back(std::move(queue.front()));
-		queue.pop();
-
+		queue.pop_front(dst);
+		dst = (void**)((uintptr_t)dst + queue.elementSizeB);
+		
 		++numPopped;
 	}
 
@@ -205,8 +221,7 @@ bool concurrent_queue::try_pop_if(void** outData, pfUnaryPredicate p_)
 
 	bool result = (!queue.empty() && p_(queue.front()));
 	if (result) {
-		outData = std::move(queue.front());
-		queue.pop();
+		queue.pop_back(outData);
 	}
 
 	SDL_UnlockMutex(lock);
@@ -218,14 +233,13 @@ bool concurrent_queue::try_pop_if(void** outData, pfUnaryPredicate p_)
 int concurrent_queue::try_pop_all_if(void** outData, pfUnaryPredicate p_)
 {
 	int numPopped = 0;
+	void** dst = outData;
 
 	SDL_LockMutex(lock);
 
-	while (!queue.empty() &&
-			p_(queue.front()))
-	{
-		outData.emplace_back(std::move(queue.front()));
-		queue.pop();
+	while (!queue.empty() && p_(queue.front())) {
+		queue.pop_front(dst);
+		dst = (void**)((uintptr_t)dst + queue.elementSizeB);
 
 		++numPopped;
 	}
@@ -240,10 +254,14 @@ void concurrent_queue::wait_pop(void** outData)
 {
 	SDL_LockMutex(lock);
 
-	cond.wait(lock, [this]() { return !queue.empty(); });
+	// continue waiting while the queue is empty, even on spurious wakeup
+	while (queue.empty()) {
+		SDL_CondWait(cond, lock);
+	}
 
-	outData = std::move(queue.front());
-	queue.pop();
+	if (!queue.empty()) {
+		queue.pop_front(outData);
+	}
 
 	SDL_UnlockMutex(lock);
 }
@@ -259,7 +277,7 @@ void concurrent_queue::clear()
 }
 
 
-inline bool concurrent_queue::empty() const
+bool concurrent_queue::empty()
 {
 	SDL_LockMutex(lock);
 	

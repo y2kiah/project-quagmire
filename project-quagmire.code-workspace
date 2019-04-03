@@ -23,7 +23,9 @@
 			"type_traits": "cpp",
 			"xhash": "cpp",
 			"xutility": "cpp",
-			"memory": "cpp"
+			"memory": "cpp",
+			"mutex": "cpp",
+			"sdl_internal.h": "c"
 		}
 	}
 }

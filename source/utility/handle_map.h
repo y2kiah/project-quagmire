@@ -1,15 +1,18 @@
+#ifndef _HANDLE_MAP_H
+#define _HANDLE_MAP_H
+
 /**
-* @struct id_t
-* @var	free		0 if active, 1 if slot is part of freelist, only applicable to inner ids
-* @var	typeId		relates to itemTypeId parameter of handle_map
-* @var	generation	incrementing generation of data at the index, for tracking accesses to old data
-* @var	index		When used as a handle (outer id, given to the client):
-*						free==0, index of id in the sparseIds array
-*					When used as an inner id (stored in sparseIds array):
-*						free==0, index of the item in the dense items array
-*						free==1, index of next free slot, forming an embedded linked list
-* @var	value		unioned with the above four vars, used for direct comparison of ids
-*/
+ * @struct id_t
+ * @var	free		0 if active, 1 if slot is part of freelist, only applicable to inner ids
+ * @var	typeId		relates to itemTypeId parameter of handle_map
+ * @var	generation	incrementing generation of data at the index, for tracking accesses to old data
+ * @var	index		When used as a handle (outer id, given to the client):
+ *						free==0, index of id in the sparseIds array
+ *					When used as an inner id (stored in sparseIds array):
+ *						free==0, index of the item in the dense items array
+ *						free==1, index of next free slot, forming an embedded linked list
+ * @var	value		unioned with the above four vars, used for direct comparison of ids
+ */
 struct id_t {
 	union {
 		/**
@@ -38,13 +41,13 @@ bool operator> (const id_t& a, const id_t& b) { return (a.value > b.value); }
 
 
 /**
-* @struct handle_map
-*	Stores objects using a dense inner array and sparse outer array scheme for good cache coherence
-*	of the inner items. The sparse array contains handles (outer ids) used to identify the item,
-*	and provides an extra indirection allowing the inner array to move items in memory to keep them
-*	tightly packed. The sparse array contains an embedded LIFO freelist, where removed ids push to
-*	the top of the list so the sparse set remains relatively dense.
-*/
+ * @struct handle_map
+ *	Stores objects using a dense inner array and sparse outer array scheme for good cache coherence
+ *	of the inner items. The sparse array contains handles (outer ids) used to identify the item,
+ *	and provides an extra indirection allowing the inner array to move items in memory to keep them
+ *	tightly packed. The sparse array contains an embedded LIFO freelist, where removed ids push to
+ *	the top of the list so the sparse set remains relatively dense.
+ */
 struct handle_map {
 	// Variables
 	void*	items = nullptr;			// array of stored objects, must have one extra element above capacity used in defragment
@@ -58,52 +61,55 @@ struct handle_map {
 	u8		_fragmented = 0;			// set to 1 if modified by insert or erase since last complete defragment
 	u8		_memoryOwned = 0;			// set to 1 if buffer memory is owned by handle_map
 	
-	u8		_padding[6] = {};
+	u8		_padding[6] = {};			// padding added to multiple of 8 size
 
 	// Functions
 
 	static size_t getTotalBufferSize(u16 elementSizeB, u32 capacity);
 
 	/**
-	* Get a direct pointer to a stored item by handle
-	* @param[in]	handle		id of the item
-	* @returns pointer to the item
-	*/
+	 * Get a direct pointer to a stored item by handle
+	 * @param[in]	handle		id of the item
+	 * @returns pointer to the item
+	 */
 	void* at(id_t handle);
-	void* operator[](id_t handle)	{ return at(handle); }
+	
+	void* operator[](id_t handle) {
+		return at(handle);
+	}
 
 	/**
-	* remove the item identified by the provided handle
-	* @param[in]	handle		id of the item
-	* @returns true if item removed, false if not found
-	*/
+	 * remove the item identified by the provided handle
+	 * @param[in]	handle		id of the item
+	 * @returns true if item removed, false if not found
+	 */
 	bool erase(id_t handle);
 
 	/**
-	* Add one item to the store, return the id, optionally return pointer to the new object for
-	* initialization.
-	* @param[in]	src		optional pointer to an object to copy into inner storage
-	* @param[out]	out		optional return pointer to the new object
-	* @returns the id
-	*/
+	 * Add one item to the store, return the id, optionally return pointer to the new object for
+	 * initialization.
+	 * @param[in]	src		optional pointer to an object to copy into inner storage
+	 * @param[out]	out		optional return pointer to the new object
+	 * @returns the id
+	 */
 	id_t insert(void* src = nullptr, void** out = nullptr);
 
 	/**
-	* Removes all items, leaving the sparseIds set intact by adding each entry to the free-
-	* list and incrementing its generation. This operation is slower than @c reset, but safer
-	* for the detection of stale handle lookups later (in debug builds). Prefer to use @c reset
-	* if safety is not a concern.
-	* Complexity is linear.
-	*/
+	 * Removes all items, leaving the sparseIds set intact by adding each entry to the free-
+	 * list and incrementing its generation. This operation is slower than @c reset, but safer
+	 * for the detection of stale handle lookups later (in debug builds). Prefer to use @c reset
+	 * if safety is not a concern.
+	 * Complexity is linear.
+	 */
 	void clear();
 
 	/**
-	* Removes all items, destroying the sparseIds set. Leaves the container's capacity, but
-	* otherwise equivalent to a default-constructed container. This is faster than @c clear,
-	* but cannot safely detect lookups by stale handles obtained before the reset. Use @c clear
-	* if safety is a concern, at least until it's proven not to be a problem.
-	* Complexity is constant.
-	*/
+	 * Removes all items, destroying the sparseIds set. Leaves the container's capacity, but
+	 * otherwise equivalent to a default-constructed container. This is faster than @c clear,
+	 * but cannot safely detect lookups by stale handles obtained before the reset. Use @c clear
+	 * if safety is a concern, at least until it's proven not to be a problem.
+	 * Complexity is constant.
+	 */
 	void reset();
 
 	/**
@@ -112,30 +118,30 @@ struct handle_map {
 	bool has(id_t handle);
 
 	/**
-	* defragment uses the comparison function @c comp to establish an ideal order for the dense
-	*	set in order to maximum cache locality for traversals. The dense set can become
-	*	fragmented over time due to removal operations. This can be an expensive operation, so
-	*	the sort operation is reentrant. Use the @c maxSwaps parameter to limit the number of
-	*	swaps that will occur before the function returns.
-	* @param[in]	comp		pointer to comparison function returning ?true if the first
-	*	argument is greater than (i.e. is ordered after) the second. The function should not
-	*	write to the pointers passed in.
-	* @param[in]	maxSwaps	maximum number of items to reorder in the insertion sort
-	*	before the function returns. Pass 0 (default) to run until completion.
-	* @returns the number of swaps that occurred, keeping in mind that this value could
-	*	overflow on very large data sets
-	*/
+	 * defragment uses the comparison function @c comp to establish an ideal order for the dense
+	 *	set in order to maximum cache locality for traversals. The dense set can become
+	 *	fragmented over time due to removal operations. This can be an expensive operation, so
+	 *	the sort operation is reentrant. Use the @c maxSwaps parameter to limit the number of
+	 *	swaps that will occur before the function returns.
+	 * @param[in]	comp		pointer to comparison function returning ?true if the first
+	 *	argument is greater than (i.e. is ordered after) the second. The function should not
+	 *	write to the pointers passed in.
+	 * @param[in]	maxSwaps	maximum number of items to reorder in the insertion sort
+	 *	before the function returns. Pass 0 (default) to run until completion.
+	 * @returns the number of swaps that occurred, keeping in mind that this value could
+	 *	overflow on very large data sets
+	 */
 	typedef bool (*pfCompare)(void*, void*);
 	size_t defragment(pfCompare comp, size_t maxSwaps = 0);
 
 	/**
-	* @returns index into the inner DenseSet for a given outer id
-	*/
+	 * @returns index into the inner DenseSet for a given outer id
+	 */
 	u32 getInnerIndex(id_t handle);
 
 	/**
-	* @return the outer id (handle) for a given dense set index
-	*/
+	 * @return the outer id (handle) for a given dense set index
+	 */
 	id_t getHandleForInnerIndex(size_t innerIndex);
 
 	inline void* item(u32 innerIndex)
@@ -169,16 +175,16 @@ struct handle_map {
 	
 
 	/**
-	* Constructor
-	* @param	elementSizeB	size in bytes of individual objects stored
-	* @param	capacity		maximum number of objects that can be stored
-	* @param	itemTypeId		typeId used by the id_t::typeId variable for this container
-	* @param	buffer
-	*	Optional pre-allocated buffer for all dynamic storage used in the handle_map, with ample
-	*	size (obtained by call to getTotalBufferSize). If passed, the memory is not owned by
-	*	handle_map and thus not freed on delete. Pass nullptr (default) to allocate the storage on
-	*	create and free on delete.
-	*/
+	 * Constructor
+	 * @param	elementSizeB	size in bytes of individual objects stored
+	 * @param	capacity		maximum number of objects that can be stored
+	 * @param	itemTypeId		typeId used by the id_t::typeId variable for this container
+	 * @param	buffer
+	 *	Optional pre-allocated buffer for all dynamic storage used in the handle_map, with ample
+	 *	size (obtained by call to getTotalBufferSize). If passed, the memory is not owned by
+	 *	handle_map and thus not freed on delete. Pass nullptr (default) to allocate the storage on
+	 *	create and free on delete.
+	 */
 	explicit handle_map(u16 elementSizeB,
 						u32 capacity,
 						u16 itemTypeId = 0,
@@ -443,3 +449,5 @@ size_t handle_map::defragment(pfCompare comp, size_t maxSwaps)
 
 	return swaps;
 }
+
+#endif

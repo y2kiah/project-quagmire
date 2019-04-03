@@ -9,6 +9,7 @@
 #include "utility/types.h"
 #include "utility/nstring.h"
 #include "utility/handle_map.h"
+#include "utility/dense_queue.h"
 #include "utility/concurrent_queue.h"
 #include "platform/platform.h"
 #include "platform/timer.h"
