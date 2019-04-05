@@ -54,17 +54,22 @@
  * The at and operator[] index are relative to queue order, not the in-memory order. Items are
  * contiguous in memory until the end of the buffer is reached, at which point the index wraps to
  * the start of the buffer.
+ * Examples:
+ * 		capacity=7
+ *		| 0 | 1 | 2 | 3 | 4 | 5 | 6 |
+ *		|	F-*---*---*---*-B       | frontCursor=1, length=4
+ *		|	    F-*---*-B           | frontCursor=2, length=2
+ *		|-*---*-B           F-*---*-| frontCursor=5, length=4
  */
 struct DenseQueue {
 	// Variables
 	void*	items = nullptr;
 	u32		frontCursor = 0;		// front index of the queue storage
-	u32		backCursor = 0;			// back index of the queue storage
 	u32		length = 0;				// current number of objects contained in queue
 	u32		capacity = 0;			// maximum number of objects that can be stored
-	u32		elementSizeB = 0;		// size in bytes of individual stored objects
-	u8		_memoryOwned = 0;
-	u8     	_padding[7] = {};
+	u16		elementSizeB = 0;		// size in bytes of individual stored objects
+	u8		_memoryOwned = 0;		// set to 1 if buffer memory is owned by DenseQueue
+	u8     	_padding = 0;
 
 	// Functions
 
@@ -91,14 +96,15 @@ struct DenseQueue {
 	}
 
 
-	bool empty() {
+	inline bool empty() {
 		return (length == 0);
 	}
 	
-	void* front() {
+	inline void* front() {
 		return (length == 0 ? nullptr : item(0));
 	}
-	void* back() {
+
+	inline void* back() {
 		return (length == 0 ? nullptr : item(length-1));
 	}
 
@@ -156,19 +162,24 @@ struct DenseQueue {
 	 */
 	void* at(u32 i) {
 		assert(i < length && "index out of range");
-		return (length > i ? nullptr : item(i));
+		return (i < length ? item(i) : nullptr);
 	}
 
 	void* operator[](u32 i) {
 		return at(i);
 	}
-	
+
 	void clear();
+	
+	inline void offsetFront(u32 n = 1)
+	{
+		frontCursor = (frontCursor + n) % capacity;
+	}
 
 	inline void* item(u32 i)
 	{
-		assert(frontCursor + i < capacity && "index exceeds capacity");
-		return (void*)((uintptr_t)items + ((frontCursor+i) * elementSizeB));
+		assert(i < capacity && "index out of range");
+		return (void*)((uintptr_t)items + ((frontCursor + i % capacity) * elementSizeB));
 	}
 
 	inline void itemcpy(void* dst, void* src)
@@ -197,14 +208,29 @@ struct DenseQueue {
 static_assert_aligned_size(DenseQueue,8);
 
 
+void* DenseQueue::push_front(void* val)
+{
+	void* addr = nullptr;
+	if (length < capacity) {
+		addr = item(capacity-1);
+		offsetFront(capacity-1);
+		++length;
+
+		if (val) {
+			itemcpy(addr, val);
+		}
+		else {
+			itemzero(addr);
+		}
+	}
+	return addr;
+}
+
+
 void* DenseQueue::push_back(void* val)
 {
 	void* addr = nullptr;
 	if (length < capacity) {
-		if (frontCursor + length + 1 == capacity) {
-			//realign();
-		}
-
 		addr = item(length);
 		++length;
 
@@ -231,7 +257,7 @@ void* DenseQueue::pop_front(void** dst)
 			frontCursor = 0;
 		}
 		else {
-			++frontCursor;
+			offsetFront();
 		}
 	}
 	return addr;

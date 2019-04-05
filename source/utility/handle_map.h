@@ -57,11 +57,9 @@ struct HandleMap {
 	u32		length = 0;					// current number of objects contained in map
 	u32		freeListFront = 0;			// front index of the embedded LIFO freelist
 	u32		capacity = 0;				// maximum number of objects that can be stored
-	u32		elementSizeB = 0;			// size in bytes of individual stored objects
+	u16		elementSizeB = 0;			// size in bytes of individual stored objects
 	u8		_fragmented = 0;			// set to 1 if modified by insert or erase since last complete defragment
 	u8		_memoryOwned = 0;			// set to 1 if buffer memory is owned by HandleMap
-	
-	u8		_padding[6] = {};			// padding added to multiple of 8 size
 
 	// Functions
 	
@@ -220,6 +218,7 @@ struct HandleMap {
 		}
 	}
 };
+static_assert_aligned_size(HandleMap,8);
 
 
 size_t HandleMap::getTotalBufferSize(u16 elementSizeB, u32 capacity)

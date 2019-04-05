@@ -11,7 +11,7 @@ struct ConcurrentQueue {
 	DenseQueue	queue;
 	
 	// padding added for 64 byte total size, to avoid potential false sharing of the ConcurrentQueue's cache line
-	u8			_padding[16] = {};
+	u8			_padding[24] = {};
 
 
 	/**
