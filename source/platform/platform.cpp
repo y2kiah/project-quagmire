@@ -1,4 +1,7 @@
 
+#include "platform.h"
+#include <SDL2/SDL_filesystem.h>
+
 static void getPreferencesPath_utf8(char* dst)
 {
 	char* path = SDL_GetPrefPath(PROGRAM_NAME, PROGRAM_NAME);
@@ -8,38 +11,18 @@ static void getPreferencesPath_utf8(char* dst)
     }
 }
 
-// TODO: rewrite this when we have a way to convert char* to wchar_t* without wstring
-/*static wchar_t* getPreferencesPathW()
+static void getCurrentWorkingDirectory_utf8(char* dst, int max)
 {
-	std::wstring ws;
-
-	wchar_t* s = getPreferencesPath();
-	ws.assign(s.begin(), s.end());
-
-	return ws;
-}*/
-
+	char* path = SDL_GetBasePath();
+	if (path) {
+        _strcpy_s(dst, max, path);
+	    SDL_free(path);
+    }
+}
 
 #ifdef _WIN32
 
 #include "Windows.h"
-
-static void getCurrentWorkingDirectory(char* dst, int max)
-{
-	GetCurrentDirectoryA(max, dst);
-}
-
-// TODO: rewrite this when we have a way to convert char* to wchar_t* without wstring
-/*static void getCurrentWorkingDirectoryW(wchar_t* dst)
-{
-	std::wstring ws;
-
-	wchar_t currentDir[LONG_MAX_PATH];
-	GetCurrentDirectory(LONG_MAX_PATH, currentDir);
-	ws = currentDir;
-
-	return ws;
-}*/
 
 void yieldThread()
 {
@@ -65,26 +48,6 @@ void setWindowIcon(const WindowData* windowData)
 }
 
 #else
-
-static void getCurrentWorkingDirectory(char* dst, int max)
-{
-	char* path = SDL_GetBasePath();
-	if (path) {
-        _strcpy_s(dst, max, path);
-	    SDL_free(path);
-    }
-}
-
-// TODO: rewrite this when we have a way to convert char* to wchar_t* without wstring
-/*static void getCurrentWorkingDirectoryW(wchar_t* dst)
-{
-	std::wstring ws;
-
-	auto s = getCurrentWorkingDirectory();
-	ws.assign(s.begin(), s.end());
-
-	return ws;
-}*/
 
 #include <unistd.h>
 #ifdef _SC_PRIORITY_SCHEDULING
@@ -135,7 +98,7 @@ bool getEnvironmentInfo(Environment* env)
 {
 	// TODO: probably need to convert this UTF8 string to wchar_t for windows
 	getPreferencesPath_utf8(env->preferencesPath);
-	getCurrentWorkingDirectory(env->currentWorkingDirectory, sizeof(env->currentWorkingDirectory));
+	getCurrentWorkingDirectory_utf8(env->currentWorkingDirectory, sizeof(env->currentWorkingDirectory));
 	
 	return strlen(env->preferencesPath) 
 		&& strlen(env->currentWorkingDirectory);

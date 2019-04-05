@@ -45,6 +45,10 @@
  * understand how the memory is managed under the hood so you don't invalide things.
  */
 
+#include <cstdlib>
+#include <cstring>
+#include "types.h"
+
 /**
  * @struct DenseQueue
  * DenseQueue implements a queue on top of a fixed-size ring buffer, allowing for pushing and
@@ -110,54 +114,66 @@ struct DenseQueue {
 
 	/**
 	 * Pushes item to the back of the queue.
-	 * @param	dst		optional, pass this to copy the val into the new item
-	 * and optionally copying from the val pointer.
+	 * @param[in]	val		optional, pass this to copy the val into the new item
+	 *	and optionally copying from the val pointer.
 	 * @returns pointer to new item, or nullptr if the container is full
 	 */
 	void* push_back(void* val = nullptr);
 
 	/**
+	 * Pushes n items to the back of the queue. This is done using one or two bulk memory copies,
+	 * since items may be split by wrapping. If adding n items would exceed capacity, no items are
+	 * copied and nullptr is returned.
+	 * @param[in]	n		number of items to push
+	 * @param[in]	val		optional, pass this to copy n vals into the new items
+	 * and optionally copying from the val pointer.
+	 * @returns pointer to new item, or nullptr if the container is full
+	 */
+	void* push_back_n(u32 n, void* vals = nullptr);
+
+	/**
 	 * Pushes item to the front of the queue.
-	 * @param	dst		optional, pass this to copy the val into the new item
+	 * @param[in]	val		optional, pass this to copy the val into the new item
 	 * and optionally copying from the val pointer.
 	 * @returns pointer to new item, or nullptr if the container is full
 	 */
 	void* push_front(void* val = nullptr);
+	
+	/**
+	 * Removes item from back of queue for LIFO behavior when push_back is used.
+	 * @param[out]	dst		optional, pass this to copy the popped value to the dst pointer
+	 * @returns the item's address or nullptr on error
+	 */
+	void* pop_back(void* dst = nullptr);
 
 	/**
 	 * Removes item from front of queue for FIFO behavior when push_back is used.
-	 * @param	dst		optional, pass this to copy the popped value to the dst pointer
+	 * @param[out]	dst		optional, pass this to copy the popped value to the dst pointer
 	 * @returns the item's address or nullptr on error
 	 */
-	void* pop_front(void** dst = nullptr);
-	
+	void* pop_front(void* dst = nullptr);
+
 	/**
-	 * Removes item from front of queue for LIFO behavior when push_back is used.
-	 * on error, and optionally copying the value to the dst pointer.
-	 * @param	dst		optional, pass this to copy the popped value to the dst pointer
-	 * @returns the item's address or nullptr on error
+	 * Removes up to n items from front of queue for FIFO behavior when push_back is used. This is
+	 * done using one or two bulk memory copies, since items may be split by wrapping.
+	 * @param[in]	n		max number of items to pop, pass 0 to pop all items
+	 * @param[out]	dst		optional, pass this to copy the popped value to the dst pointer
+	 * @returns the number items popped
 	 */
-	void* pop_back(void** dst = nullptr);
+	u32 pop_front_n(u32 n, void* dst);
 
 	/**
 	 * Use push, pop_fifo and pop_lifo for worry-free queue semantics.
 	 */
 	inline void* push(void* val = nullptr) { return push_back(val); }
-	inline void* pop_fifo(void** dst = nullptr) { return pop_front(dst); }
-	inline void* pop_lifo(void** dst = nullptr) { return pop_back(dst); }
-
-	/**
-	 * Pointers obtained from at and operator[] should not be stored or used across calls to
-	 * realign, this should only be called when guaranteed not to create bugs. The index used to
-	 * look up items is not invalidated by this call. Use this sparingly or not at all, since
-	 * emptying the queue will also realign for new items without the cost of swapping memory.
-	 */
-	void realign();
+	inline void* push_n(u32 n, void* val = nullptr) { return push_back_n(n,val); }
+	inline void* pop_fifo(void* dst = nullptr) { return pop_front(dst); }
+	inline void* pop_lifo(void* dst = nullptr) { return pop_back(dst); }
+	inline u32   pop_fifo_n(u32 n, void* dst = nullptr) { return pop_front_n(n,dst); }
 	
 	/**
-	 * @param	i	index relative to the queue's front, it should not be interpreted as a direct
-	 *	offset into the items buffer. The index of an item is stable across calls to realign,
-	 *	whereas the pointer returned may be erroneous.
+	 * @param[in]	i	index relative to the queue's front, it should not be interpreted as a
+	 *	direct offset into the items buffer.
 	 * @returns item at index i in the queue.
 	 */
 	void* at(u32 i) {
@@ -173,13 +189,13 @@ struct DenseQueue {
 	
 	inline void offsetFront(u32 n = 1)
 	{
-		frontCursor = (frontCursor + n) % capacity;
+		frontCursor = ((u64)frontCursor + n) % capacity;
 	}
 
 	inline void* item(u32 i)
 	{
 		assert(i < capacity && "index out of range");
-		return (void*)((uintptr_t)items + ((frontCursor + i % capacity) * elementSizeB));
+		return (void*)((uintptr_t)items + (((u64)frontCursor + i % capacity) * elementSizeB));
 	}
 
 	inline void itemcpy(void* dst, void* src)
@@ -245,7 +261,35 @@ void* DenseQueue::push_back(void* val)
 }
 
 
-void* DenseQueue::pop_front(void** dst)
+void* DenseQueue::push_back_n(u32 n, void* vals)
+{
+	assert(n > 1 && "n should be > 1, for n == 1 use push_back");
+
+	void* addr = nullptr;
+	if (length + n <= capacity) {
+		u32 backCursor = ((u64)frontCursor + length % capacity);
+		u32 firstn = min(capacity - backCursor, n);
+		addr = item(length);
+		length += n;
+
+		if (vals) {
+			memcpy(addr, vals, elementSizeB * firstn);
+			if (firstn < n) {
+				memcpy(items, vals, elementSizeB * (n - firstn));
+			}
+		}
+		else {
+			memset(addr, 0, elementSizeB * firstn);
+			if (firstn < n) {
+				memset(items, 0, elementSizeB * (n - firstn));
+			}
+		}
+	}
+	return addr;
+}
+
+
+void* DenseQueue::pop_front(void* dst)
 {
 	void* addr = front();
 	if (addr) {
@@ -264,7 +308,36 @@ void* DenseQueue::pop_front(void** dst)
 }
 
 
-void* DenseQueue::pop_back(void** dst)
+u32 DenseQueue::pop_front_n(u32 n, void* dst)
+{
+	void* addr = front();
+	if (addr) {
+		n = (n == 0 ? length : min(n, length));
+		u32 firstn = min(capacity - frontCursor, n);
+
+		if (dst) {
+			memcpy(dst, addr, elementSizeB * firstn);
+			if (firstn < n) {
+				memcpy(dst, items, elementSizeB * (n - firstn));
+			}
+		}
+
+		length -= n;
+		if (length == 0) {
+			frontCursor = 0;
+		}
+		else {
+			offsetFront(n);
+		}
+	}
+	else {
+		n = 0;
+	}
+	return n;
+}
+
+
+void* DenseQueue::pop_back(void* dst)
 {
 	void* addr = back();
 	if (addr) {
@@ -277,20 +350,6 @@ void* DenseQueue::pop_back(void** dst)
 		}
 	}
 	return addr;
-}
-
-
-/**
- * Force a reset of the frontCursor to 0, rotating queued values so they are contiguous in memory.
- */
-void DenseQueue::realign()
-{
-	// TODO: implement this
-	assert(!"need algorithm to rotate");
-	//if (frontCursor > 0 && length > 0) {
-	//	memmove(items, front(), length*elementSizeB);
-	//	frontCursor = 0;
-	//}
 }
 
 

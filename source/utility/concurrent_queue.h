@@ -1,9 +1,15 @@
+#ifndef _CONCURRENT_QUEUE_H
+#define _CONCURRENT_QUEUE_H
+
+#include <SDL2/SDL_mutex.h>
+#include "dense_queue.h"
+
 /**
-* @struct ConcurrentQueue
-* ConcurrentQueue provides functionality for thread-safe enqueue and dequeue operations.
-* @see http://www.justsoftwaresolutions.co.uk/threading/implementing-a-thread-safe-queue-using-condition-variables.html
-* @see http://stackoverflow.com/questions/15278343/c11-thread-safe-queue
-*/
+ * @struct ConcurrentQueue
+ * ConcurrentQueue provides functionality for thread-safe enqueue and dequeue operations.
+ * @see http://www.justsoftwaresolutions.co.uk/threading/implementing-a-thread-safe-queue-using-condition-variables.html
+ * @see http://stackoverflow.com/questions/15278343/c11-thread-safe-queue
+ */
 struct ConcurrentQueue {
 	SDL_mutex*	lock = nullptr;
 	SDL_cond*	cond = nullptr;
@@ -34,14 +40,14 @@ struct ConcurrentQueue {
 	/**
 	* Thread-safe push onto the queue. Also updates the condition variable so any threads
 	* locked in waitPop will take the mutex and process the pop.
-	* @param	inData	item to be moved into queue
+	* @param[in]	inData	item to be copied into queue
 	*/
 	void push(void* inData);
 
 	/**
 	* Copies all items in container inData into the queue.
-	* @param	inData	container of items to be moved into queue
-	* @param    count   number of objects to push
+	* @param[in]	inData	container of items to be copied into queue
+	* @param[in]	count	number of objects to push
 	*/
 	void push_all(void* inData, int count);
 
@@ -49,55 +55,55 @@ struct ConcurrentQueue {
 	* Pops an item from the queue, or returns immediately without waiting if the list is
 	* empty. Most likely would use this in the main thread to pop items pushed from a worker
 	* thread.
-	* @param	outData	   memory location to move item into, only modified if true is returned
+	* @param[out]	outData		memory location to copy item into, only modified if true is returned
 	* @returns true if pop succeeds, false if queue is empty
 	*/
-	bool try_pop(void** outData);
+	bool try_pop(void* outData);
 
 	/**
 	* Pops an item from the queue, or waits for specified timeout period for an item.
 	* Most likely would use this in the main thread to pop items pushed from a worker thread.
-	* @param	outData	   memory location to move item into, only modified if true is returned
-	* @param	timeoutMS  timeout period in milliseconds
+	* @param[out]	outData		memory location to copy item into, only modified if true is returned
+	* @param[in]	timeoutMS	timeout period in milliseconds
 	* @returns true if pop succeeds, false if queue is empty for duration
 	*/
-	bool try_pop(void** outData, u32 timeoutMS);
+	bool try_pop(void* outData, u32 timeoutMS);
 
 	/**
 	* Pops several items from the queue, or returns immediately without waiting if the list is
 	* empty. Items are popped only up to a max count passed in.
-	* @param	outData	The popped items are emplaced into the provided container.
-	* @param	max		maximum number of items to pop, or 0 (default) for unlimited
-	* @returns number of items popped (and emplaced in outData)
+	* @param[out]	outData		The popped items are copied to the provided address.
+	* @param[in]	max			maximum number of items to pop, or 0 (default) for unlimited
+	* @returns number of items popped
 	*/
-	int try_pop_all(void** outData, int max = 0);
+	u32 try_pop_all(void* outData, int max = 0);
 
 	/**
 	* Pops an item from the queue, or returns immediately without waiting if the list is empty
 	* only if the provided predicate function evaluates to true.
-	* @param	outData	   memory location to move item into, only modified if true is returned
-	* @param	p_		   predicate must return bool and accept a single param of type void*
+	* @param[out]	outData	   memory location to copy item into, only modified if true is returned
+	* @param[in]	p_		   predicate must return bool and accept a single param of type void*
 	* @returns true if pop succeeds, false if queue is empty or predicate returns false
 	*/
 	typedef bool (*pfUnaryPredicate)(void*);
-	bool try_pop_if(void** outData, pfUnaryPredicate p_);
+	bool try_pop_if(void* outData, pfUnaryPredicate p_);
 
 	/**
 	* Pops several items from the queue, or returns immediately without waiting if the list is
 	* empty. Items are popped only while the provided predicate function evaluates to true.
-	* @param	outData	The popped items are emplaced into the provided container.
-	* @param	p_		   predicate must return bool and accept a single param of type void*
-	* @returns number of items popped (and emplaced in outData)
+	* @param[out]	outData		The popped items are copied to the provided address
+	* @param[in]	p_			predicate must return bool and accept a single param of type void*
+	* @returns number of items popped
 	*/
-	int try_pop_all_if(void** outData, pfUnaryPredicate p_);
+	u32 try_pop_all_if(void* outData, pfUnaryPredicate p_);
 
 	/**
 	* Waits indefinitely for a condition variable that indicates data is available in the
 	* queue. Most likely would use this in a worker thread to execute tasks pushed from a
 	* client thread.
-	* @param	outData	   memory location to move item into
+	* @param[out]	outData		memory location to move item into
 	*/
-	void wait_pop(void** outData);
+	void wait_pop(void* outData);
 
 	/**
 	* Concurrency-safe clear the queue
@@ -106,7 +112,7 @@ struct ConcurrentQueue {
 
 	/**
 	* Concurrency-safe check of whether the queue is empty
-	* @returns whether the queue is empty: i.e. whether its size is zero
+	* @returns true if the queue is empty
 	*/
 	bool empty();
 
@@ -141,21 +147,16 @@ void ConcurrentQueue::push(void* inData)
 
 void ConcurrentQueue::push_all(void* inData, int count)
 {
-	void* src = inData;
-	
 	SDL_LockMutex(lock);
 
-	for (int c = 0; c < count; ++c) {
-		queue.push_back(src);
-		src = (void*)((uintptr_t)src + queue.elementSizeB);
-	}
+	queue.push_back_n(count, inData);
 
 	SDL_UnlockMutex(lock);
 	SDL_CondSignal(cond);
 }
 
 
-bool ConcurrentQueue::try_pop(void** outData)
+bool ConcurrentQueue::try_pop(void* outData)
 {
 	assert(outData);
 
@@ -172,7 +173,7 @@ bool ConcurrentQueue::try_pop(void** outData)
 }
 
 
-bool ConcurrentQueue::try_pop(void** outData, u32 timeoutMS)
+bool ConcurrentQueue::try_pop(void* outData, u32 timeoutMS)
 {
 	SDL_LockMutex(lock);
 
@@ -193,21 +194,11 @@ bool ConcurrentQueue::try_pop(void** outData, u32 timeoutMS)
 }
 
 
-int ConcurrentQueue::try_pop_all(void** outData, int max)
+u32 ConcurrentQueue::try_pop_all(void* outData, int max)
 {
-	int numPopped = 0;
-	void** dst = outData;
-
 	SDL_LockMutex(lock);
 
-	while (!queue.empty() &&
-		(max <= 0 || numPopped < max))
-	{
-		queue.pop_front(dst);
-		dst = (void**)((uintptr_t)dst + queue.elementSizeB);
-		
-		++numPopped;
-	}
+	u32 numPopped = queue.pop_front_n(max, outData);
 
 	SDL_UnlockMutex(lock);
 	
@@ -215,7 +206,7 @@ int ConcurrentQueue::try_pop_all(void** outData, int max)
 }
 
 
-bool ConcurrentQueue::try_pop_if(void** outData, pfUnaryPredicate p_)
+bool ConcurrentQueue::try_pop_if(void* outData, pfUnaryPredicate p_)
 {
 	SDL_LockMutex(lock);
 
@@ -230,18 +221,21 @@ bool ConcurrentQueue::try_pop_if(void** outData, pfUnaryPredicate p_)
 }
 
 
-int ConcurrentQueue::try_pop_all_if(void** outData, pfUnaryPredicate p_)
+u32 ConcurrentQueue::try_pop_all_if(void* outData, pfUnaryPredicate p_)
 {
-	int numPopped = 0;
-	void** dst = outData;
-
 	SDL_LockMutex(lock);
 
-	while (!queue.empty() && p_(queue.front())) {
-		queue.pop_front(dst);
-		dst = (void**)((uintptr_t)dst + queue.elementSizeB);
-
+	// get number of items that pass the predicate to pop
+	u32 numPopped = 0;
+	for (u32 i = 0;
+		 i < queue.length && p_(queue[i]);
+		 ++i)
+	{
 		++numPopped;
+	}
+
+	if (numPopped > 0) {
+		numPopped = queue.pop_front_n(numPopped, outData);
 	}
 
 	SDL_UnlockMutex(lock);
@@ -250,7 +244,7 @@ int ConcurrentQueue::try_pop_all_if(void** outData, pfUnaryPredicate p_)
 }
 
 
-void ConcurrentQueue::wait_pop(void** outData)
+void ConcurrentQueue::wait_pop(void* outData)
 {
 	SDL_LockMutex(lock);
 
@@ -287,3 +281,5 @@ bool ConcurrentQueue::empty()
 	
 	return result;
 }
+
+#endif

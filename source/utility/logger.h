@@ -1,3 +1,9 @@
+#ifndef _LOGGER_H
+#define _LOGGER_H
+
+#include <cstdarg>
+#include "types.h"
+
 namespace logger {
 	/**
 	 * Logging mode. Normally you'd set Immediate_Thread_Unsafe only for early initialization
@@ -29,16 +35,6 @@ namespace logger {
 		Category_Test,				// test code
 		_Category_Count
 	};
-	static_assert(Category_Application == (u8)SDL_LOG_CATEGORY_APPLICATION
-			   && Category_Error       == (u8)SDL_LOG_CATEGORY_ERROR
-			   && Category_Assert      == (u8)SDL_LOG_CATEGORY_ASSERT
-			   && Category_System      == (u8)SDL_LOG_CATEGORY_SYSTEM
-			   && Category_Audio       == (u8)SDL_LOG_CATEGORY_AUDIO
-			   && Category_Video       == (u8)SDL_LOG_CATEGORY_VIDEO
-			   && Category_Render      == (u8)SDL_LOG_CATEGORY_RENDER
-			   && Category_Input       == (u8)SDL_LOG_CATEGORY_INPUT
-			   && Category_Test        == (u8)SDL_LOG_CATEGORY_TEST,
-			   "Logger Category mismatch with SDL");
 
 	enum Priority : u8 {
 		Priority_Off = 0,
@@ -95,9 +91,10 @@ namespace logger {
 		void verbose(Category c, const char *s, ...);
 		void test(const char *s, ...);
 
-		void log(Category c, Priority p, const char *s, ...);
-		void log(Category c, const char *s, ...);
 		void log(const char *s, ...);
+		void log(Category c, const char *s, ...);
+		void log(Category c, Priority p, const char *s, ...);
+		void _log(Category c, Priority p, const char *s, va_list args);
 
 		/**
 		* Sets the priority for a category. This call is not thread safe, call this only
@@ -113,3 +110,5 @@ namespace logger {
 	};
 
 }
+
+#endif

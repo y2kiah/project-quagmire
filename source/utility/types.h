@@ -1,3 +1,6 @@
+#ifndef _TYPES_H
+#define _TYPES_H
+
 #include <cstdint>
 #include <climits>
 #include <cstddef>
@@ -79,3 +82,5 @@ inline u32 max(u32 a, u32 b) { return (a > b ? a : b); }
 inline i32 max(i32 a, i32 b) { return (a > b ? a : b); }
 inline u64 max(u64 a, u64 b) { return (a > b ? a : b); }
 inline i64 max(i64 a, i64 b) { return (a > b ? a : b); }
+
+#endif

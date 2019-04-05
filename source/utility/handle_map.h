@@ -1,6 +1,10 @@
 #ifndef _HANDLE_MAP_H
 #define _HANDLE_MAP_H
 
+#include <cstdlib>
+#include <cstring>
+#include "types.h"
+
 /**
  * @struct Id_t
  * @var	free		0 if active, 1 if slot is part of freelist, only applicable to inner ids

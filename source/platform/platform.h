@@ -1,3 +1,10 @@
+#ifndef _PLATFORM_H
+#define _PLATFORM_H
+
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_syswm.h>
+#include "../utility/types.h"
+
 /*class FileSystemWatcher {
 public:
 	void onFileRenamed(std::function<void(const std::wstring&, const std::wstring&)> f);
@@ -6,6 +13,8 @@ public:
 	void onFileRemoved(std::function<void(const std::wstring&)> f);
 
 };*/
+
+#define PROGRAM_NAME "Project Quagmire"
 
 #define MAXPATH		1024
 
@@ -71,4 +80,6 @@ void setWindowIcon(const WindowData *windowData);
 #define _export __declspec(dllexport)
 #else
 #define _export __attribute__ ((visibility ("default")))
+#endif
+
 #endif

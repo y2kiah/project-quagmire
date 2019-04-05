@@ -1,8 +1,15 @@
+#include <SDL2/SDL_log.h>
+#include "../capacity.h"
+#include "logger.h"
+#include "concurrent_queue.h"
+
 namespace logger {
 
 	Mode gLoggingMode = Mode_Deferred_Thread_Safe;
 	// TODO: pass in buffer space, currently this mallocs its own
 	global ConcurrentQueue gMessageQueue(sizeof(LogMessage), QUAGMIRE_LOGGER_CAPACITY);
+	int gPopArrayLen = 0;
+	LogMessage gPopArray[QUAGMIRE_LOGGER_CAPACITY] = {};
 
 
 	void write(const LogMessage& m)
@@ -18,11 +25,11 @@ namespace logger {
 	 */
 	void flush()
 	{
-		//gMessageQueue.try_pop_all(m_popArray);
-		//for (auto& li : m_popArray) {
-		//	write(li);
-		//}
-		//m_popArray.clear();
+		gPopArrayLen = gMessageQueue.try_pop_all(gPopArray);
+		for (int i = 0; i < gPopArrayLen; ++i) {
+			write(gPopArray[i]);
+		}
+		gPopArrayLen = 0;
 	}
 
 	/**
@@ -32,22 +39,6 @@ namespace logger {
 	void set_mode(Mode mode) {
 		flush();
 		gLoggingMode = mode;
-	}
-
-	void _log(Category c, Priority p, const char *s, va_list args) {
-		// write formatted string
-		//int len = _vscprintf(s, args);
-		/*std::string str(len, 0);
-		vsnprintf_s(&str[0], len+1, len, s, args);
-		*/
-		/*if (m_priority[c] >= p) {
-			if (m_mode == Mode_Deferred_Thread_Safe) {
-				m_q.push({ c, p, std::move(str) });
-			}
-			else {
-				write({ c, p, std::move(str) });
-			}
-		}*/
 	}
 
 
@@ -141,4 +132,29 @@ namespace logger {
 		pass_args(_log(defaultCategory, categoryDefaultPriority[defaultCategory], s, args));
 	}
 
+	void Logger::_log(Category c, Priority p, const char *s, va_list args)
+	{
+		if (logPriority >= p) {
+			//int len = _vscprintf(s, args);
+			// write formatted string
+			vsnprintf_s(&str[0], len+1, len, s, args);
+			if (gLoggingMode == Mode_Deferred_Thread_Safe) {
+				gMessageQueue.push(LogMessage{ c, p, std::move(str) });
+			}
+			else {
+				write({ c, p, std::move(str) });
+			}
+		}
+	}
+
+	static_assert(Category_Application == (u8)SDL_LOG_CATEGORY_APPLICATION
+			   && Category_Error       == (u8)SDL_LOG_CATEGORY_ERROR
+			   && Category_Assert      == (u8)SDL_LOG_CATEGORY_ASSERT
+			   && Category_System      == (u8)SDL_LOG_CATEGORY_SYSTEM
+			   && Category_Audio       == (u8)SDL_LOG_CATEGORY_AUDIO
+			   && Category_Video       == (u8)SDL_LOG_CATEGORY_VIDEO
+			   && Category_Render      == (u8)SDL_LOG_CATEGORY_RENDER
+			   && Category_Input       == (u8)SDL_LOG_CATEGORY_INPUT
+			   && Category_Test        == (u8)SDL_LOG_CATEGORY_TEST,
+			   "Logger Category mismatch with SDL");
 }

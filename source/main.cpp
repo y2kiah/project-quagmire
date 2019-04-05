@@ -130,6 +130,7 @@ bool initWindow(
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 4);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+	SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
 	//WGL_NV_gpu_affinity
 	//AMD_gpu_association
 
@@ -234,8 +235,14 @@ bool initOpenGL(SDLApplication& app)
 	
 	free(glExtensions);
 
-	// This makes our buffer swap syncronized with the monitor's vertical refresh
-	SDL_GL_SetSwapInterval(1);
+	// use adaptive vertical refresh, if available
+	if (SDL_GL_SetSwapInterval(-1) == -1) {
+		// buffer swap syncronized with the monitor's vertical refresh
+		if (SDL_GL_SetSwapInterval(1) == -1) {
+			// immediate buffer swap
+			SDL_GL_SetSwapInterval(0);
+		}
+	}
 
 	// Enable multisampling
 	//glEnable(GL_MULTISAMPLE);
