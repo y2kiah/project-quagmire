@@ -51,13 +51,24 @@ void showErrorBox(const char* text, const char* caption);
 
 void setWindowIcon(const WindowData *windowData);
 
-
-#if defined(_MSC_VER)
+// c std lib macros for msvc-only *_s functions
+#ifdef _MSC_VER
     #define _strcpy_s(dest,destsz,src)          strcpy_s(dest,destsz,src)
     #define _strncpy_s(dest,destsz,src,count)   strncpy_s(dest,destsz,src,count)
     #define _strcat_s(dest,destsz,src)          strcat_s(dest,destsz,src)
+	#define _vsnprintf_s(s,n,fmt,valist)		vsnprintf_s(s,n,fmt,valist)
 #else
     #define _strcpy_s(dest,destsz,src)          strcpy(dest,src)
     #define _strncpy_s(dest,destsz,src,count)   strncpy(dest,src,min(destsz,count))
     #define _strcat_s(dest,destsz,src)          strcat(dest,src)
+	#define _vsnprintf_s(s,n,fmt,valist)		vsnprintf(s,n,fmt,valist)
+	#define _vscprintf(fmt,valist)				vsnprintf(nullptr,0,fmt,valist)
+#endif
+
+
+// export macros
+#ifdef _WIN32
+#define _export __declspec(dllexport)
+#else
+#define _export __attribute__ ((visibility ("default")))
 #endif

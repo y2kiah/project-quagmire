@@ -1,0 +1,1 @@
+#define QUAGMIRE_LOGGER_CAPACITY	100		// maximum number of messages that can build up in concurrent queue before it is flushed (per frame)

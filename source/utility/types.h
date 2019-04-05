@@ -22,6 +22,13 @@ typedef double   r64;
 typedef float    f32;
 typedef double   f64;
 
+#define global static
+
+
+// stringize macros
+#define xstr(s) str(s)
+#define str(s) #s
+
 
 // Assert macros
 #if defined(QUAGMIRE_SLOWCHECKS) && QUAGMIRE_SLOWCHECKS != 0
@@ -47,6 +54,11 @@ typedef double   f64;
 
 #define _align_mask(addr, mask)     (((uintptr_t)(addr)+(mask))&~(mask))
 #define align(addr, bytes)          _align_mask(addr,(bytes)-1)
+
+// static assert macro for checking struct size to a base alignment when packed in an array
+//#define _static_assert_aligned_size_msg(Type,bytes)		#Type " size is not a multiple of " xstr(bytes)
+//#define static_assert_aligned_size(Type,bytes)			static_assert(sizeof(Type) % (bytes) == 0, _static_assert_aligned_size_msg(Type,bytes))
+#define static_assert_aligned_size(Type,bytes)			static_assert(sizeof(Type) % (bytes) == 0, #Type " size is not a multiple of " xstr(bytes))
 
 
 // min/max functions, should avoid using macros for this due to possible double-evaluation

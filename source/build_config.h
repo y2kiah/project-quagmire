@@ -1,15 +1,18 @@
-#define QUAGMIRE_TOOLS          1
-#define QUAGMIRE_SLOWCHECKS     1
-#define QUAGMIRE_MEMPROFILE     0
+#define QUAGMIRE_TOOLS			1	// set 1 to enable engine tools in the game
+#define QUAGMIRE_SLOWCHECKS		1	// set 1 to run slow code like asserts and other dev-time tasks
+#define QUAGMIRE_LOG_ASSERTS	0	// set 1 to log failed asserts rather than hard stop when SLOWCHECKS is enabled, could be useful during play testing if you prefer not to crash
+#define QUAGMIRE_MEMPROFILE		0	// set 1 to enable memory profiling
+#define QUAGMIRE_DEBUG_LOG		0	// set 1 to enable debug level logging TODO: is this necessary?
 
 #define GL_GLEXT_PROTOTYPES
 #define GLEW_STATIC
 #define GLEW_NO_GLU
-#define NANOVG_GL3_IMPLEMENTATION
+#define NANOVG_GL3_IMPLEMENTATION // TODO: remove if we don't use NanoVG
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 
+// TODO: ??
 #define _VERTEX_
 #define _TESS_CONTROL_
 #define _TESS_EVAL_

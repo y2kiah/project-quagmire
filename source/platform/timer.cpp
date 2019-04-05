@@ -1,13 +1,13 @@
 #if defined(QUAGMIRE_SLOWCHECKS) && QUAGMIRE_SLOWCHECKS != 0
-#define ASSERT_TIMER_INITIALIZED	assert(qpc_countsPerSecond != 0 && "High performance timer not initialized")
+#define ASSERT_TIMER_INITIALIZED	assert(gCountsPerSecond != 0 && "High performance timer not initialized")
 #else
 #define ASSERT_TIMER_INITIALIZED
 #endif
 
-static i64 qpc_countsPerSecond = 0;
-static f64 qpc_secondsPerCount = 0.0;
+global i64 gCountsPerSecond = 0;
+global f64 gSecondsPerCount = 0.0;
 
-#if defined(_WIN32)
+#ifdef _WIN32
 
 inline i64 getPerformanceFrequency() {
 	i64 freq = 0;
@@ -52,7 +52,7 @@ i64 timer_queryCountsSince(i64 startCounts)
 
 f64 timer_querySecondsSince(i64 startCounts)
 {
-	return (timer_queryCountsSince(startCounts) * qpc_secondsPerCount);
+	return (timer_queryCountsSince(startCounts) * gSecondsPerCount);
 }
 
 f64 timer_queryMillisSince(i64 startCounts)
@@ -64,7 +64,7 @@ f64 timer_secondsBetween(i64 startCounts, i64 stopCounts)
 {
 	ASSERT_TIMER_INITIALIZED;
 
-	return (stopCounts - startCounts) * qpc_secondsPerCount;
+	return (stopCounts - startCounts) * gSecondsPerCount;
 }
 
 f64 timer_millisBetween(i64 startCounts, i64 stopCounts)
@@ -75,13 +75,13 @@ f64 timer_millisBetween(i64 startCounts, i64 stopCounts)
 bool initHighPerfTimer()
 {
 	// get high performance counter frequency
-	qpc_countsPerSecond = getPerformanceFrequency();
-	if (qpc_countsPerSecond == 0) {
+	gCountsPerSecond = getPerformanceFrequency();
+	if (gCountsPerSecond == 0) {
 		//debugPrintf("Timer::initTimer: QueryPerformanceFrequency failed (error %d)\n", GetLastError());
 		return false;
 	}
 
-	qpc_secondsPerCount = 1.0 / (f64)(qpc_countsPerSecond);
+	gSecondsPerCount = 1.0 / (f64)(gCountsPerSecond);
 
 	// test counter function
 	if (getPerformanceCounter() == -1) {
@@ -98,8 +98,8 @@ void Timer::init()
 {
 	ASSERT_TIMER_INITIALIZED;
 
-	countsPerSecond = qpc_countsPerSecond;
-	secondsPerCount = qpc_secondsPerCount;
+	countsPerSecond = gCountsPerSecond;
+	secondsPerCount = gSecondsPerCount;
 	countsPerMs = countsPerSecond / 1000;
 }
 

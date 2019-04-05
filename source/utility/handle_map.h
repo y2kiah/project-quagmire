@@ -4,7 +4,7 @@
 /**
  * @struct Id_t
  * @var	free		0 if active, 1 if slot is part of freelist, only applicable to inner ids
- * @var	typeId		relates to itemTypeId parameter of handle_map
+ * @var	typeId		relates to itemTypeId parameter of HandleMap
  * @var	generation	incrementing generation of data at the index, for tracking accesses to old data
  * @var	index		When used as a handle (outer id, given to the client):
  *						free==0, index of id in the sparseIds array
@@ -41,14 +41,14 @@ bool operator> (const Id_t& a, const Id_t& b) { return (a.value > b.value); }
 
 
 /**
- * @struct handle_map
+ * @struct HandleMap
  *	Stores objects using a dense inner array and sparse outer array scheme for good cache coherence
  *	of the inner items. The sparse array contains handles (outer ids) used to identify the item,
  *	and provides an extra indirection allowing the inner array to move items in memory to keep them
  *	tightly packed. The sparse array contains an embedded LIFO freelist, where removed ids push to
  *	the top of the list so the sparse set remains relatively dense.
  */
-struct handle_map {
+struct HandleMap {
 	// Variables
 	void*	items = nullptr;			// array of stored objects, must have one extra element above capacity used in defragment
 	Id_t*	sparseIds = nullptr;		// array of Id_ts, these are "inner" ids indexing into items
@@ -59,13 +59,60 @@ struct handle_map {
 	u32		capacity = 0;				// maximum number of objects that can be stored
 	u32		elementSizeB = 0;			// size in bytes of individual stored objects
 	u8		_fragmented = 0;			// set to 1 if modified by insert or erase since last complete defragment
-	u8		_memoryOwned = 0;			// set to 1 if buffer memory is owned by handle_map
+	u8		_memoryOwned = 0;			// set to 1 if buffer memory is owned by HandleMap
 	
 	u8		_padding[6] = {};			// padding added to multiple of 8 size
 
 	// Functions
-
+	
 	static size_t getTotalBufferSize(u16 elementSizeB, u32 capacity);
+
+	/**
+	 * Constructor
+	 * @param	elementSizeB	size in bytes of individual objects stored
+	 * @param	capacity		maximum number of objects that can be stored
+	 * @param	itemTypeId		typeId used by the Id_t::typeId variable for this container
+	 * @param	buffer
+	 *	Optional pre-allocated buffer for all dynamic storage used in the HandleMap, with ample
+	 *	size (obtained by call to getTotalBufferSize). If passed, the memory is not owned by
+	 *	HandleMap and thus not freed on delete. Pass nullptr (default) to allocate the storage on
+	 *	create and free on delete.
+	 */
+	explicit HandleMap(u16 elementSizeB,
+					   u32 capacity,
+					   u16 itemTypeId = 0,
+					   void* buffer = nullptr) :
+		elementSizeB{ elementSizeB },
+		capacity{ capacity }
+	{
+		if (!buffer) {
+			size_t size = getTotalBufferSize(elementSizeB, capacity);
+			buffer = malloc(size);
+			memset(buffer, 0, size);
+			_memoryOwned = 1;
+		}
+
+		items = buffer;
+		// round up to aligned storage
+		// add an extra item to the items array for scratch memory used by defragment sort
+		sparseIds = (Id_t*)align((uintptr_t)items + (elementSizeB * (capacity+1)), 8);
+		denseToSparse = (u32*)align((uintptr_t)sparseIds + (sizeof(Id_t) * capacity), 4);
+
+		// check resulting alignment in case element storage plus padding doesn't leave us 8-byte aligned
+		assert(is_aligned(sparseIds, 8) && "sparseIds not properly aligned");
+		assert(is_aligned(denseToSparse, 4) && "denseToSparse not properly aligned");
+
+		// reset to set up the sparseIds freelist
+		sparseIds[0].typeId = itemTypeId & 0x7FFF;
+		reset();
+	}
+
+	~HandleMap() {
+		if (_memoryOwned && items) {
+			free(items);
+		}
+	}
+
 
 	/**
 	 * Get a direct pointer to a stored item by handle
@@ -172,57 +219,10 @@ struct handle_map {
 			default: memset(dst, 0, elementSizeB);
 		}
 	}
-	
-
-	/**
-	 * Constructor
-	 * @param	elementSizeB	size in bytes of individual objects stored
-	 * @param	capacity		maximum number of objects that can be stored
-	 * @param	itemTypeId		typeId used by the Id_t::typeId variable for this container
-	 * @param	buffer
-	 *	Optional pre-allocated buffer for all dynamic storage used in the handle_map, with ample
-	 *	size (obtained by call to getTotalBufferSize). If passed, the memory is not owned by
-	 *	handle_map and thus not freed on delete. Pass nullptr (default) to allocate the storage on
-	 *	create and free on delete.
-	 */
-	explicit handle_map(u16 elementSizeB,
-						u32 capacity,
-						u16 itemTypeId = 0,
-						void* buffer = nullptr) :
-		elementSizeB{ elementSizeB },
-		capacity{ capacity }
-	{
-		if (!buffer) {
-			size_t size = getTotalBufferSize(elementSizeB, capacity);
-			buffer = malloc(size);
-			memset(buffer, 0, size);
-			_memoryOwned = 1;
-		}
-
-		items = buffer;
-		// round up to aligned storage
-		// add an extra item to the items array for scratch memory used by defragment sort
-		sparseIds = (Id_t*)align((uintptr_t)items + (elementSizeB * (capacity+1)), 8);
-		denseToSparse = (u32*)align((uintptr_t)sparseIds + (sizeof(Id_t) * capacity), 4);
-
-		// check resulting alignment in case element storage plus padding doesn't leave us 8-byte aligned
-		assert(is_aligned(sparseIds, 8) && "sparseIds not properly aligned");
-		assert(is_aligned(denseToSparse, 4) && "denseToSparse not properly aligned");
-
-		// reset to set up the sparseIds freelist
-		sparseIds[0].typeId = itemTypeId & 0x7FFF;
-		reset();
-	}
-
-	~handle_map() {
-		if (_memoryOwned && items) {
-			free(items);
-		}
-	}
 };
 
 
-size_t handle_map::getTotalBufferSize(u16 elementSizeB, u32 capacity)
+size_t HandleMap::getTotalBufferSize(u16 elementSizeB, u32 capacity)
 {
 	// handle aligned storage, which may increase total size due to padding between buffers
 	// add an extra item to the items array for scratch memory used by defragment sort
@@ -233,9 +233,9 @@ size_t handle_map::getTotalBufferSize(u16 elementSizeB, u32 capacity)
 }
 
 
-Id_t handle_map::insert(void* src, void** out)
+Id_t HandleMap::insert(void* src, void** out)
 {
-	assert(length < capacity && "handle_map is full");
+	assert(length < capacity && "HandleMap is full");
 	Id_t handle = null_Id_t;
 	
 	if (length < capacity) {
@@ -275,7 +275,7 @@ Id_t handle_map::insert(void* src, void** out)
 }
 
 
-bool handle_map::erase(Id_t handle)
+bool HandleMap::erase(Id_t handle)
 {
 	if (!has(handle)) {
 		return false;
@@ -314,7 +314,7 @@ bool handle_map::erase(Id_t handle)
 }
 
 
-void handle_map::clear()
+void HandleMap::clear()
 {
 	if (length > 0) {
 		for (u32 i = 0; i < length; ++i) {
@@ -337,7 +337,7 @@ void handle_map::clear()
 }
 
 
-void handle_map::reset()
+void HandleMap::reset()
 {
 	Id_t innerId = { 0, 0, sparseIds[0].typeId, 1 };
 	for (u32 i = 0; i < capacity; ++i) {
@@ -358,7 +358,7 @@ void handle_map::reset()
 }
 
 
-void* handle_map::at(Id_t handle)
+void* HandleMap::at(Id_t handle)
 {
 	void* pItem = nullptr;
 	if (has(handle)) {
@@ -369,7 +369,7 @@ void* handle_map::at(Id_t handle)
 }
 
 
-bool handle_map::has(Id_t handle)
+bool HandleMap::has(Id_t handle)
 {
 	assert(handle.index < capacity && "handle index out of range");
 	
@@ -388,7 +388,7 @@ bool handle_map::has(Id_t handle)
 }
 
 
-u32 handle_map::getInnerIndex(Id_t handle)
+u32 HandleMap::getInnerIndex(Id_t handle)
 {
 	u32 index = UINT_MAX;
 	if (has(handle)) {
@@ -398,7 +398,7 @@ u32 handle_map::getInnerIndex(Id_t handle)
 }
 
 
-Id_t handle_map::getHandleForInnerIndex(size_t innerIndex)
+Id_t HandleMap::getHandleForInnerIndex(size_t innerIndex)
 {
 	assert(innerIndex < length && innerIndex >= 0 && "inner index out of range");
 	
@@ -410,7 +410,7 @@ Id_t handle_map::getHandleForInnerIndex(size_t innerIndex)
 }
 
 
-size_t handle_map::defragment(pfCompare comp, size_t maxSwaps)
+size_t HandleMap::defragment(pfCompare comp, size_t maxSwaps)
 {
 	if (_fragmented == 0) {
 		return 0;

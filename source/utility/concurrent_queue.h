@@ -1,34 +1,32 @@
 /**
-* @struct concurrent_queue
-* concurrent_queue provides functionality for thread-safe enqueue and dequeue operations.
+* @struct ConcurrentQueue
+* ConcurrentQueue provides functionality for thread-safe enqueue and dequeue operations.
 * @see http://www.justsoftwaresolutions.co.uk/threading/implementing-a-thread-safe-queue-using-condition-variables.html
 * @see http://stackoverflow.com/questions/15278343/c11-thread-safe-queue
 */
-struct concurrent_queue {
+struct ConcurrentQueue {
 	SDL_mutex*	lock = nullptr;
 	SDL_cond*	cond = nullptr;
 	
-	dense_queue queue;
+	DenseQueue	queue;
 	
-	// padding added for 64 byte total size, to avoid potential false sharing of the concurrent_queue's cache line
-	u8     		_padding[16] = {};
+	// padding added for 64 byte total size, to avoid potential false sharing of the ConcurrentQueue's cache line
+	u8			_padding[16] = {};
 
 
 	/**
 	* Constructors
 	*/
-	explicit concurrent_queue(u16 elementSizeB,
-							  u32 capacity,
-							  void* buffer = nullptr) :
+	explicit ConcurrentQueue(u16 elementSizeB,
+							 u32 capacity,
+							 void* buffer = nullptr) :
 		queue(elementSizeB, capacity, buffer)
 	{
-		assert(sizeof(concurrent_queue) == 64);
-
 		lock = SDL_CreateMutex();
 		cond = SDL_CreateCond();
 	}
 
-	~concurrent_queue() {
+	~ConcurrentQueue() {
 		SDL_DestroyMutex(lock);
 		SDL_DestroyCond(cond);
 	}
@@ -117,18 +115,20 @@ struct concurrent_queue {
 	* concurrently with calls to push*, pop*, and empty methods.
 	* @returns size of the queue
 	*/
-	size_t unsafe_size() { return queue.length; }
+	u32 unsafe_size() { return queue.length; }
 
 	/**
 	* unsafe_capacity is not concurrency-safe and can produce incorrect results if called
 	* concurrently with calls to push*, pop*, and empty methods.
 	* @returns capacity of the queue
 	*/
-	size_t unsafe_capacity() { return queue.capacity; }
+	u32 unsafe_capacity() { return queue.capacity; }
 };
 
+static_assert(sizeof(ConcurrentQueue) == 64, "ConcurrentQueue expected to be 64 bytes");
 
-void concurrent_queue::push(void* inData)
+
+void ConcurrentQueue::push(void* inData)
 {
 	SDL_LockMutex(lock);
 	
@@ -139,7 +139,7 @@ void concurrent_queue::push(void* inData)
 }
 
 
-void concurrent_queue::push_all(void* inData, int count)
+void ConcurrentQueue::push_all(void* inData, int count)
 {
 	void* src = inData;
 	
@@ -155,7 +155,7 @@ void concurrent_queue::push_all(void* inData, int count)
 }
 
 
-bool concurrent_queue::try_pop(void** outData)
+bool ConcurrentQueue::try_pop(void** outData)
 {
 	assert(outData);
 
@@ -172,7 +172,7 @@ bool concurrent_queue::try_pop(void** outData)
 }
 
 
-bool concurrent_queue::try_pop(void** outData, u32 timeoutMS)
+bool ConcurrentQueue::try_pop(void** outData, u32 timeoutMS)
 {
 	SDL_LockMutex(lock);
 
@@ -193,7 +193,7 @@ bool concurrent_queue::try_pop(void** outData, u32 timeoutMS)
 }
 
 
-int concurrent_queue::try_pop_all(void** outData, int max)
+int ConcurrentQueue::try_pop_all(void** outData, int max)
 {
 	int numPopped = 0;
 	void** dst = outData;
@@ -215,7 +215,7 @@ int concurrent_queue::try_pop_all(void** outData, int max)
 }
 
 
-bool concurrent_queue::try_pop_if(void** outData, pfUnaryPredicate p_)
+bool ConcurrentQueue::try_pop_if(void** outData, pfUnaryPredicate p_)
 {
 	SDL_LockMutex(lock);
 
@@ -230,7 +230,7 @@ bool concurrent_queue::try_pop_if(void** outData, pfUnaryPredicate p_)
 }
 
 
-int concurrent_queue::try_pop_all_if(void** outData, pfUnaryPredicate p_)
+int ConcurrentQueue::try_pop_all_if(void** outData, pfUnaryPredicate p_)
 {
 	int numPopped = 0;
 	void** dst = outData;
@@ -250,7 +250,7 @@ int concurrent_queue::try_pop_all_if(void** outData, pfUnaryPredicate p_)
 }
 
 
-void concurrent_queue::wait_pop(void** outData)
+void ConcurrentQueue::wait_pop(void** outData)
 {
 	SDL_LockMutex(lock);
 
@@ -267,7 +267,7 @@ void concurrent_queue::wait_pop(void** outData)
 }
 
 
-void concurrent_queue::clear()
+void ConcurrentQueue::clear()
 {
 	SDL_LockMutex(lock);
 
@@ -277,7 +277,7 @@ void concurrent_queue::clear()
 }
 
 
-bool concurrent_queue::empty()
+bool ConcurrentQueue::empty()
 {
 	SDL_LockMutex(lock);
 	

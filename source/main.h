@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <cmath>
+#include <cstdarg>
 #include <atomic>
 #include <SDL.h>
 #include <SDL_syswm.h>
@@ -11,6 +12,7 @@
 #include "utility/handle_map.h"
 #include "utility/dense_queue.h"
 #include "utility/concurrent_queue.h"
+#include "utility/logger.h"
 #include "platform/platform.h"
 #include "platform/timer.h"
 #include "platform/fixed_timestep.h"

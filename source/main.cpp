@@ -1,4 +1,5 @@
 #include "build_config.h"
+#include "capacity.h"
 #include "main.h"
 //#include <application/Engine.h>
 //#include <game/Game.h>
@@ -9,10 +10,11 @@
 //#include <utility/debug.h>
 //#include <utility/Logger.h>
 //#include <tests/Test.h>
-#include "platform/platform.cpp"
+#include "utility/logger.cpp"
 #include "platform/timer.cpp"
 #include "engine.cpp"
 #include "game.cpp"
+#include "platform/platform.cpp"
 
 
 struct GameContext {
@@ -294,12 +296,9 @@ int main(int argc, char *argv[])
 	// Game& game = *gamePtr;
 
 	// run tests at startup
-	//struct Something {
-	//	u32 a, b, c, d;
-	//};
 	using Something = Id_t;
 	Something s = { 1, 1, 1, 1 };
-	handle_map testMap(sizeof(Something), 100, 1);
+	HandleMap testMap(sizeof(Something), 100, 1);
 	Something* items = (Something*)testMap.items;
 	Id_t h1 = testMap.insert();
 	Id_t h2 = testMap.insert(&s);
@@ -308,7 +307,7 @@ int main(int argc, char *argv[])
 	*s3 = { 3, 3, 3, 1 }; 
 	testMap.erase(h3);
 
-	auto component_insert = [](handle_map& hm, Something&& val)->Id_t {
+	auto component_insert = [](HandleMap& hm, Something&& val)->Id_t {
 		return hm.insert((void*)&val);
 	};
 
