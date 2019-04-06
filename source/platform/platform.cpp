@@ -1,6 +1,6 @@
 
 #include "platform.h"
-#include <SDL2/SDL_filesystem.h>
+#include <SDL_filesystem.h>
 
 static void getPreferencesPath_utf8(char* dst)
 {

@@ -17,70 +17,14 @@
 #include "platform/platform.cpp"
 
 
-struct GameContext {
-	SDLApplication* app = nullptr;
-	std::atomic_bool done; // TODO: consider using SDL atomics instead of std to avoid the template
-	//*game
-	//*engine
-};
+logging::Logger logger;
 
-/**
-* Game Update-Render Thread, runs the main rendering frame loop and the inner
-* fixed-timestep game update loop
-*/
-int gameProcess(void* ctx)
+// enable dedicated graphics for NVIDIA and AMD
+extern "C" 
 {
-	GameContext& gameContext = *(GameContext*)ctx;
-	gameContext.done = false;
-	SDLApplication& app = *(gameContext.app);
-	Timer timer;
-	uint64_t frame = 0;
-
-	// gl context made current on the main loop thread
-	SDL_GL_MakeCurrent(app.windowData.window, app.windowData.glContext);
-	
-	int64_t realTime = timer.start();
-
-	FixedTimestep update(1000.0f / 30.0f, timer.countsPerMs);
-	
-	for (frame = 0; !gameContext.done; ++frame)
-	{
-		int64_t countsPassed = timer.queryCountsPassed();
-		realTime = timer.stopCounts;
-
-		float interpolation = update.tick(realTime, countsPassed, frame, 1.0f,
-			[](UpdateInfo& ui) {
-				/*logger.verbose("Update virtualTime=%lu: gameTime=%ld: deltaCounts=%ld: countsPerMs=%ld\n",
-						virtualTime, gameTime, deltaCounts, Timer::timerFreq() / 1000);*/
-
-				//engine.threadPool->executeFixedThreadTasks(ThreadAffinity::Thread_Update);
-
-				//engineUpdateFrameTick(engine, game, ui);
-			});
-
-		//SDL_Delay(1000);
-		/*logger.verbose("Render realTime=%lu: interpolation=%0.3f: threadIdHash=%lu\n",
-				realTime, interpolation, std::this_thread::get_id().hash());*/
-
-		//engine.threadPool->executeFixedThreadTasks(ThreadAffinity::Thread_OpenGL_Render);
-
-//		engineRenderFrameTick(engine, game, interpolation, realTime, countsPassed);
-
-		SDL_GL_SwapWindow(app.windowData.window);
-
-		yieldThread();
-		
-		//logger.error(Logger::Category_Error, "%s", e.what());
-	}
-
-	// NOTE: be sure to wait on important futures here for processes that must finish before exit (e.g. save game)
-
-	SDL_GL_MakeCurrent(nullptr, 0); // quitting, make no gl context current on the game thread
-	glGetError(); // clear GL error from SDL call above
-
-	return 0;
+	_export unsigned long NvOptimusEnablement = 0x00000001;
+	_export int AmdPowerXpressRequestHighPerformance = 1;
 }
-
 
 void initApplication(SDLApplication& app)
 {
@@ -109,19 +53,19 @@ bool initWindow(
 	// get number of displays
 	app.numDisplays = SDL_GetNumVideoDisplays();
 	if (app.numDisplays <= 0) {
-		//log (SDL_GetError());
+		logger.error(SDL_GetError());
 		return false;
 	}
 
 	// get all display modes for each display
 	for (int d = 0; d < app.numDisplays; ++d) {
 		if (SDL_GetDisplayBounds(d, &(app.displayData[d].bounds)) != 0) {
-			//log (SDL_GetError());
+			logger.error(SDL_GetError());
 			return false;
 		}
 
 		if (SDL_GetDesktopDisplayMode(d, &app.displayData[d].displayMode) != 0) {
-			//log (SDL_GetError());
+			logger.error(SDL_GetError());
 			return false;
 		}
 	}
@@ -161,14 +105,14 @@ bool initWindow(
 		//SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN_DESKTOP);
 
 	if (window == nullptr) {
-		//log (SDL_GetError());
+		logger.error(SDL_GetError());
 		return false;
 	}
 
 	SDL_GLContext glContext = SDL_GL_CreateContext(window);
 
 	if (glContext == nullptr) {
-		//log (SDL_GetError());
+		logger.error(SDL_GetError());
 		return false;
 	}
 
@@ -193,18 +137,18 @@ bool initOpenGL(SDLApplication& app)
 	glewExperimental = true; // Needed in core profile
 	GLenum err = glewInit();
 	if (err != GLEW_OK) {
-//		logger.critical(Logger::Category_Error, "Failed to initialize GLEW\n");
-//		logger.critical(Logger::Category_Error, (const char *)glewGetErrorString(err));
+		logger.critical(logging::Category_Error, "Failed to initialize GLEW\n");
+		logger.critical(logging::Category_Error, (const char *)glewGetErrorString(err));
 		return false;
 	}
 	glGetError(); // clear any error created by GLEW init
 
-//	logger.debug(Logger::Category_Video,
-//				 "OpenGL Information:\n  Vendor: %s\n  Renderer: %s\n  Version: %s\n  Shading Language Version: %s\n",
-//				 glGetString(GL_VENDOR),
-//				 glGetString(GL_RENDERER),
-//				 glGetString(GL_VERSION),
-//				 glGetString(GL_SHADING_LANGUAGE_VERSION));
+	logger.debug(logging::Category_Video,
+			  "OpenGL Information:\n  Vendor: %s\n  Renderer: %s\n  Version: %s\n  Shading Language Version: %s\n",
+			  glGetString(GL_VENDOR),
+			  glGetString(GL_RENDERER),
+			  glGetString(GL_VERSION),
+			  glGetString(GL_SHADING_LANGUAGE_VERSION));
 
 	//PFNGLGETSTRINGIPROC glGetStringi = (PFNGLGETSTRINGIPROC)SDL_GL_GetProcAddress("glGetStringi");
 
@@ -227,8 +171,7 @@ bool initOpenGL(SDLApplication& app)
 			_strcat_s(glExtensions, totalLen, " ");
 		}
 	}
-	printf("%s\n", glExtensions);
-	//logger.debug(Logger::Category_Video, "OpenGL Extensions: %s\n", glExtensions.c_str());
+	logger.debug(logging::Category_Video, "OpenGL Extensions: %s\n", glExtensions);
 
 	// give the extensions string to the SOIL library
 	//SOIL_set_gl_extensions_string(glExtensions.c_str());
@@ -273,17 +216,87 @@ bool initOpenGL(SDLApplication& app)
 
 void quitApplication(SDLApplication& app)
 {
-	SDL_GL_DeleteContext(app.windowData.glContext);
-	SDL_DestroyWindow(app.windowData.window);
+	if (app.windowData.glContext) {
+		SDL_GL_DeleteContext(app.windowData.glContext);
+	}
+	if (app.windowData.window) {
+		SDL_DestroyWindow(app.windowData.window);
+	}
 
+	logging::flush();
+	
 	SDL_Quit();
+}
+
+
+struct GameContext {
+	SDLApplication* app = nullptr;
+	std::atomic_bool done; // TODO: consider using SDL atomics instead of std to avoid the template
+	//*game
+	//*engine
+};
+
+/**
+* Game Update-Render Thread, runs the main rendering frame loop and the inner
+* fixed-timestep game update loop
+*/
+int gameProcess(void* ctx)
+{
+	GameContext& gameContext = *(GameContext*)ctx;
+	gameContext.done = false;
+	SDLApplication& app = *(gameContext.app);
+	Timer timer;
+	uint64_t frame = 0;
+
+	// gl context made current on the main loop thread
+	SDL_GL_MakeCurrent(app.windowData.window, app.windowData.glContext);
+	
+	int64_t realTime = timer.start();
+
+	FixedTimestep update(1000.0f / 30.0f, timer.countsPerMs);
+	
+	for (frame = 0; !gameContext.done; ++frame)
+	{
+		int64_t countsPassed = timer.queryCountsPassed();
+		realTime = timer.stopCounts;
+
+		float interpolation = update.tick(realTime, countsPassed, frame, 1.0f,
+			[](UpdateInfo& ui) {
+				logger.verbose("Update virtualTime=%lu: gameTime=%ld: deltaCounts=%ld: countsPerMs=%ld\n",
+						ui.virtualTime, ui.gameTime, ui.deltaCounts, ui.countsPerMS);
+
+				//engine.threadPool->executeFixedThreadTasks(ThreadAffinity::Thread_Update);
+
+				//engineUpdateFrameTick(engine, game, ui);
+			});
+
+		//SDL_Delay(1000);
+		/*logger.verbose("Render realTime=%lu: interpolation=%0.3f: threadIdHash=%lu\n",
+				realTime, interpolation, std::this_thread::get_id().hash());*/
+
+		//engine.threadPool->executeFixedThreadTasks(ThreadAffinity::Thread_OpenGL_Render);
+
+//		engineRenderFrameTick(engine, game, interpolation, realTime, countsPassed);
+
+		SDL_GL_SwapWindow(app.windowData.window);
+
+		yieldThread();
+	}
+
+	// NOTE: be sure to wait on important futures here for processes that must finish before exit (e.g. save game)
+
+	SDL_GL_MakeCurrent(nullptr, 0); // quitting, make no gl context current on the game thread
+	glGetError(); // clear GL error from SDL call above
+
+	return 0;
 }
 
 
 int main(int argc, char *argv[])
 {
 	initHighPerfTimer();
-//	logger.setAllPriority(Logger::Priority_Verbose);
+	logging::setMode(logging::Mode_Immediate_Thread_Unsafe);
+	logger.setAllPriorities(logging::Priority_Verbose);
 	
 	SDLApplication app;
 	initApplication(app);
@@ -293,8 +306,12 @@ int main(int argc, char *argv[])
 	GameContext gameContext;
 	gameContext.app = &app;
 
-	initWindow(app, PROGRAM_NAME);
-	initOpenGL(app);
+	if (!initWindow(app, PROGRAM_NAME) ||
+		!initOpenGL(app))
+	{
+		quitApplication(app);
+		return 1;
+	}
 
 	// enginePtr = make_engine(app);
 	// Engine& engine = *enginePtr;
@@ -374,7 +391,7 @@ int main(int argc, char *argv[])
 		//   engine.taskPool.checkDeferredTasks();
 
 		// flush the logger queue, writing out all of the messages
-		//logger.flush();
+		logging::flush();
 
 		yieldThread();
 	}
@@ -393,8 +410,6 @@ int main(int argc, char *argv[])
 	//enginePtr.reset(); // must delete the engine on the GL thread
 
 	quitApplication(app);
-	
-	//logger.deinit();
 
 	return 0;
 }

@@ -1,7 +1,7 @@
 #ifndef _CONCURRENT_QUEUE_H
 #define _CONCURRENT_QUEUE_H
 
-#include <SDL2/SDL_mutex.h>
+#include <SDL_mutex.h>
 #include "dense_queue.h"
 
 /**

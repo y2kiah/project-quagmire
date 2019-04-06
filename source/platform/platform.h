@@ -1,8 +1,8 @@
 #ifndef _PLATFORM_H
 #define _PLATFORM_H
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_syswm.h>
+#include <SDL.h>
+#include <SDL_syswm.h>
 #include "../utility/types.h"
 
 /*class FileSystemWatcher {
@@ -62,16 +62,16 @@ void setWindowIcon(const WindowData *windowData);
 
 // c std lib macros for msvc-only *_s functions
 #ifdef _MSC_VER
-    #define _strcpy_s(dest,destsz,src)          strcpy_s(dest,destsz,src)
-    #define _strncpy_s(dest,destsz,src,count)   strncpy_s(dest,destsz,src,count)
-    #define _strcat_s(dest,destsz,src)          strcat_s(dest,destsz,src)
-	#define _vsnprintf_s(s,n,fmt,valist)		vsnprintf_s(s,n,fmt,valist)
+    #define _strcpy_s(dest,destsz,src)					strcpy_s(dest,destsz,src)
+    #define _strncpy_s(dest,destsz,src,count)			strncpy_s(dest,destsz,src,count)
+    #define _strcat_s(dest,destsz,src)					strcat_s(dest,destsz,src)
+	#define _vsnprintf_s(dest,destsz,count,fmt,valist)	vsnprintf_s(dest,destsz,count,fmt,valist)
 #else
-    #define _strcpy_s(dest,destsz,src)          strcpy(dest,src)
-    #define _strncpy_s(dest,destsz,src,count)   strncpy(dest,src,min(destsz,count))
-    #define _strcat_s(dest,destsz,src)          strcat(dest,src)
-	#define _vsnprintf_s(s,n,fmt,valist)		vsnprintf(s,n,fmt,valist)
-	#define _vscprintf(fmt,valist)				vsnprintf(nullptr,0,fmt,valist)
+    #define _strcpy_s(dest,destsz,src)					strcpy(dest,src)
+    #define _strncpy_s(dest,destsz,src,count)			strncpy(dest,src,min(destsz,count))
+    #define _strcat_s(dest,destsz,src)					strcat(dest,src)
+	#define _vsnprintf_s(dest,destsz,count,fmt,valist)	vsnprintf(dest,count,fmt,valist)
+	#define _vscprintf(fmt,valist)						vsnprintf(nullptr,0,fmt,valist)
 #endif
 
 

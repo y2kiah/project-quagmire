@@ -3,8 +3,9 @@
 
 #include <cstdarg>
 #include "types.h"
+#include "nstring.h"
 
-namespace logger {
+namespace logging {
 	/**
 	 * Logging mode. Normally you'd set Immediate_Thread_Unsafe only for early initialization
 	 * before multiple threads are running, and Deferred_Thread_Safe while multiple threads are
@@ -47,11 +48,13 @@ namespace logger {
 	};
 	
 	struct LogMessage {
-		char*		message;
+		//char*		message;
 		Category	category;
 		Priority	priority;
 		
 		u8			_padding[6];
+
+		fstring254	message;
 	};
 	static_assert_aligned_size(LogMessage,8);
 
@@ -61,7 +64,6 @@ namespace logger {
 	// TODO: keep an entity/gameplay log history file specific to save-game, with save game diffs stacking up. If an old save game is deleted, prepend old diffs into history
 	struct Logger {
 		Category	defaultCategory = Category_System;
-		Priority	logPriority = Priority_Verbose;
 		Priority	categoryDefaultPriority[_Category_Count] = {
 						Priority_Info,		// Category_Application
 						Priority_Critical,	// Category_Error
@@ -91,10 +93,10 @@ namespace logger {
 		void verbose(Category c, const char *s, ...);
 		void test(const char *s, ...);
 
-		void log(const char *s, ...);
-		void log(Category c, const char *s, ...);
-		void log(Category c, Priority p, const char *s, ...);
-		void _log(Category c, Priority p, const char *s, va_list args);
+		void out(const char *s, ...);
+		void out(Category c, const char *s, ...);
+		void out(Category c, Priority p, const char *s, ...);
+		void _out(Category c, Priority p, const char *s, va_list args);
 
 		/**
 		* Sets the priority for a category. This call is not thread safe, call this only

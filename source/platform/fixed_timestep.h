@@ -1,3 +1,6 @@
+#ifndef _FIXED_TIMESTEP_H
+#define _FIXED_TIMESTEP_H
+
 struct UpdateInfo {
 	i64		virtualTime;	// interpolation of real time with each step of update loop, keeps in sync with real time, useful for checking against timestamped events 
 	i64		gameTime;		// current game time from 0, useful for logical game time checks, sensitive to gameSpeed, should be reset to 0 when game is restarted
@@ -6,6 +9,7 @@ struct UpdateInfo {
 	f32		deltaMs;		// update frame time in milliseconds
 	f32		deltaT;			// update frame time in seconds
 	f32		gameSpeed;		// rate multiplier of gameplay, 1.0 is normal
+	i64		countsPerMS;	// performance counter frequency
 };
 
 
@@ -19,11 +23,14 @@ struct FixedTimestep {
 	i64 	deltaCounts;
 	f32		deltaMs;
 
+	i64		countsPerMs;
+
 
 	explicit FixedTimestep(f32 deltaMs,
 						   i64 countsPerMs) :
 		deltaMs{ deltaMs },
-		deltaCounts{ (i64)(deltaMs * countsPerMs) }
+		deltaCounts{ (i64)(deltaMs * countsPerMs) },
+		countsPerMs{ countsPerMs }
 	{}
 
 	f32 tick(i64 realTime,
@@ -32,7 +39,7 @@ struct FixedTimestep {
 			 f32 gameSpeed,
 			 pfUpdate update)
 	{
-		UpdateInfo ui = { virtualTime, gameTime, deltaCounts, frame, deltaMs, deltaMs / 1000.0f, gameSpeed };
+		UpdateInfo ui = { virtualTime, gameTime, deltaCounts, frame, deltaMs, deltaMs / 1000.0f, gameSpeed, countsPerMs };
 
 		accumulator += (i64)(countsPassed * gameSpeed);
 
@@ -50,3 +57,5 @@ struct FixedTimestep {
 		return interpolation;
 	}
 };
+
+#endif

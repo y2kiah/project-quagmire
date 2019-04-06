@@ -1,9 +1,9 @@
-#include <SDL2/SDL_log.h>
+#include <SDL_log.h>
 #include "../capacity.h"
 #include "logger.h"
 #include "concurrent_queue.h"
 
-namespace logger {
+namespace logging {
 
 	Mode gLoggingMode = Mode_Deferred_Thread_Safe;
 	// TODO: pass in buffer space, currently this mallocs its own
@@ -15,7 +15,7 @@ namespace logger {
 	void write(const LogMessage& m)
 	{
 		SDL_LogPriority sdlPriority = (SDL_LogPriority)(m.priority == 0 ? 0 : SDL_NUM_LOG_PRIORITIES - m.priority);
-		SDL_LogMessage(m.category, sdlPriority, "%s", m.message);
+		SDL_LogMessage(m.category, sdlPriority, "%s", m.message.c_str);
 	}
 
 	/**
@@ -36,7 +36,7 @@ namespace logger {
 	 * Setting the mode will also flush the queue. This call is not thread safe, call this only
 	 * from the same thread that normally calls flush.
 	 */
-	void set_mode(Mode mode) {
+	void setMode(Mode mode) {
 		flush();
 		gLoggingMode = mode;
 	}
@@ -61,88 +61,90 @@ namespace logger {
 
 
 	void Logger::critical(const char *s, ...) {
-		pass_args(_log(defaultCategory, Priority_Critical, s, args));
+		pass_args(_out(defaultCategory, Priority_Critical, s, args));
 	}
 
 	void Logger::error(const char *s, ...) {
-		pass_args(_log(defaultCategory, Priority_Error, s, args));
+		pass_args(_out(defaultCategory, Priority_Error, s, args));
 	}
 
 	void Logger::warn(const char *s, ...) {
-		pass_args(_log(defaultCategory, Priority_Warn, s, args));
+		pass_args(_out(defaultCategory, Priority_Warn, s, args));
 	}
 
 	void Logger::info(const char *s, ...) {
-		pass_args(_log(defaultCategory, Priority_Info, s, args));
+		pass_args(_out(defaultCategory, Priority_Info, s, args));
 	}
 
 	#if defined(QUAGMIRE_DEBUG_LOG) && QUAGMIRE_DEBUG_LOG != 0
 	void Logger::debug(const char *s, ...) {
-		pass_args(_log(defaultCategory, Priority_Debug, s, args));
+		pass_args(_out(defaultCategory, Priority_Debug, s, args));
 	}
 	#else
 	void Logger::debug(const char *s, ...) {}
 	#endif
 
 	void Logger::verbose(const char *s, ...) {
-		pass_args(_log(defaultCategory, Priority_Verbose, s, args));
+		pass_args(_out(defaultCategory, Priority_Verbose, s, args));
 	}
 
 	void Logger::critical(Category c, const char *s, ...) {
-		pass_args(_log(c, Priority_Critical, s, args));
+		pass_args(_out(c, Priority_Critical, s, args));
 	}
 
 	void Logger::error(Category c, const char *s, ...) {
-		pass_args(_log(c, Priority_Error, s, args));
+		pass_args(_out(c, Priority_Error, s, args));
 	}
 
 	void Logger::warn(Category c, const char *s, ...) {
-		pass_args(_log(c, Priority_Warn, s, args));
+		pass_args(_out(c, Priority_Warn, s, args));
 	}
 
 	void Logger::info(Category c, const char *s, ...) {
-		pass_args(_log(c, Priority_Info, s, args));
+		pass_args(_out(c, Priority_Info, s, args));
 	}
 
 	#if defined(QUAGMIRE_DEBUG_LOG) && QUAGMIRE_DEBUG_LOG != 0
 	void Logger::debug(Category c, const char *s, ...) {
-		pass_args(_log(c, Priority_Debug, s, args));
+		pass_args(_out(c, Priority_Debug, s, args));
 	}
 	#else
 	void Logger::debug(Category c, const char *s, ...) {}
 	#endif
 
 	void Logger::verbose(Category c, const char *s, ...) {
-		pass_args(_log(c, Priority_Verbose, s, args));
+		pass_args(_out(c, Priority_Verbose, s, args));
 	}
 
 	void Logger::test(const char *s, ...) {
-		pass_args(_log(Category_Test, categoryDefaultPriority[Category_Test], s, args));
+		pass_args(_out(Category_Test, categoryDefaultPriority[Category_Test], s, args));
 	}
 
-	void Logger::log(Category c, Priority p, const char *s, ...) {
-		pass_args(_log(c, p, s, args));
+	void Logger::out(Category c, Priority p, const char *s, ...) {
+		pass_args(_out(c, p, s, args));
 	}
 
-	void Logger::log(Category c, const char *s, ...) {
-		pass_args(_log(c, categoryDefaultPriority[c], s, args));
+	void Logger::out(Category c, const char *s, ...) {
+		pass_args(_out(c, categoryDefaultPriority[c], s, args));
 	}
 
-	void Logger::log(const char *s, ...) {
-		pass_args(_log(defaultCategory, categoryDefaultPriority[defaultCategory], s, args));
+	void Logger::out(const char *s, ...) {
+		pass_args(_out(defaultCategory, categoryDefaultPriority[defaultCategory], s, args));
 	}
 
-	void Logger::_log(Category c, Priority p, const char *s, va_list args)
+	void Logger::_out(Category c, Priority p, const char *s, va_list args)
 	{
-		if (logPriority >= p) {
-			//int len = _vscprintf(s, args);
+		if (categoryDefaultPriority[c] >= p) {
 			// write formatted string
-			vsnprintf_s(&str[0], len+1, len, s, args);
+			int len = _vscprintf(s, args);
+			LogMessage msg = { c, p, {}, {} };
+			_vsnprintf_s(msg.message.c_str, 254, len, s, args);
+			msg.message.sizeB = (u8)min(len, 254);
 			if (gLoggingMode == Mode_Deferred_Thread_Safe) {
-				gMessageQueue.push(LogMessage{ c, p, std::move(str) });
+				gMessageQueue.push(&msg);
 			}
 			else {
-				write({ c, p, std::move(str) });
+				write(msg);
 			}
 		}
 	}
