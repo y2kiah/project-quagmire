@@ -7,7 +7,7 @@ namespace logging {
 
 	Mode gLoggingMode = Mode_Deferred_Thread_Safe;
 	// TODO: pass in buffer space, currently this mallocs its own
-	global ConcurrentQueue gMessageQueue(sizeof(LogMessage), QUAGMIRE_LOGGER_CAPACITY);
+	global ConcurrentQueue gMessageQueue(sizeof(LogMessage), QUAGMIRE_LOGGER_CAPACITY, nullptr, 0);
 	int gPopArrayLen = 0;
 	LogMessage gPopArray[QUAGMIRE_LOGGER_CAPACITY] = {};
 
@@ -138,10 +138,13 @@ namespace logging {
 			// write formatted string
 			int len = _vscprintf(s, args);
 			LogMessage msg = { c, p, {}, {} };
-			_vsnprintf_s(msg.message.c_str, 254, len, s, args);
+			_vsnprintf_s(msg.message.c_str, 254, _TRUNCATE, s, args);
 			msg.message.sizeB = (u8)min(len, 254);
 			if (gLoggingMode == Mode_Deferred_Thread_Safe) {
-				gMessageQueue.push(&msg);
+				if (!gMessageQueue.push(&msg)) {
+					flush();
+					gMessageQueue.push(&msg);
+				}
 			}
 			else {
 				write(msg);

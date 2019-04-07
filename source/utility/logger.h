@@ -54,7 +54,7 @@ namespace logging {
 		
 		u8			_padding[6];
 
-		fstring254	message;
+		fstring254	message; // TODO: don't really want to use a fixed len string here, we want a string ring-buffer allowing variable length strings
 	};
 	static_assert_aligned_size(LogMessage,8);
 

@@ -143,12 +143,12 @@ bool initOpenGL(SDLApplication& app)
 	}
 	glGetError(); // clear any error created by GLEW init
 
-	logger.debug(logging::Category_Video,
-			  "OpenGL Information:\n  Vendor: %s\n  Renderer: %s\n  Version: %s\n  Shading Language Version: %s\n",
-			  glGetString(GL_VENDOR),
-			  glGetString(GL_RENDERER),
-			  glGetString(GL_VERSION),
-			  glGetString(GL_SHADING_LANGUAGE_VERSION));
+	logger.info(logging::Category_Video,
+				"OpenGL Information:\n  Vendor: %s\n  Renderer: %s\n  Version: %s\n  Shading Language Version: %s\n",
+				glGetString(GL_VENDOR),
+				glGetString(GL_RENDERER),
+				glGetString(GL_VERSION),
+				glGetString(GL_SHADING_LANGUAGE_VERSION));
 
 	//PFNGLGETSTRINGIPROC glGetStringi = (PFNGLGETSTRINGIPROC)SDL_GL_GetProcAddress("glGetStringi");
 
@@ -171,7 +171,7 @@ bool initOpenGL(SDLApplication& app)
 			_strcat_s(glExtensions, totalLen, " ");
 		}
 	}
-	logger.debug(logging::Category_Video, "OpenGL Extensions: %s\n", glExtensions);
+	logger.verbose(logging::Category_Video, "OpenGL Extensions: %s\n", glExtensions);
 
 	// give the extensions string to the SOIL library
 	//SOIL_set_gl_extensions_string(glExtensions.c_str());
@@ -263,7 +263,7 @@ int gameProcess(void* ctx)
 		float interpolation = update.tick(realTime, countsPassed, frame, 1.0f,
 			[](UpdateInfo& ui) {
 				logger.verbose("Update virtualTime=%lu: gameTime=%ld: deltaCounts=%ld: countsPerMs=%ld\n",
-						ui.virtualTime, ui.gameTime, ui.deltaCounts, ui.countsPerMS);
+							   ui.virtualTime, ui.gameTime, ui.deltaCounts, ui.countsPerMS);
 
 				//engine.threadPool->executeFixedThreadTasks(ThreadAffinity::Thread_Update);
 
@@ -295,7 +295,7 @@ int gameProcess(void* ctx)
 int main(int argc, char *argv[])
 {
 	initHighPerfTimer();
-	logging::setMode(logging::Mode_Immediate_Thread_Unsafe);
+	//logging::setMode(logging::Mode_Immediate_Thread_Unsafe);
 	logger.setAllPriorities(logging::Priority_Verbose);
 	
 	SDLApplication app;

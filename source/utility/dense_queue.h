@@ -72,16 +72,18 @@ struct DenseQueue {
 	u32		length = 0;				// current number of objects contained in queue
 	u32		capacity = 0;			// maximum number of objects that can be stored
 	u16		elementSizeB = 0;		// size in bytes of individual stored objects
+	u8		assertOnFull = 1;		// set to 0 if overflow is handled by usage code
 	u8		_memoryOwned = 0;		// set to 1 if buffer memory is owned by DenseQueue
-	u8     	_padding = 0;
 
 	// Functions
 
 	explicit DenseQueue(u16 elementSizeB,
 						u32 capacity,
-						void* buffer = nullptr) :
+						void* buffer = nullptr,
+						u8 assertOnFull = 1) :
 		elementSizeB{ elementSizeB },
-		capacity{ capacity }
+		capacity{ capacity },
+		assertOnFull{ assertOnFull }
 	{
 		if (!buffer) {
 			size_t size = elementSizeB * capacity;
@@ -127,7 +129,7 @@ struct DenseQueue {
 	 * @param[in]	n		number of items to push
 	 * @param[in]	val		optional, pass this to copy n vals into the new items
 	 * and optionally copying from the val pointer.
-	 * @returns pointer to new item, or nullptr if the container is full
+	 * @returns pointer to first new item, or nullptr if the container is full
 	 */
 	void* push_back_n(u32 n, void* vals = nullptr);
 
@@ -226,6 +228,8 @@ static_assert_aligned_size(DenseQueue,8);
 
 void* DenseQueue::push_front(void* val)
 {
+	assert(!assertOnFull || length < capacity && "queue is full");
+	
 	void* addr = nullptr;
 	if (length < capacity) {
 		addr = item(capacity-1);
@@ -245,6 +249,8 @@ void* DenseQueue::push_front(void* val)
 
 void* DenseQueue::push_back(void* val)
 {
+	assert(!assertOnFull || length < capacity && "queue is full");
+
 	void* addr = nullptr;
 	if (length < capacity) {
 		addr = item(length);
@@ -263,6 +269,7 @@ void* DenseQueue::push_back(void* val)
 
 void* DenseQueue::push_back_n(u32 n, void* vals)
 {
+	assert(!assertOnFull || length + n <= capacity && "queue is full");
 	assert(n > 1 && "n should be > 1, for n == 1 use push_back");
 
 	void* addr = nullptr;
