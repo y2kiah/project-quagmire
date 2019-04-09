@@ -1,14 +1,47 @@
 
+#include "build_config.h"
+#include "capacity.h"
+#include <cstdlib>
+#include <cmath>
+#include <cstdarg>
+#include <atomic>
+#include <SDL_render.h>
+#include <SDL_video.h>
+#include <SDL_syswm.h>
+#include "game.h"
+#include "platform/platform.h"
+
+#include "utility/logger.cpp"
+
+logging::Logger logger;
+
 /**
 * Runs the simulation logic at a fixed frame rate. Keep a "previous" and "next" value for
 * any state that needs to be interpolated smoothly in the renderFrameTick loop. The sceneNode
 * position and orientation are interpolated automatically, but other values like color that
 * need smooth interpolation for rendering should be handled manually.
 */
-void gameUpdateFrameTick(Game& game, Engine& engine, UpdateInfo& ui)
+void gameUpdateFrameTick(UpdateInfo& ui, void* _gameMemory)
 {
+	GameMemory& gameMemory = *(GameMemory*)_gameMemory;
+
+	logger.verbose("Update virtualTime=%lu: gameTime=%ld: deltaCounts=%ld: countsPerMs=%ld\n",
+				   ui.virtualTime, ui.gameTime, ui.deltaCounts, ui.countsPerMs);
+
+	//engine.threadPool->executeFixedThreadTasks(ThreadAffinity::Thread_Update);
+
 	// if all systems operate on 1(+) frame-old-data, can all systems be run in parallel?
 	// should this list become a task flow graph?
+
+	//gameMemory.
+//	engine.inputSystem->updateFrameTick(ui);
+
+	//	ResourceLoader
+	//	AISystem
+	//	PhysicsSystem
+	//	CollisionSystem
+	//	ResourcePredictionSystem
+	//	etc.
 
 //	game.player.updateFrameTick(game, engine, ui);
 
@@ -21,6 +54,8 @@ void gameUpdateFrameTick(Game& game, Engine& engine, UpdateInfo& ui)
 //	game.sky.updateFrameTick(game, engine, ui);
 
 //	game.screenShaker.updateFrameTick(game, engine, ui);
+	
+//	engine.sceneManager->updateActiveScenes();
 }
 
 
@@ -29,20 +64,188 @@ void gameUpdateFrameTick(Game& game, Engine& engine, UpdateInfo& ui)
 * smooth animation, state must be kept from the two most recent update ticks, and interpolated
 * in this loop for final rendering.
 */
-void gameRenderFrameTick(Game& game, Engine& engine, float interpolation,
+void gameRenderFrameTick(GameMemory* gameMemory, float interpolation,
 						 int64_t realTime, int64_t countsPassed)
 {
+	logger.verbose("Render realTime=%lu: interpolation=%0.3f\n", realTime, interpolation);
+
+//	engine.resourceLoader->executeCallbacks();
+
 //	game.screenShaker.renderFrameTick(game, engine, interpolation, realTime, countsPassed);
 
 //	game.devConsole.renderFrameTick(game, engine, interpolation, realTime, countsPassed);
+
+//	engine.sceneManager->renderActiveScenes(interpolation, engine);
+
+//	engine.renderSystem->renderFrame(interpolation, engine);
+}
+
+
+/**
+* Create and init the systems of the griffin engine, and do dependency injection
+*/
+void makeCoreSystems(GameMemory* gameMemory)
+{
+	Game& game = *(Game*)gameMemory->gameState;
+	
+	/**
+	* Create thread pool, one worker thread per logical core
+	*/
+//	{
+//		engine.threadPool = make_shared<thread_pool>(app.getSystemInfo().cpuCount);
+//		task_base::s_threadPool = engine.threadPool;
+//	}
+
+//	auto scriptPtr  = make_shared<script::ScriptManager>();
+//	auto inputPtr   = make_shared<input::InputSystem>();
+//	auto loaderPtr  = make_shared<resource::ResourceLoader>();
+
+	/**
+	* Build the Lua scripting system
+	*/
+//	{
+//		using namespace script;
+
+		// init.lua configures the startup settings
+//		engine.engineLuaState = scriptPtr->createState("scripts/initState.lua"); // throws on error
+
+		// add system API functions to Lua
+
+
+//		engine.scriptManager = scriptPtr;
+//	}
+
+	/**
+	* Build the tools manager, QUAGMIRE_DEVELOPMENT only
+	*/
+	#ifdef QUAGMIRE_DEVELOPMENT
+	{
+//		using namespace tools;
+
+//		engine.toolsLuaState = scriptPtr->createState("scripts/initState.lua");
+
+//		auto toolsPtr = make_shared<GriffinToolsManager>(engine.toolsLuaState);
+
+		// executes tools build scripts, and starts http server on a new thread
+//		toolsPtr->init(scriptPtr);
+
+//		engine.toolsManager = toolsPtr;
+	}
+	#endif
+
+	/**
+	* Build the input system
+	*/
+	{
+//		using namespace input;
+
+		// inject dependencies into the InputSystem
+//		inputPtr->app = &app;
+
+//		inputPtr->initialize();
+
+		// inject dependencies to the InputSystem C API
+//		setInputSystemPtr(inputPtr);
+
+		// InputSystem.lua contains initInputSystem function
+//		scriptPtr->doFile(engine.engineLuaState, "scripts/InputSystem.lua"); // throws on error
+
+		// invoke Lua function to init InputSystem
+//		scriptPtr->callLuaGlobalFunction(engine.engineLuaState, "initInputSystem");
+
+		// move input system into application
+//		engine.inputSystem = inputPtr;
+	}
+
+	/**
+	* Build the resource system
+	*/
+	{
+//		using namespace resource;
+
+		// Build resource caches
+		//   Permanent Cache
+//		auto permanentCachePtr = make_shared<ResourceCache>(Cache_Permanent, RESERVE_RESOURCECACHE_PERMANENT, 0 /* Infinite */);
+//		loaderPtr->registerCache(permanentCachePtr, (CacheType)permanentCachePtr->getItemTypeId());
+
+		//   Materials Cache
+//		auto materialsCachePtr = make_shared<ResourceCache>(Cache_Materials, RESERVE_RESOURCECACHE_MATERIALS, 256 * 1024 * 1024 /* 256 MB */);
+//		loaderPtr->registerCache(materialsCachePtr, (CacheType)materialsCachePtr->getItemTypeId());
+		
+		//   Models Cache
+//		auto modelsCachePtr = make_shared<ResourceCache>(Cache_Models, RESERVE_RESOURCECACHE_MODELS, 256 * 1024 * 1024 /* 256 MB */);
+//		loaderPtr->registerCache(modelsCachePtr, (CacheType)modelsCachePtr->getItemTypeId());
+
+		//   Scripts Cache
+//		auto scriptsCachePtr = make_shared<ResourceCache>(Cache_Scripts, RESERVE_RESOURCECACHE_SCRIPTS, 16 * 1024 * 1024 /* 16 MB */);
+//		loaderPtr->registerCache(scriptsCachePtr, (CacheType)scriptsCachePtr->getItemTypeId());
+
+		// Build resource sources
+//		auto fileSystemSourcePtr = IResourceSourcePtr((IResourceSource*)(new FileSystemSource()));
+//		loaderPtr->registerSource(fileSystemSourcePtr);
+
+		// inject loader dependencies into other system
+//		render::setResourceLoaderPtr(loaderPtr);
+//		scene::setResourceLoaderPtr(loaderPtr);
+		#ifdef QUAGMIRE_DEVELOPMENT
+//		tools::setResourceLoaderPtr(loaderPtr);
+		#endif
+
+		// add Lua APIs
+
+
+//		engine.resourceLoader = loaderPtr;
+	}
+
+	/**
+	* Build the render system
+	*/
+	{
+//		using namespace render;
+
+//		auto renderSystemPtr = make_shared<RenderSystem>();
+//		auto shaderManagerPtr = make_shared<ShaderManager_GL>();
+//		auto modelManagerPtr = make_shared<ModelManager_GL>();
+
+//		engine.renderSystem = renderSystemPtr;
+//		engine.shaderManager = shaderManagerPtr;
+//		engine.modelManager = modelManagerPtr;
+
+//		renderSystemPtr->init(app.getPrimaryWindow().width, app.getPrimaryWindow().height, engine);
+//		renderSystemPtr->loadGlobalFonts();
+//		shaderManagerPtr->loadUbershaderCode("shaders/ads.glsl");
+	}
+
+	/**
+	* Build the scene manager
+	*/
+	{
+//		using namespace scene;
+
+//		auto scenePtr = make_shared<SceneManager>();
+
+		// inject dependencies
+//		setRenderSystemPtr(engine.renderSystem);
+//		setSceneManagerPtr(scenePtr); // to the Scene C API
+
+		// Scene.lua contains scene functions
+//		scriptPtr->doFile(engine.engineLuaState, "scripts/Scene.lua"); // throws on error
+
+//		engine.sceneManager = scenePtr;
+	}
 }
 
 
 /**
 * Create and init the initial game state and game systems and do dependency injection
 */
-Game* make_game(Engine& engine, SDLApplication& app)
+void makeGame(GameMemory* gameMemory)
 {
+	Game& game = *(Game*)gameMemory->gameState;
+
+	//logging::setMode(logging::Mode_Immediate_Thread_Unsafe);
+	logger.setAllPriorities(logging::Priority_Info);
+	
 //	GamePtr gamePtr = std::make_shared<Game>();
 //	Game& game = *gamePtr;
 
@@ -51,6 +254,8 @@ Game* make_game(Engine& engine, SDLApplication& app)
 
 	// invoke Lua function to init the game
 //	engine.scriptManager->callLuaGlobalFunction(engine.engineLuaState, "initGame");
+
+	makeCoreSystems(gameMemory);
 
 	// set up game scene
 	{
@@ -87,14 +292,83 @@ Game* make_game(Engine& engine, SDLApplication& app)
 //	engine.inputSystem->setContextActive(game.player.playerfpsInputContextId);
 
 //	return game;
-	return nullptr;
+	gameMemory->initialized = true;
 }
 
 
 /**
-* Destructor releases all systems on the OpenGL thread
+* Releases all systems on the OpenGL thread
 */
-Game::~Game()
+void destroyGame(GameMemory* gameMemory)
 {
 //	terrain.deinit();
+
+	// Destroy the scene manager
+//	scene::setRenderSystemPtr(render::RenderSystemPtr());
+//	scene::setSceneManagerPtr(scene::SceneManagerPtr());
+//	sceneManager.reset();
+
+	// Destroy the render system
+//	renderSystem.reset();
+
+	// Destroy the resource system
+//	render::setResourceLoaderPtr(ResourceLoaderPtr());
+//	scene::setResourceLoaderPtr(ResourceLoaderPtr());
+	#ifdef QUAGMIRE_DEVELOPMENT
+//	tools::setResourceLoaderPtr(ResourceLoaderPtr());
+	#endif
+//	resourceLoader.reset();
+
+	// Destroy the input system
+//	setInputSystemPtr(input::InputSystemPtr());
+//	inputSystem.reset();
+
+	// Destroy the tools system
+	#ifdef QUAGMIRE_DEVELOPMENT
+//	toolsManager.reset();
+	#endif
+
+	// Destroy the scripting system
+//	scriptManager.reset();
+
+	// Destroy the thread pool
+//	threadPool.reset();
+//	task_base::s_threadPool.reset();
+}
+
+
+extern "C" {
+_export
+void
+gameUpdateAndRender(
+	GameMemory* gameMemory,
+	i64 realTime,
+	i64 countsPassed,
+	i64 countsPerMs,
+	u64 frame)
+{
+	if (!gameMemory->initialized) {
+		makeGame(gameMemory);
+	}
+
+	Game& game = *(Game*)gameMemory->gameState;
+	
+	float interpolation = game.simulationUpdate.tick(
+			1000.0f / 30.0f,	// deltaMS, run at 30fps
+			realTime,
+			countsPassed,
+			countsPerMs,
+			frame,
+			1.0f,				// game speed, 1.0=normal
+			gameUpdateFrameTick,
+			gameMemory);
+
+	//SDL_Delay(1000);
+
+	//engine.threadPool->executeFixedThreadTasks(ThreadAffinity::Thread_OpenGL_Render);
+
+	gameRenderFrameTick(gameMemory, interpolation, realTime, countsPassed);
+
+	logging::flush();
+}
 }

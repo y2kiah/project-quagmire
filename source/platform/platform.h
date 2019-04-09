@@ -1,7 +1,8 @@
 #ifndef _PLATFORM_H
 #define _PLATFORM_H
 
-#include <SDL.h>
+#include <SDL_render.h>
+#include <SDL_video.h>
 #include <SDL_syswm.h>
 #include "../utility/types.h"
 
@@ -19,6 +20,7 @@ public:
 #define MAXPATH		1024
 
 
+// TODO: switch these to fstring?
 struct Environment {
 	char preferencesPath[MAXPATH] = {};
 	char currentWorkingDirectory[MAXPATH] = {};
@@ -45,11 +47,23 @@ struct SystemInfo {
 struct SDLApplication {
 	WindowData		windowData = {};
 	SystemInfo		systemInfo = {};
+	Environment		environment = {};
 	int				numDisplays = 0;
 	DisplayData		displayData[50] = {};
-	Environment		environment = {};
 };
 
+struct GameMemory {
+	size_t			gameStateSize;
+	void*			gameState;
+
+	size_t			transientSize;
+	void*			transient;
+
+	size_t			frameScopedSize;
+	void*			frameScoped;
+	
+	bool			initialized;
+};
 
 bool getWindowInfo(SDL_Window* window, SDL_SysWMinfo* info);
 bool getEnvironmentInfo(Environment* env);
@@ -60,26 +74,5 @@ void showErrorBox(const char* text, const char* caption);
 
 void setWindowIcon(const WindowData *windowData);
 
-// c std lib macros for msvc-only *_s functions
-#ifdef _MSC_VER
-    #define _strcpy_s(dest,destsz,src)					strcpy_s(dest,destsz,src)
-    #define _strncpy_s(dest,destsz,src,count)			strncpy_s(dest,destsz,src,count)
-    #define _strcat_s(dest,destsz,src)					strcat_s(dest,destsz,src)
-	#define _vsnprintf_s(dest,destsz,count,fmt,valist)	vsnprintf_s(dest,destsz,count,fmt,valist)
-#else
-    #define _strcpy_s(dest,destsz,src)					strcpy(dest,src)
-    #define _strncpy_s(dest,destsz,src,count)			strncpy(dest,src,min(destsz,count))
-    #define _strcat_s(dest,destsz,src)					strcat(dest,src)
-	#define _vsnprintf_s(dest,destsz,count,fmt,valist)	vsnprintf(dest,count,fmt,valist)
-	#define _vscprintf(fmt,valist)						vsnprintf(nullptr,0,fmt,valist)
-#endif
-
-
-// export macros
-#ifdef _WIN32
-#define _export __declspec(dllexport)
-#else
-#define _export __attribute__ ((visibility ("default")))
-#endif
 
 #endif

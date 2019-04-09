@@ -1,30 +1,24 @@
 #include "build_config.h"
 #include "capacity.h"
 #include "main.h"
-//#include <application/Engine.h>
-//#include <game/Game.h>
 //#include <input/InputSystem.h>
 //#include <render/Render.h>
 //#include <resource/ResourceLoader.h>
 //#include <utility/profile/Profile.h>
-//#include <utility/debug.h>
-//#include <utility/Logger.h>
 //#include <tests/Test.h>
 #include "utility/logger.cpp"
 #include "platform/timer.cpp"
-#include "engine.cpp"
-#include "game.cpp"
 #include "platform/platform.cpp"
 
 
 logging::Logger logger;
 
 // enable dedicated graphics for NVIDIA and AMD
-extern "C" 
-{
+extern "C" {
 	_export unsigned long NvOptimusEnablement = 0x00000001;
 	_export int AmdPowerXpressRequestHighPerformance = 1;
 }
+
 
 void initApplication(SDLApplication& app)
 {
@@ -156,27 +150,14 @@ bool initOpenGL(SDLApplication& app)
 	int numExtensions = 0;
 	glGetIntegerv(GL_NUM_EXTENSIONS, &numExtensions);
 
-	// TODO: rewrite this when we have a string library
-	size_t totalLen = 0;
+	logger.debug(logging::Category_Video, "OpenGL Extensions:\n");
 	for (int i = 0; i < numExtensions; ++i) {
-		totalLen += strlen((const char*)glGetStringi(GL_EXTENSIONS, i)) + 1;
+		const char* ext = (const char*)glGetStringi(GL_EXTENSIONS, i);
+		logger.debug(logging::Category_Video, "%s ", ext);
 	}
-	
-	char* glExtensions = (char*)malloc(totalLen);
-	memset(glExtensions, 0, totalLen);
-	for (int i = 0; i < numExtensions; ++i) {
-		const char* extStr = (const char*)glGetStringi(GL_EXTENSIONS, i);
-		_strcat_s(glExtensions, totalLen, extStr);
-		if (i < numExtensions-1) {
-			_strcat_s(glExtensions, totalLen, " ");
-		}
-	}
-	logger.verbose(logging::Category_Video, "OpenGL Extensions: %s\n", glExtensions);
 
 	// give the extensions string to the SOIL library
 	//SOIL_set_gl_extensions_string(glExtensions.c_str());
-	
-	free(glExtensions);
 
 	// use adaptive vertical refresh, if available
 	if (SDL_GL_SetSwapInterval(-1) == -1) {
@@ -224,17 +205,9 @@ void quitApplication(SDLApplication& app)
 	}
 
 	logging::flush();
-	
 	SDL_Quit();
 }
 
-
-struct GameContext {
-	SDLApplication* app = nullptr;
-	std::atomic_bool done; // TODO: consider using SDL atomics instead of std to avoid the template
-	//*game
-	//*engine
-};
 
 /**
 * Game Update-Render Thread, runs the main rendering frame loop and the inner
@@ -246,39 +219,39 @@ int gameProcess(void* ctx)
 	gameContext.done = false;
 	SDLApplication& app = *(gameContext.app);
 	Timer timer;
-	uint64_t frame = 0;
+	u64 frame = 0;
 
 	// gl context made current on the main loop thread
 	SDL_GL_MakeCurrent(app.windowData.window, app.windowData.glContext);
 	
-	int64_t realTime = timer.start();
+	FixedTimestep gameCodeHotLoad;
 
-	FixedTimestep update(1000.0f / 30.0f, timer.countsPerMs);
+	i64 realTime = timer.start();
 	
 	for (frame = 0; !gameContext.done; ++frame)
 	{
-		int64_t countsPassed = timer.queryCountsPassed();
+		i64 countsPassed = timer.queryCountsPassed();
 		realTime = timer.stopCounts;
 
-		float interpolation = update.tick(realTime, countsPassed, frame, 1.0f,
-			[](UpdateInfo& ui) {
-				logger.verbose("Update virtualTime=%lu: gameTime=%ld: deltaCounts=%ld: countsPerMs=%ld\n",
-							   ui.virtualTime, ui.gameTime, ui.deltaCounts, ui.countsPerMS);
-
-				//engine.threadPool->executeFixedThreadTasks(ThreadAffinity::Thread_Update);
-
-				//engineUpdateFrameTick(engine, game, ui);
-			});
-
-		//SDL_Delay(1000);
-		/*logger.verbose("Render realTime=%lu: interpolation=%0.3f: threadIdHash=%lu\n",
-				realTime, interpolation, std::this_thread::get_id().hash());*/
-
-		//engine.threadPool->executeFixedThreadTasks(ThreadAffinity::Thread_OpenGL_Render);
-
-//		engineRenderFrameTick(engine, game, interpolation, realTime, countsPassed);
+		if (gameContext.gameCode.isValid) {
+			gameContext.gameCode.updateAndRender(
+					&gameContext.gameMemory,
+					realTime,
+					countsPassed,
+					timer.countsPerMs,
+					frame);
+		}
 
 		SDL_GL_SwapWindow(app.windowData.window);
+
+		#if defined(QUAGMIRE_DEVELOPMENT) && QUAGMIRE_DEVELOPMENT != 0
+		// check for new game code to load
+		gameCodeHotLoad.tick(500.0f, realTime, countsPassed, timer.countsPerMs, frame, 1.0f,
+			[](UpdateInfo& ui, void* _gameContext) {
+				GameContext& gameContext = *(GameContext*)_gameContext;
+				loadGameCode(gameContext.gameCode);
+			}, ctx);
+		#endif
 
 		yieldThread();
 	}
@@ -296,15 +269,12 @@ int main(int argc, char *argv[])
 {
 	initHighPerfTimer();
 	//logging::setMode(logging::Mode_Immediate_Thread_Unsafe);
-	logger.setAllPriorities(logging::Priority_Verbose);
+	logger.setAllPriorities(logging::Priority_Info);
 	
 	SDLApplication app;
 	initApplication(app);
 //	EnginePtr enginePtr;
 //	GamePtr gamePtr;
-	
-	GameContext gameContext;
-	gameContext.app = &app;
 
 	if (!initWindow(app, PROGRAM_NAME) ||
 		!initOpenGL(app))
@@ -313,11 +283,10 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	// enginePtr = make_engine(app);
-	// Engine& engine = *enginePtr;
-
-	// gamePtr = make_game(engine, app);
-	// Game& game = *gamePtr;
+	GameContext gameContext;
+	gameContext.app = &app;
+	createGameMemory(gameContext.gameMemory);
+	loadGameCode(gameContext.gameCode);
 
 	// run tests at startup
 	using Something = Id_t;
@@ -390,10 +359,13 @@ int main(int argc, char *argv[])
 		// run thread_pool deferred task check (when_any, when_all)
 		//   engine.taskPool.checkDeferredTasks();
 
+		logger.verbose("Input frame\n");
+
 		// flush the logger queue, writing out all of the messages
 		logging::flush();
 
-		yieldThread();
+		//yieldThread();
+		platformSleep(1);
 	}
 
 	int gameResult = 0;

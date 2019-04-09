@@ -15,7 +15,7 @@ namespace logging {
 	void write(const LogMessage& m)
 	{
 		SDL_LogPriority sdlPriority = (SDL_LogPriority)(m.priority == 0 ? 0 : SDL_NUM_LOG_PRIORITIES - m.priority);
-		SDL_LogMessage(m.category, sdlPriority, "%s", m.message.c_str);
+		SDL_LogMessage(m.category, sdlPriority, "%lu %s", m.id, m.message.c_str);
 	}
 
 	/**
@@ -134,10 +134,11 @@ namespace logging {
 
 	void Logger::_out(Category c, Priority p, const char *s, va_list args)
 	{
+		static std::atomic<u64> id = 0;
 		if (categoryDefaultPriority[c] >= p) {
 			// write formatted string
 			int len = _vscprintf(s, args);
-			LogMessage msg = { c, p, {}, {} };
+			LogMessage msg = { c, p, id++, {}, {} };
 			_vsnprintf_s(msg.message.c_str, 254, _TRUNCATE, s, args);
 			msg.message.sizeB = (u8)min(len, 254);
 			if (gLoggingMode == Mode_Deferred_Thread_Safe) {

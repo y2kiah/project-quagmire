@@ -51,7 +51,8 @@ namespace logging {
 		//char*		message;
 		Category	category;
 		Priority	priority;
-		
+		u64			id;
+
 		u8			_padding[6];
 
 		fstring254	message; // TODO: don't really want to use a fixed len string here, we want a string ring-buffer allowing variable length strings
