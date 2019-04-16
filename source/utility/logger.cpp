@@ -7,9 +7,9 @@ namespace logging {
 
 	Mode gLoggingMode = Mode_Deferred_Thread_Safe;
 	// TODO: pass in buffer space, currently this mallocs its own
-	global ConcurrentQueue gMessageQueue(sizeof(LogMessage), QUAGMIRE_LOGGER_CAPACITY, nullptr, 0);
+	global ConcurrentQueue gMessageQueue(sizeof(LogMessage), LOGGER_CAPACITY, nullptr, 0);
 	int gPopArrayLen = 0;
-	LogMessage gPopArray[QUAGMIRE_LOGGER_CAPACITY] = {};
+	LogMessage gPopArray[LOGGER_CAPACITY] = {};
 
 
 	void write(const LogMessage& m)

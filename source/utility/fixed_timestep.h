@@ -1,6 +1,7 @@
 #ifndef _FIXED_TIMESTEP_H
 #define _FIXED_TIMESTEP_H
 
+
 struct UpdateInfo {
 	i64		virtualTime;	// interpolation of real time with each step of update loop, keeps in sync with real time, useful for checking against timestamped events 
 	i64		gameTime;		// current game time from 0, useful for logical game time checks, sensitive to gameSpeed, should be reset to 0 when game is restarted
@@ -14,7 +15,7 @@ struct UpdateInfo {
 
 
 struct FixedTimestep {
-	typedef void (*pfUpdate)(UpdateInfo&, void*);
+	typedef void UpdateFunc(UpdateInfo&, void*);
 
 	i64		accumulator = 0;
 	i64 	gameTime = 0;
@@ -27,7 +28,7 @@ struct FixedTimestep {
 			 i64 countsPerMs,
 			 u64 frame,
 			 f32 gameSpeed,
-			 pfUpdate update,
+			 UpdateFunc* update,
 			 void* ctx = nullptr)
 	{
 		i64 deltaCounts = (i64)(deltaMs * countsPerMs);

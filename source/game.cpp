@@ -10,20 +10,27 @@
 #include <SDL_syswm.h>
 #include "game.h"
 #include "platform/platform.h"
+#include "input/platform_input.h"
 
 #include "utility/logger.cpp"
+
+struct SimulationUpdateContext {
+	Game&					game;
+	input::PlatformInput&	input;
+	GameMemory*				gameMemory;
+};
 
 logging::Logger logger;
 
 /**
-* Runs the simulation logic at a fixed frame rate. Keep a "previous" and "next" value for
-* any state that needs to be interpolated smoothly in the renderFrameTick loop. The sceneNode
-* position and orientation are interpolated automatically, but other values like color that
-* need smooth interpolation for rendering should be handled manually.
-*/
-void gameUpdateFrameTick(UpdateInfo& ui, void* _gameMemory)
+ * Runs the simulation logic at a fixed frame rate. Keep a "previous" and "next" value for
+ * any state that needs to be interpolated smoothly in the renderFrameTick loop. The sceneNode
+ * position and orientation are interpolated automatically, but other values like color that
+ * need smooth interpolation for rendering should be handled manually.
+ */
+void gameUpdateFrameTick(UpdateInfo& ui, void* _ctx)
 {
-	GameMemory& gameMemory = *(GameMemory*)_gameMemory;
+	SimulationUpdateContext& simContext = *(SimulationUpdateContext*)_ctx;
 
 	logger.verbose("Update virtualTime=%lu: gameTime=%ld: deltaCounts=%ld: countsPerMs=%ld\n",
 				   ui.virtualTime, ui.gameTime, ui.deltaCounts, ui.countsPerMs);
@@ -33,8 +40,11 @@ void gameUpdateFrameTick(UpdateInfo& ui, void* _gameMemory)
 	// if all systems operate on 1(+) frame-old-data, can all systems be run in parallel?
 	// should this list become a task flow graph?
 
+	// TEMP instead of popping
+	simContext.input.eventsQueue.clear();
+	simContext.input.motionEventsQueue.clear();
 	//gameMemory.
-//	engine.inputSystem->updateFrameTick(ui);
+//	inputSystem->updateFrameTick(ui);
 
 	//	ResourceLoader
 	//	AISystem
@@ -60,10 +70,10 @@ void gameUpdateFrameTick(UpdateInfo& ui, void* _gameMemory)
 
 
 /**
-* Runs at the "full" variable frame rate of the render loop, often bound to vsync at 60hz. For
-* smooth animation, state must be kept from the two most recent update ticks, and interpolated
-* in this loop for final rendering.
-*/
+ * Runs at the "full" variable frame rate of the render loop, often bound to vsync at 60hz. For
+ * smooth animation, state must be kept from the two most recent update ticks, and interpolated
+ * in this loop for final rendering.
+ */
 void gameRenderFrameTick(GameMemory* gameMemory, float interpolation,
 						 int64_t realTime, int64_t countsPassed)
 {
@@ -82,15 +92,15 @@ void gameRenderFrameTick(GameMemory* gameMemory, float interpolation,
 
 
 /**
-* Create and init the systems of the griffin engine, and do dependency injection
-*/
+ * Create and init the systems of the griffin engine, and do dependency injection
+ */
 void makeCoreSystems(GameMemory* gameMemory)
 {
 	Game& game = *(Game*)gameMemory->gameState;
 	
 	/**
-	* Create thread pool, one worker thread per logical core
-	*/
+	 * Create thread pool, one worker thread per logical core
+	 */
 //	{
 //		engine.threadPool = make_shared<thread_pool>(app.getSystemInfo().cpuCount);
 //		task_base::s_threadPool = engine.threadPool;
@@ -101,8 +111,8 @@ void makeCoreSystems(GameMemory* gameMemory)
 //	auto loaderPtr  = make_shared<resource::ResourceLoader>();
 
 	/**
-	* Build the Lua scripting system
-	*/
+	 * Build the Lua scripting system
+	 */
 //	{
 //		using namespace script;
 
@@ -116,8 +126,8 @@ void makeCoreSystems(GameMemory* gameMemory)
 //	}
 
 	/**
-	* Build the tools manager, QUAGMIRE_DEVELOPMENT only
-	*/
+	 * Build the tools manager, QUAGMIRE_DEVELOPMENT only
+	 */
 	#ifdef QUAGMIRE_DEVELOPMENT
 	{
 //		using namespace tools;
@@ -134,8 +144,8 @@ void makeCoreSystems(GameMemory* gameMemory)
 	#endif
 
 	/**
-	* Build the input system
-	*/
+	 * Build the input system
+	 */
 	{
 //		using namespace input;
 
@@ -158,8 +168,8 @@ void makeCoreSystems(GameMemory* gameMemory)
 	}
 
 	/**
-	* Build the resource system
-	*/
+	 * Build the resource system
+	 */
 	{
 //		using namespace resource;
 
@@ -198,8 +208,8 @@ void makeCoreSystems(GameMemory* gameMemory)
 	}
 
 	/**
-	* Build the render system
-	*/
+	 * Build the render system
+	 */
 	{
 //		using namespace render;
 
@@ -217,8 +227,8 @@ void makeCoreSystems(GameMemory* gameMemory)
 	}
 
 	/**
-	* Build the scene manager
-	*/
+	 * Build the scene manager
+	 */
 	{
 //		using namespace scene;
 
@@ -237,8 +247,8 @@ void makeCoreSystems(GameMemory* gameMemory)
 
 
 /**
-* Create and init the initial game state and game systems and do dependency injection
-*/
+ * Create and init the initial game state and game systems and do dependency injection
+ */
 void makeGame(GameMemory* gameMemory)
 {
 	Game& game = *(Game*)gameMemory->gameState;
@@ -297,8 +307,8 @@ void makeGame(GameMemory* gameMemory)
 
 
 /**
-* Releases all systems on the OpenGL thread
-*/
+ * Releases all systems on the OpenGL thread
+ */
 void destroyGame(GameMemory* gameMemory)
 {
 //	terrain.deinit();
@@ -342,6 +352,7 @@ _export
 void
 gameUpdateAndRender(
 	GameMemory* gameMemory,
+	input::PlatformInput* input,
 	i64 realTime,
 	i64 countsPassed,
 	i64 countsPerMs,
@@ -352,6 +363,7 @@ gameUpdateAndRender(
 	}
 
 	Game& game = *(Game*)gameMemory->gameState;
+	SimulationUpdateContext ctx = { game, *input, gameMemory };
 	
 	float interpolation = game.simulationUpdate.tick(
 			1000.0f / 30.0f,	// deltaMS, run at 30fps
@@ -361,7 +373,7 @@ gameUpdateAndRender(
 			frame,
 			1.0f,				// game speed, 1.0=normal
 			gameUpdateFrameTick,
-			gameMemory);
+			&ctx);
 
 	//SDL_Delay(1000);
 

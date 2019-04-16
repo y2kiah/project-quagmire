@@ -21,6 +21,8 @@ struct ConcurrentQueue {
 
 	// Functions 
 
+	explicit ConcurrentQueue() {}
+	
 	explicit ConcurrentQueue(u16 elementSizeB,
 							 u32 capacity,
 							 void* buffer = nullptr,
@@ -130,6 +132,13 @@ struct ConcurrentQueue {
 	 * @returns capacity of the queue
 	 */
 	u32 unsafe_capacity() { return queue.capacity; }
+
+	void init(u16 elementSizeB,
+			  u32 capacity,
+			  void* buffer = nullptr,
+			  u8 assertOnFull = 1);
+
+	void deinit();
 };
 
 static_assert(sizeof(ConcurrentQueue) == 64, "ConcurrentQueue expected to be 64 bytes");
@@ -283,6 +292,30 @@ bool ConcurrentQueue::empty()
 	SDL_UnlockMutex(lock);
 	
 	return result;
+}
+
+
+void ConcurrentQueue::init(
+	u16 elementSizeB,
+	u32 capacity,
+	void* buffer,
+	u8 assertOnFull)
+{
+	queue.init(elementSizeB, capacity, buffer, assertOnFull);
+	
+	lock = SDL_CreateMutex();
+	cond = SDL_CreateCond();
+}
+
+
+void ConcurrentQueue::deinit()
+{
+	SDL_DestroyMutex(lock);
+	SDL_DestroyCond(cond);
+	lock = nullptr;
+	cond = nullptr;
+
+	queue.deinit();
 }
 
 #endif

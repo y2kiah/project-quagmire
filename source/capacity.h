@@ -1,1 +1,13 @@
-#define QUAGMIRE_LOGGER_CAPACITY	50		// maximum number of messages that can build up in concurrent queue before it is flushed (per frame)
+#define LOGGER_CAPACITY		50		// maximum number of messages that can build up in concurrent queue before it is flushed (per frame)
+
+// Input System
+#define INPUTSYSTEM_EVENTSQUEUE_CAPACITY		100
+#define INPUTSYSTEM_MOTIONEVENTSQUEUE_CAPACITY  150
+#define INPUTSYSTEM_MAPPINGS_CAPACITY			32
+#define INPUTSYSTEM_CONTEXTS_CAPACITY			32
+#define INPUTSYSTEM_CALLBACKS_CAPACITY			10
+#define INPUTSYSTEM_POPQUEUE_CAPACITY			30
+#define INPUTSYSTEM_MOTIONPOPQUEUE_CAPACITY		150
+#define INPUTSYSTEM_AXIS_CAPACITY				64
+#define INPUTSYSTEM_JOYSTICKS_CAPACITY			64
+#define INPUTCONTEXT_MAPPINGS_CAPACITY			64

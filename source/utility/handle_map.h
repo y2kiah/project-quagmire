@@ -33,7 +33,7 @@ struct Id_t {
 	};
 };
 
-#define null_Id_t	Id_t{}
+#define NullId_t	Id_t{}
 
 
 // Id_t comparison functions
@@ -69,6 +69,7 @@ struct HandleMap {
 	
 	static size_t getTotalBufferSize(u16 elementSizeB, u32 capacity);
 
+
 	/**
 	 * Constructor
 	 * @param	elementSizeB	size in bytes of individual objects stored
@@ -80,39 +81,18 @@ struct HandleMap {
 	 *	HandleMap and thus not freed on delete. Pass nullptr (default) to allocate the storage on
 	 *	create and free on delete.
 	 */
-	explicit HandleMap(u16 elementSizeB,
-					   u32 capacity,
+	explicit HandleMap(u16 _elementSizeB,
+					   u32 _capacity,
 					   u16 itemTypeId = 0,
-					   void* buffer = nullptr) :
-		elementSizeB{ elementSizeB },
-		capacity{ capacity }
+					   void* buffer = nullptr)
 	{
-		if (!buffer) {
-			size_t size = getTotalBufferSize(elementSizeB, capacity);
-			buffer = malloc(size);
-			memset(buffer, 0, size);
-			_memoryOwned = 1;
-		}
-
-		items = buffer;
-		// round up to aligned storage
-		// add an extra item to the items array for scratch memory used by defragment sort
-		sparseIds = (Id_t*)align((uintptr_t)items + (elementSizeB * (capacity+1)), 8);
-		denseToSparse = (u32*)align((uintptr_t)sparseIds + (sizeof(Id_t) * capacity), 4);
-
-		// check resulting alignment in case element storage plus padding doesn't leave us 8-byte aligned
-		assert(is_aligned(sparseIds, 8) && "sparseIds not properly aligned");
-		assert(is_aligned(denseToSparse, 4) && "denseToSparse not properly aligned");
-
-		// reset to set up the sparseIds freelist
-		sparseIds[0].typeId = itemTypeId & 0x7FFF;
-		reset();
+		init(_elementSizeB, _capacity, itemTypeId, buffer);
 	}
 
+	explicit HandleMap() {}
+
 	~HandleMap() {
-		if (_memoryOwned && items) {
-			free(items);
-		}
+		deinit();
 	}
 
 
@@ -221,6 +201,13 @@ struct HandleMap {
 			default: memset(dst, 0, elementSizeB);
 		}
 	}
+
+	void init(u16 elementSizeB,
+			  u32 capacity,
+			  u16 itemTypeId = 0,
+			  void* buffer = nullptr);
+
+	void deinit();
 };
 static_assert_aligned_size(HandleMap,8);
 
@@ -239,7 +226,7 @@ size_t HandleMap::getTotalBufferSize(u16 elementSizeB, u32 capacity)
 Id_t HandleMap::insert(void* src, void** out)
 {
 	assert(length < capacity && "HandleMap is full");
-	Id_t handle = null_Id_t;
+	Id_t handle = NullId_t;
 	
 	if (length < capacity) {
 		u32 sparseIndex = freeListFront;
@@ -451,6 +438,47 @@ size_t HandleMap::defragment(pfCompare comp, size_t maxSwaps)
 	}
 
 	return swaps;
+}
+
+
+void HandleMap::init(
+	u16 _elementSizeB,
+	u32 _capacity,
+	u16 itemTypeId,
+	void* buffer)
+{
+	elementSizeB = _elementSizeB;
+	capacity = _capacity;
+
+	if (!buffer) {
+		size_t size = getTotalBufferSize(elementSizeB, capacity);
+		buffer = malloc(size);
+		memset(buffer, 0, size);
+		_memoryOwned = 1;
+	}
+
+	items = buffer;
+	// round up to aligned storage
+	// add an extra item to the items array for scratch memory used by defragment sort
+	sparseIds = (Id_t*)align((uintptr_t)items + (elementSizeB * (capacity+1)), 8);
+	denseToSparse = (u32*)align((uintptr_t)sparseIds + (sizeof(Id_t) * capacity), 4);
+
+	// check resulting alignment in case element storage plus padding doesn't leave us 8-byte aligned
+	assert(is_aligned(sparseIds, 8) && "sparseIds not properly aligned");
+	assert(is_aligned(denseToSparse, 4) && "denseToSparse not properly aligned");
+
+	// reset to set up the sparseIds freelist
+	sparseIds[0].typeId = itemTypeId & 0x7FFF;
+	reset();
+}
+
+
+void HandleMap::deinit()
+{
+	if (_memoryOwned && items) {
+		free(items);
+		items = nullptr;
+	}
 }
 
 #endif

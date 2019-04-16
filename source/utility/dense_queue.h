@@ -77,28 +77,18 @@ struct DenseQueue {
 
 	// Functions
 
-	explicit DenseQueue(u16 elementSizeB,
-						u32 capacity,
+	explicit DenseQueue() {}
+	
+	explicit DenseQueue(u16 _elementSizeB,
+						u32 _capacity,
 						void* buffer = nullptr,
-						u8 assertOnFull = 1) :
-		elementSizeB{ elementSizeB },
-		capacity{ capacity },
-		assertOnFull{ assertOnFull }
+						u8 _assertOnFull = 1)
 	{
-		if (!buffer) {
-			size_t size = elementSizeB * capacity;
-			buffer = malloc(size);
-			memset(buffer, 0, size);
-			_memoryOwned = 1;
-		}
-
-		items = buffer;
+		init(_elementSizeB, _capacity, buffer, _assertOnFull);
 	}
 
 	~DenseQueue() {
-		if (_memoryOwned && items) {
-			free(items);
-		}
+		deinit();
 	}
 
 
@@ -222,6 +212,13 @@ struct DenseQueue {
 			default: memset(dst, 0, elementSizeB);
 		}
 	}
+
+	void init(u16 elementSizeB,
+			  u32 capacity,
+			  void* buffer = nullptr,
+			  u8 assertOnFull = 1);
+
+	void deinit();
 };
 static_assert_aligned_size(DenseQueue,8);
 
@@ -369,6 +366,36 @@ void DenseQueue::clear()
 	// clear item memory to zero (slow build only) to help in debugging
 	memset(items, 0, capacity*elementSizeB);
 	#endif
+}
+
+
+void DenseQueue::init(
+	u16 _elementSizeB,
+	u32 _capacity,
+	void* buffer,
+	u8 _assertOnFull)
+{
+	elementSizeB = _elementSizeB;
+	capacity = _capacity;
+	assertOnFull = _assertOnFull;
+	
+	if (!buffer) {
+		size_t size = elementSizeB * capacity;
+		buffer = malloc(size);
+		memset(buffer, 0, size);
+		_memoryOwned = 1;
+	}
+
+	items = buffer;
+}
+
+
+void DenseQueue::deinit()
+{
+	if (_memoryOwned && items) {
+		free(items);
+		items = nullptr;
+	}
 }
 
 #endif

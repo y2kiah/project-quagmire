@@ -9,6 +9,7 @@
 #include "utility/logger.cpp"
 #include "platform/timer.cpp"
 #include "platform/platform.cpp"
+#include "input/platform_input.cpp"
 
 
 logging::Logger logger;
@@ -210,9 +211,9 @@ void quitApplication(SDLApplication& app)
 
 
 /**
-* Game Update-Render Thread, runs the main rendering frame loop and the inner
-* fixed-timestep game update loop
-*/
+ * Game Update-Render Thread, runs the main rendering frame loop and the inner
+ * fixed-timestep game update loop
+ */
 int gameProcess(void* ctx)
 {
 	GameContext& gameContext = *(GameContext*)ctx;
@@ -236,6 +237,7 @@ int gameProcess(void* ctx)
 		if (gameContext.gameCode.isValid) {
 			gameContext.gameCode.updateAndRender(
 					&gameContext.gameMemory,
+					&gameContext.input,
 					realTime,
 					countsPassed,
 					timer.countsPerMs,
@@ -273,8 +275,6 @@ int main(int argc, char *argv[])
 	
 	SDLApplication app;
 	initApplication(app);
-//	EnginePtr enginePtr;
-//	GamePtr gamePtr;
 
 	if (!initWindow(app, PROGRAM_NAME) ||
 		!initOpenGL(app))
@@ -283,10 +283,8 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	GameContext gameContext;
-	gameContext.app = &app;
-	createGameMemory(gameContext.gameMemory);
-	loadGameCode(gameContext.gameCode);
+	GameContext gameContext = {};
+	createGameContext(gameContext, &app);
 
 	// run tests at startup
 	using Something = Id_t;
@@ -333,7 +331,8 @@ int main(int argc, char *argv[])
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {
 			// send to the input system to handle the event
-			bool handled = false;//engine.inputSystem->handleMessage(event);
+			i64 eventTimestamp = timer_queryCounts();
+			bool handled = input::handleMessage(gameContext.input, event, eventTimestamp);
 			
 			if (!handled) {
 				switch (event.type) {
@@ -371,8 +370,6 @@ int main(int argc, char *argv[])
 	int gameResult = 0;
 	SDL_WaitThread(gameThread, &gameResult); // wait for the game thread to join
 
-	//showErrorBox(e.what(), "Error");
-
 	// gl context made current on the OS/Input thread for destruction
 	SDL_GL_MakeCurrent(app.windowData.window, app.windowData.glContext);
 
@@ -381,6 +378,7 @@ int main(int argc, char *argv[])
 	//gamePtr.reset();
 	//enginePtr.reset(); // must delete the engine on the GL thread
 
+	destroyGameContext(gameContext);
 	quitApplication(app);
 
 	return 0;

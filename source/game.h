@@ -34,16 +34,16 @@ struct Game {
 	//render::ModelManagerPtr			modelManager	= nullptr;
 	//scene::SceneManagerPtr			sceneManager	= nullptr;
 
-	//Id_T							engineLuaState	= NullId_T;
+	//Id_t							engineLuaState	= NullId_t;
 
 	//#ifdef QUAGMIRE_DEVELOPMENT
 	//tools::GriffinToolsManagerPtr	toolsManager	= nullptr;
-	//Id_T							toolsLuaState	= NullId_T;
+	//Id_t							toolsLuaState	= NullId_t;
 	//#endif
 
 	// Game Systems
 
-	// Id_T						sceneId = NullId_T;
+	// Id_t						sceneId = NullId_t;
 	// game::PlayerControlSystem	player;
 	// game::SkySystem				sky;
 	// game::TerrainSystem			terrain;

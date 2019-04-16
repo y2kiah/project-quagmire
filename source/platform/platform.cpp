@@ -1,5 +1,6 @@
 
 #include "platform.h"
+#include "input/platform_input.h"
 #include <SDL_filesystem.h>
 
 extern logging::Logger logger;
@@ -10,6 +11,7 @@ extern logging::Logger logger;
 
 typedef void GameUpdateAndRender(
 		GameMemory* gameMemory,
+		input::PlatformInput* input,
 		i64 realTime,
 		i64 countsPassed,
 		i64 countsPerMs,
@@ -240,11 +242,31 @@ unloadGameCode(GameCode& gameCode)
 
 
 struct GameContext {
-	SDLApplication*		app = nullptr;
-	GameMemory			gameMemory = {};
-	GameCode			gameCode = {};
-	std::atomic_bool	done; // TODO: consider using SDL atomics instead of std to avoid the template
+	SDLApplication*			app = nullptr;
+	GameMemory				gameMemory = {};
+	GameCode				gameCode = {};
+	input::PlatformInput	input = {};
+	std::atomic_bool		done; // TODO: consider using SDL atomics instead of std to avoid the template
 };
+
+
+void createGameContext(GameContext& gameContext, SDLApplication* app)
+{
+	gameContext.app = app;
+	
+	createGameMemory(gameContext.gameMemory);
+	loadGameCode(gameContext.gameCode);
+	
+	gameContext.input.eventsQueue.init(sizeof(input::InputEvent), INPUTSYSTEM_EVENTSQUEUE_CAPACITY);
+	gameContext.input.motionEventsQueue.init(sizeof(input::InputEvent), INPUTSYSTEM_MOTIONEVENTSQUEUE_CAPACITY);
+}
+
+
+void destroyGameContext(GameContext& gameContext)
+{
+	gameContext.input.eventsQueue.deinit();
+	gameContext.input.motionEventsQueue.deinit();
+}
 
 
 static void getPreferencesPath_utf8(char* dst)
