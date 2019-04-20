@@ -5,18 +5,10 @@
 #include "capacity.h"
 #include "utility/concurrent_queue.h"
 #include "utility/handle_map.h"
+#include "utility/fixed_timestep.h"
+#include "platform_input.h"
 
 namespace input {
-
-	/**
-	 * Input Event types
-	 */
-	enum InputEventType : u8 {
-		Event_Keyboard = 0,
-		Event_Mouse,
-		Event_Joystick,
-		Event_TextInput
-	};
 
 	/**
 	 * Input Cursor types
@@ -150,7 +142,7 @@ namespace input {
 		f32				relMapped;		// relative motion of the axis since last frame mapped to curve
 		i32				posRaw;			// raw value from device, not normalized or mapped to curve, may be useful but use posMapped by default
 		i32				relRaw;			// relative raw value of the axis
-		char*			deviceName;		// name of the device
+		const char*		deviceName;		// name of the device
 	};
 
 	/**
@@ -168,31 +160,25 @@ namespace input {
 	 * Container holding all mapped input for a frame, plus text input
 	 */
 	struct FrameMappedInput {
-		std::wstring	textInput;			// text input buffer
-		std::wstring	textComposition;	// text editing buffer
-		i32				cursorPos;			// text editing cursor position
-		i32				selectionLength;	// text editing selection length (if any)
-		bool			textInputHandled;	// flag set to true when text input has been handled by a callback
-		
 		u16				actionsSize;
 		u16				statesSize;
 		u16				axesSize;
 		u16				motionSize;
 
-		MappedAction	actions[INPUTSYSTEM_POPQUEUE_CAPACITY];	// actions mapped to an active InputMapping for the frame
-		MappedState		states[INPUTSYSTEM_POPQUEUE_CAPACITY];	// states mapped to an active InputMapping for the frame
-		MappedAxis		axes[INPUTSYSTEM_AXIS_CAPACITY];		// axes mapped to an active InputMapping for the frame
-		AxisMotion		motion[INPUTSYSTEM_AXIS_CAPACITY];		// holds accumulated motion for the mouse and joysticks
-	};
+		MappedAction	actions[GAMEINPUT_ACTION_CAPACITY];	// actions mapped to an active InputMapping for the frame
+		MappedState		states[GAMEINPUT_STATE_CAPACITY];	// states mapped to an active InputMapping for the frame
+		MappedAxis		axes[GAMEINPUT_AXIS_CAPACITY];		// axes mapped to an active InputMapping for the frame
+		AxisMotion		motion[GAMEINPUT_AXIS_CAPACITY];	// holds accumulated motion for the mouse and joysticks
 
-	/**
-	 * Input Event
-	 */
-	struct InputEvent {
-		i64				timeStampCounts;
-		SDL_Event		evt;
-		InputEventType	eventType;
-		u8				_padding[7];
+		char			textInput[32];			// text input buffer
+		char			textComposition[32];	// text editing buffer
+
+		u8				textInputSize;
+		u8				textCompositionSize;
+		u8				textInputHandled;		// flag set to true when text input has been handled by a callback
+		u8				_padding;
+		i32				cursorPos;				// text editing cursor position
+		i32				selectionLength;		// text editing selection length (if any)
 	};
 
 	struct InputContext {
@@ -222,40 +208,39 @@ namespace input {
 		u8				_padding[4];
 	};
 
+	
+	typedef void InputCallbackFunc(FrameMappedInput&);
+	typedef bool InputActionFunc(MappedAction&, InputContext&);
+	typedef bool InputStateFunc(MappedState&, InputContext&);
+	typedef bool InputAxisFunc(MappedAxis&, InputContext&);
+	typedef bool InputTextFunc(FrameMappedInput&, InputContext&);
+	
+	HandleMapTyped(InputMapping, HandleMap_InputMapping, 0);
+	HandleMapTyped(InputContext, HandleMap_InputContext, 1);
+	HandleMapTyped(InputCallbackFunc*, HandleMap_InputCallback, 2);
 
-	struct Input_Platform {
-		ConcurrentQueue		eventsQueue;	// push on input thread, pop on update thread
-		ConcurrentQueue		motionEventsQueue;
-	};
 
-	struct InputSystem {
-		typedef void InputCallbackFunc(FrameMappedInput&);
-		typedef bool InputActionFunc(MappedAction&, InputContext&);
-		typedef bool InputStateFunc(MappedState&, InputContext&);
-		typedef bool InputAxisFunc(MappedAxis&, InputContext&);
-		typedef bool InputTextFunc(FrameMappedInput&, InputContext&);
+	struct GameInput {
+		HandleMap_InputMapping		inputMappings;	// collection of input mappings (actions,states,axes)
+		HandleMap_InputContext		inputContexts;	// collection of input contexts
+		HandleMap_InputCallback		callbacks;		// map storing all registered callbacks
 
-		//ConcurrentQueue		eventsQueue;	// push on input thread, pop on update thread
-		//ConcurrentQueue		motionEventsQueue;
-
-		DenseQueue			popEvents;		// pop events from the ConcurrentQueues into these buffers
-		DenseQueue			popMotionEvents;
-
-		HandleMap			inputMappings;	// collection of input mappings (actions,states,axes)
-		HandleMap			inputContexts;	// collection of input contexts
-		HandleMap			callbacks;		// map storing all registered callbacks
+		HandleMapBuffer(InputMapping, inputMappingsBuffer, GAMEINPUT_MAPPINGS_CAPACITY);
+		HandleMapBuffer(InputContext, inputContextsBuffer, GAMEINPUT_CONTEXTS_CAPACITY);
+		HandleMapBuffer(InputCallbackFunc*, callbacksBuffer, GAMEINPUT_CALLBACKS_CAPACITY);
 
 		// active input contexts sorted by priority
-		ActiveInputContext	activeInputContexts[INPUTSYSTEM_CONTEXTS_CAPACITY];
+		ActiveInputContext	activeInputContexts[GAMEINPUT_CONTEXTS_CAPACITY];
 		// callback order sorted by priority
-		CallbackPriority	callbackPriorityList[INPUTSYSTEM_CALLBACKS_CAPACITY];
+		CallbackPriority	callbackPriorityList[GAMEINPUT_CALLBACKS_CAPACITY];
 		
 		FrameMappedInput	frameMappedInput;	// per-frame mapped input buffer
 
 		// table of mouse cursors
 		SDL_Cursor*			cursors[_InputMouseCursorCount];
 		// list of opened joysticks
-		SDL_Joystick*		joysticks[INPUTSYSTEM_JOYSTICKS_CAPACITY];
+		SDL_Joystick*		joysticks[GAMEINPUT_JOYSTICKS_CAPACITY];
+		u8					joysticksSize;
 
 
 		/**
@@ -271,12 +256,8 @@ namespace input {
 		/**
 		 * Executed in the update fixed timestep loop
 		 */
-		void updateFrameTick(const UpdateInfo& ui);
+		void updateFrameTick(const UpdateInfo& ui, PlatformInput& platformInput);
 
-		/**
-		 * Executed on the input/GUI thread
-		 */
-		bool handleMessage(const SDL_Event& event);
 
 		// Input Mappings
 
@@ -286,13 +267,13 @@ namespace input {
 		 * @name		mapping name found in config/inputcontexts.json
 		 * @return	Id of the mapping, NullId_t if name not found within context
 		 */
-		Id_t getInputMappingHandle(const char* name, Id_t contextId) const;
+		Id_t getInputMappingHandle(const char* name, Id_t contextId);
 		
 
 		/**
 		 * Get index of active state in frame states array, -1 if not present.
 		 */
-		int findActiveState(Id_t mappingId) const;
+		int findActiveState(Id_t mappingId);
 
 
 		// Input Contexts
@@ -308,7 +289,7 @@ namespace input {
 		 * @name		context name found in config/inputcontexts.json
 		 * @return	Id of the context, NullId_t if name not found
 		 */
-		Id_t getInputContextHandle(const char* name) const;
+		Id_t getInputContextHandle(const char* name);
 
 		/**
 		 * Set the InputContext, returns true on success
@@ -317,7 +298,7 @@ namespace input {
 
 		// Callbacks
 		
-		Id_t registerCallback(int priority, InputCallbackFunc* func);
+		Id_t registerCallback(i32 priority, InputCallbackFunc* func);
 
 		bool unregisterCallback(Id_t callbackId);
 
@@ -351,12 +332,12 @@ namespace input {
 		/**
 		 * Convenience function for handling text input events. Returns false if the context
 		 *	asked for is not active or does not capture text input.
-		 *	Otherwise returns the result of callback.
-		 * @param	contextId	which input context you are capturing text for
-		 * @param	mappedInput	member wstring textInput contains the input text
-		 * @param	callback	returns true if text input was consumed, false if not consumed
-		 * @return	true if text input was consumed by the callback
-		 */
+			*	Otherwise returns the result of callback.
+			* @param	contextId	which input context you are capturing text for
+			* @param	mappedInput	member wstring textInput contains the input text
+			* @param	callback	returns true if text input was consumed, false if not consumed
+			* @return	true if text input was consumed by the callback
+			*/
 		bool handleTextInput(Id_t contextId,
 							 FrameMappedInput& mappedInput,
 							 InputTextFunc* callback);
@@ -368,21 +349,20 @@ namespace input {
 		 */
 		void startTextInput();
 		void stopTextInput();
-		bool textInputActive() const;
+		bool textInputActive();
 
 		/**
 		 * Mouse movement mode
 		 */
 		void startRelativeMouseMode();
 		void stopRelativeMouseMode();
-		bool relativeMouseModeActive() const;
+		bool relativeMouseModeActive();
 
 		/**
 		 * Translate input events into mapped into for one frame
 		 */
 		void mapFrameInputs(const UpdateInfo& ui);
 		void mapFrameMotion(const UpdateInfo& ui);
-
 	};
 
 }

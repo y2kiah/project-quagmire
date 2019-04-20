@@ -5,6 +5,8 @@
 #include <SDL_video.h>
 #include <SDL_syswm.h>
 #include "../utility/types.h"
+#include "../utility/logger.h"
+#include "../game.h"
 
 /*class FileSystemWatcher {
 public:
@@ -52,27 +54,36 @@ struct SDLApplication {
 	DisplayData		displayData[50] = {};
 };
 
-struct GameMemory {
-	size_t			gameStateSize;
-	void*			gameState;
-
-	size_t			transientSize;
-	void*			transient;
-
-	size_t			frameScopedSize;
-	void*			frameScoped;
-	
-	bool			initialized;
+struct PlatformApi {
+	logger::LogFunc* log;
 };
 
-bool getWindowInfo(SDL_Window* window, SDL_SysWMinfo* info);
-bool getEnvironmentInfo(Environment* env);
+struct GameMemory {
+	Game*			gameState;
+	size_t			gameStateSize;
 
-void yieldThread();
+	void*			transient;
+	size_t			transientSize;
 
-void showErrorBox(const char* text, const char* caption);
+	void*			frameScoped;
+	size_t			frameScopedSize;
+	
+	bool			initialized;
 
-void setWindowIcon(const WindowData *windowData);
+	PlatformApi		platform;
+};
+
+namespace logger {
+	void log(Category, Priority, const char*, va_list);
+}
+//bool getWindowInfo(SDL_Window* window, SDL_SysWMinfo* info);
+//bool getEnvironmentInfo(Environment* env);
+
+//void yieldThread();
+
+//void showErrorBox(const char* text, const char* caption);
+
+//void setWindowIcon(const WindowData *windowData);
 
 
 #endif

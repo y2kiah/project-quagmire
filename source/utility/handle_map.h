@@ -160,8 +160,8 @@ struct HandleMap {
 	 * @returns the number of swaps that occurred, keeping in mind that this value could
 	 *	overflow on very large data sets
 	 */
-	typedef bool (*pfCompare)(void*, void*);
-	size_t defragment(pfCompare comp, size_t maxSwaps = 0);
+	typedef bool Compare(void*, void*);
+	size_t defragment(Compare* comp, size_t maxSwaps = 0);
 
 	/**
 	 * @returns index into the inner DenseSet for a given outer id
@@ -400,7 +400,7 @@ Id_t HandleMap::getHandleForInnerIndex(size_t innerIndex)
 }
 
 
-size_t HandleMap::defragment(pfCompare comp, size_t maxSwaps)
+size_t HandleMap::defragment(Compare* comp, size_t maxSwaps)
 {
 	if (_fragmented == 0) {
 		return 0;
@@ -480,5 +480,43 @@ void HandleMap::deinit()
 		items = nullptr;
 	}
 }
+
+
+// Helper Macros
+
+// Macro for defining a HandleMap storage buffer
+#define HandleMapBuffer(Type, name, capacity) \
+	u8 name[(sizeof(Type)*(capacity+1)) + (sizeof(Id_t)*capacity) + (sizeof(u32)*capacity)];\
+	static_assert(is_aligned(sizeof(Type)*(capacity+1),8),"sizeof items array must be a multiple of 8");
+
+
+// Macro for defining a type-safe HandleMap wrapper that avoids void* and elementSizeB in the api
+#define HandleMapTyped(Type, name, TypeId) \
+	struct name {\
+		enum { TypeSize = sizeof(Type) };\
+		HandleMap _map;\
+		static size_t getTotalBufferSize(u32 capacity)\
+											{ return HandleMap::getTotalBufferSize(TypeSize, capacity); }\
+		explicit name(u32 _capacity, void* buffer = nullptr)\
+											{ _map.init(TypeSize, _capacity, TypeId, buffer); }\
+		explicit name() {}\
+		Type* at(Id_t handle)				{ return (Type*)_map.at(handle); }\
+		Type* operator[](Id_t handle)		{ return at(handle); }\
+		bool erase(Id_t handle)				{ return _map.erase(handle); }\
+		Id_t insert(Type* src = nullptr, Type** out = nullptr)\
+											{ return _map.insert((void*)src, (void**)out); }\
+		void clear()						{ _map.clear(); }\
+		void reset()						{ _map.reset(); }\
+		bool has(Id_t handle)				{ return _map.has(handle); }\
+		size_t defragment(HandleMap::Compare* comp, size_t maxSwaps = 0)\
+											{ return _map.defragment(comp, maxSwaps); }\
+		u32 getInnerIndex(Id_t handle)		{ return _map.getInnerIndex(handle); }\
+		Id_t getHandleForInnerIndex(size_t innerIndex)\
+											{ return _map.getHandleForInnerIndex(innerIndex); }\
+		inline Type* item(u32 innerIndex)	{ return (Type*)_map.item(innerIndex); }\
+		void init(u32 capacity, void* buffer = nullptr)\
+											{ _map.init(TypeSize, capacity, TypeId, buffer); }\
+		void deinit()						{ _map.deinit(); }\
+	};
 
 #endif

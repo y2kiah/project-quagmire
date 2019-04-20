@@ -13,15 +13,6 @@ namespace input {
 		Event_TextInput
 	};
 
-	enum InputMouseCursor : u8 {
-		Cursor_Arrow = 0,
-		Cursor_Hand,
-		Cursor_Wait,
-		Cursor_IBeam,
-		Cursor_Crosshair,
-		_InputMouseCursorCount
-	};
-
 	struct InputEvent {
 		i64				timeStampCounts;
 		SDL_Event		evt;
@@ -35,6 +26,8 @@ namespace input {
 	struct PlatformInput {
 		ConcurrentQueue		eventsQueue;
 		ConcurrentQueue		motionEventsQueue;
+		DenseQueue			popEvents;
+		DenseQueue			popMotionEvents;
 	};
 
 }

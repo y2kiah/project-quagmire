@@ -6,13 +6,11 @@
 //#include <resource/ResourceLoader.h>
 //#include <utility/profile/Profile.h>
 //#include <tests/Test.h>
-#include "utility/logger.cpp"
+#include "utility/platform_logger.cpp"
 #include "platform/timer.cpp"
 #include "platform/platform.cpp"
 #include "input/platform_input.cpp"
 
-
-logging::Logger logger;
 
 // enable dedicated graphics for NVIDIA and AMD
 extern "C" {
@@ -48,19 +46,19 @@ bool initWindow(
 	// get number of displays
 	app.numDisplays = SDL_GetNumVideoDisplays();
 	if (app.numDisplays <= 0) {
-		logger.error(SDL_GetError());
+		logger::error(SDL_GetError());
 		return false;
 	}
 
 	// get all display modes for each display
 	for (int d = 0; d < app.numDisplays; ++d) {
 		if (SDL_GetDisplayBounds(d, &(app.displayData[d].bounds)) != 0) {
-			logger.error(SDL_GetError());
+			logger::error(SDL_GetError());
 			return false;
 		}
 
 		if (SDL_GetDesktopDisplayMode(d, &app.displayData[d].displayMode) != 0) {
-			logger.error(SDL_GetError());
+			logger::error(SDL_GetError());
 			return false;
 		}
 	}
@@ -100,14 +98,14 @@ bool initWindow(
 		//SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN_DESKTOP);
 
 	if (window == nullptr) {
-		logger.error(SDL_GetError());
+		logger::error(SDL_GetError());
 		return false;
 	}
 
 	SDL_GLContext glContext = SDL_GL_CreateContext(window);
 
 	if (glContext == nullptr) {
-		logger.error(SDL_GetError());
+		logger::error(SDL_GetError());
 		return false;
 	}
 
@@ -132,13 +130,13 @@ bool initOpenGL(SDLApplication& app)
 	glewExperimental = true; // Needed in core profile
 	GLenum err = glewInit();
 	if (err != GLEW_OK) {
-		logger.critical(logging::Category_Error, "Failed to initialize GLEW\n");
-		logger.critical(logging::Category_Error, (const char *)glewGetErrorString(err));
+		logger::critical(logger::Category_Error, "Failed to initialize GLEW\n");
+		logger::critical(logger::Category_Error, (const char *)glewGetErrorString(err));
 		return false;
 	}
 	glGetError(); // clear any error created by GLEW init
 
-	logger.info(logging::Category_Video,
+	logger::info(logger::Category_Video,
 				"OpenGL Information:\n  Vendor: %s\n  Renderer: %s\n  Version: %s\n  Shading Language Version: %s\n",
 				glGetString(GL_VENDOR),
 				glGetString(GL_RENDERER),
@@ -151,10 +149,10 @@ bool initOpenGL(SDLApplication& app)
 	int numExtensions = 0;
 	glGetIntegerv(GL_NUM_EXTENSIONS, &numExtensions);
 
-	logger.debug(logging::Category_Video, "OpenGL Extensions:\n");
+	logger::debug(logger::Category_Video, "OpenGL Extensions:\n");
 	for (int i = 0; i < numExtensions; ++i) {
 		const char* ext = (const char*)glGetStringi(GL_EXTENSIONS, i);
-		logger.debug(logging::Category_Video, "%s ", ext);
+		logger::debug(logger::Category_Video, "%s ", ext);
 	}
 
 	// give the extensions string to the SOIL library
@@ -205,7 +203,6 @@ void quitApplication(SDLApplication& app)
 		SDL_DestroyWindow(app.windowData.window);
 	}
 
-	logging::flush();
 	SDL_Quit();
 }
 
@@ -270,8 +267,10 @@ int gameProcess(void* ctx)
 int main(int argc, char *argv[])
 {
 	initHighPerfTimer();
-	//logging::setMode(logging::Mode_Immediate_Thread_Unsafe);
-	logger.setAllPriorities(logging::Priority_Info);
+	
+	logger::_log = &logger::log;
+	//logger::setMode(logger::Mode_Immediate_Thread_Unsafe);
+	logger::setAllPriorities(logger::Priority_Verbose);
 	
 	SDLApplication app;
 	initApplication(app);
@@ -346,7 +345,7 @@ int main(int argc, char *argv[])
 						break;
 
 					default: {
-						//logger.verbose(Logger::Category_Input, "event type=%d\n", event.type);
+						//logger::verbose(Logger::Category_Input, "event type=%d\n", event.type);
 					}
 				}
 			}
@@ -358,10 +357,10 @@ int main(int argc, char *argv[])
 		// run thread_pool deferred task check (when_any, when_all)
 		//   engine.taskPool.checkDeferredTasks();
 
-		logger.verbose("Input frame\n");
+		//logger::verbose("Input frame\n");
 
 		// flush the logger queue, writing out all of the messages
-		logging::flush();
+		logger::flush();
 
 		//yieldThread();
 		platformSleep(1);

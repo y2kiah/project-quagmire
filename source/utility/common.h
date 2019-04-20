@@ -37,6 +37,10 @@
 #define static_assert_aligned_size(Type,bytes)	static_assert(sizeof(Type) % (bytes) == 0,\
                                                               #Type " size is not a multiple of " xstr(bytes))
 
+// size in bytes macros
+#define kilobytes(v)    v*1024
+#define megabytes(v)    kilobytes(v)*1024
+#define gigabytes(v)    megabytes(v)*1024
 
 // export macros
 #ifdef _MSC_VER

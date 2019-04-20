@@ -88,8 +88,8 @@ struct ConcurrentQueue {
 	 * @param[in]	p_		   predicate must return bool and accept a single param of type void*
 	 * @returns true if pop succeeds, false if queue is empty or predicate returns false
 	 */
-	typedef bool (*pfUnaryPredicate)(void*);
-	bool try_pop_if(void* outData, pfUnaryPredicate p_);
+	typedef bool UnaryPredicate(void*);
+	bool try_pop_if(void* outData, UnaryPredicate* p_);
 
 	/**
 	 * Pops several items from the queue, or returns immediately without waiting if the list is
@@ -98,7 +98,7 @@ struct ConcurrentQueue {
 	 * @param[in]	p_			predicate must return bool and accept a single param of type void*
 	 * @returns number of items popped
 	 */
-	u32 try_pop_all_if(void* outData, pfUnaryPredicate p_);
+	u32 try_pop_all_if(void* outData, UnaryPredicate* p_);
 
 	/**
 	 * Waits indefinitely for a condition variable that indicates data is available in the
@@ -218,7 +218,7 @@ u32 ConcurrentQueue::try_pop_all(void* outData, int max)
 }
 
 
-bool ConcurrentQueue::try_pop_if(void* outData, pfUnaryPredicate p_)
+bool ConcurrentQueue::try_pop_if(void* outData, UnaryPredicate* p_)
 {
 	SDL_LockMutex(lock);
 
@@ -233,7 +233,7 @@ bool ConcurrentQueue::try_pop_if(void* outData, pfUnaryPredicate p_)
 }
 
 
-u32 ConcurrentQueue::try_pop_all_if(void* outData, pfUnaryPredicate p_)
+u32 ConcurrentQueue::try_pop_all_if(void* outData, UnaryPredicate* p_)
 {
 	SDL_LockMutex(lock);
 

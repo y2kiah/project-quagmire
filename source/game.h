@@ -8,6 +8,7 @@
 #include "utility/concurrent_queue.h"
 #include "utility/logger.h"
 #include "utility/fixed_timestep.h"
+#include "input/game_input.h"
 
 //#define MAX_GAME_COMPONENTS		32
 
@@ -24,10 +25,10 @@
 struct Game {
 	// Core Systems
 
-	FixedTimestep simulationUpdate = {};
+	FixedTimestep		simulationUpdate = {};
 
 	//ThreadPoolPtr					threadPool		= nullptr;
-//	InputSystem*			inputSystem		= nullptr;
+	input::GameInput	gameInput = {};
 	//resource::ResourceLoaderPtr		resourceLoader	= nullptr;
 	//render::RenderSystemPtr			renderSystem	= nullptr;
 	//render::ShaderManagerPtr		shaderManager	= nullptr;

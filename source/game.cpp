@@ -1,4 +1,3 @@
-
 #include "build_config.h"
 #include "capacity.h"
 #include <cstdlib>
@@ -13,6 +12,8 @@
 #include "input/platform_input.h"
 
 #include "utility/logger.cpp"
+#include "input/game_input.cpp"
+
 
 struct SimulationUpdateContext {
 	Game&					game;
@@ -20,7 +21,8 @@ struct SimulationUpdateContext {
 	GameMemory*				gameMemory;
 };
 
-logging::Logger logger;
+PlatformApi* platform = nullptr;
+
 
 /**
  * Runs the simulation logic at a fixed frame rate. Keep a "previous" and "next" value for
@@ -32,8 +34,8 @@ void gameUpdateFrameTick(UpdateInfo& ui, void* _ctx)
 {
 	SimulationUpdateContext& simContext = *(SimulationUpdateContext*)_ctx;
 
-	logger.verbose("Update virtualTime=%lu: gameTime=%ld: deltaCounts=%ld: countsPerMs=%ld\n",
-				   ui.virtualTime, ui.gameTime, ui.deltaCounts, ui.countsPerMs);
+	//logger::verbose("Update virtualTime=%lu: gameTime=%ld: deltaCounts=%ld: countsPerMs=%ld\n",
+	//                ui.virtualTime, ui.gameTime, ui.deltaCounts, ui.countsPerMs);
 
 	//engine.threadPool->executeFixedThreadTasks(ThreadAffinity::Thread_Update);
 
@@ -44,7 +46,7 @@ void gameUpdateFrameTick(UpdateInfo& ui, void* _ctx)
 	simContext.input.eventsQueue.clear();
 	simContext.input.motionEventsQueue.clear();
 	//gameMemory.
-//	inputSystem->updateFrameTick(ui);
+//	input::updateFrameTick(ui, simContext.input);
 
 	//	ResourceLoader
 	//	AISystem
@@ -77,7 +79,7 @@ void gameUpdateFrameTick(UpdateInfo& ui, void* _ctx)
 void gameRenderFrameTick(GameMemory* gameMemory, float interpolation,
 						 int64_t realTime, int64_t countsPassed)
 {
-	logger.verbose("Render realTime=%lu: interpolation=%0.3f\n", realTime, interpolation);
+//	logger::verbose("Render realTime=%lu: interpolation=%0.3f\n", realTime, interpolation);
 
 //	engine.resourceLoader->executeCallbacks();
 
@@ -147,24 +149,13 @@ void makeCoreSystems(GameMemory* gameMemory)
 	 * Build the input system
 	 */
 	{
-//		using namespace input;
-
-		// inject dependencies into the InputSystem
-//		inputPtr->app = &app;
-
-//		inputPtr->initialize();
-
-		// inject dependencies to the InputSystem C API
-//		setInputSystemPtr(inputPtr);
+		game.gameInput.init();
 
 		// InputSystem.lua contains initInputSystem function
 //		scriptPtr->doFile(engine.engineLuaState, "scripts/InputSystem.lua"); // throws on error
 
 		// invoke Lua function to init InputSystem
 //		scriptPtr->callLuaGlobalFunction(engine.engineLuaState, "initInputSystem");
-
-		// move input system into application
-//		engine.inputSystem = inputPtr;
 	}
 
 	/**
@@ -251,11 +242,8 @@ void makeCoreSystems(GameMemory* gameMemory)
  */
 void makeGame(GameMemory* gameMemory)
 {
-	Game& game = *(Game*)gameMemory->gameState;
+	Game& game = *gameMemory->gameState;
 
-	//logging::setMode(logging::Mode_Immediate_Thread_Unsafe);
-	logger.setAllPriorities(logging::Priority_Info);
-	
 //	GamePtr gamePtr = std::make_shared<Game>();
 //	Game& game = *gamePtr;
 
@@ -311,6 +299,8 @@ void makeGame(GameMemory* gameMemory)
  */
 void destroyGame(GameMemory* gameMemory)
 {
+	Game& game = *gameMemory->gameState;
+
 //	terrain.deinit();
 
 	// Destroy the scene manager
@@ -330,16 +320,12 @@ void destroyGame(GameMemory* gameMemory)
 //	resourceLoader.reset();
 
 	// Destroy the input system
-//	setInputSystemPtr(input::InputSystemPtr());
-//	inputSystem.reset();
+	game.gameInput.deinit();
 
 	// Destroy the tools system
 	#ifdef QUAGMIRE_DEVELOPMENT
 //	toolsManager.reset();
 	#endif
-
-	// Destroy the scripting system
-//	scriptManager.reset();
 
 	// Destroy the thread pool
 //	threadPool.reset();
@@ -348,39 +334,41 @@ void destroyGame(GameMemory* gameMemory)
 
 
 extern "C" {
-_export
-void
-gameUpdateAndRender(
-	GameMemory* gameMemory,
-	input::PlatformInput* input,
-	i64 realTime,
-	i64 countsPassed,
-	i64 countsPerMs,
-	u64 frame)
-{
-	if (!gameMemory->initialized) {
-		makeGame(gameMemory);
+	_export
+	void
+	gameUpdateAndRender(
+		GameMemory* gameMemory,
+		input::PlatformInput* input,
+		i64 realTime,
+		i64 countsPassed,
+		i64 countsPerMs,
+		u64 frame)
+	{
+		if (!platform) {
+			platform = &gameMemory->platform;
+			logger::_log = platform->log;
+		}
+		if (!gameMemory->initialized) {
+			makeGame(gameMemory);
+		}
+
+		Game& game = *(Game*)gameMemory->gameState;
+		SimulationUpdateContext ctx = { game, *input, gameMemory };
+		
+		float interpolation = game.simulationUpdate.tick(
+				1000.0f / 30.0f,	// deltaMS, run at 30fps
+				realTime,
+				countsPassed,
+				countsPerMs,
+				frame,
+				1.0f,				// game speed, 1.0=normal
+				gameUpdateFrameTick,
+				&ctx);
+
+		//SDL_Delay(1000);
+
+		//engine.threadPool->executeFixedThreadTasks(ThreadAffinity::Thread_OpenGL_Render);
+
+		gameRenderFrameTick(gameMemory, interpolation, realTime, countsPassed);
 	}
-
-	Game& game = *(Game*)gameMemory->gameState;
-	SimulationUpdateContext ctx = { game, *input, gameMemory };
-	
-	float interpolation = game.simulationUpdate.tick(
-			1000.0f / 30.0f,	// deltaMS, run at 30fps
-			realTime,
-			countsPassed,
-			countsPerMs,
-			frame,
-			1.0f,				// game speed, 1.0=normal
-			gameUpdateFrameTick,
-			&ctx);
-
-	//SDL_Delay(1000);
-
-	//engine.threadPool->executeFixedThreadTasks(ThreadAffinity::Thread_OpenGL_Render);
-
-	gameRenderFrameTick(gameMemory, interpolation, realTime, countsPassed);
-
-	logging::flush();
-}
 }

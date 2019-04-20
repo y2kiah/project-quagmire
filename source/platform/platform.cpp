@@ -1,9 +1,10 @@
 
+#include <atomic>
+#include "../capacity.h"
 #include "platform.h"
 #include "input/platform_input.h"
+#include "utility/logger.h"
 #include <SDL_filesystem.h>
-
-extern logging::Logger logger;
 
 #ifdef _WIN32
 
@@ -60,10 +61,22 @@ void createGameMemory(GameMemory& gameMemory)
 {
 	const size_t pageSize = 4096; // TODO: should this just be 64K? allocations must be on 64K boundaries
 	
-	if (gameMemory.gameState == nullptr) {
+	if (!gameMemory.gameState) {
 		gameMemory.gameStateSize = align(sizeof(Game), pageSize);
-		gameMemory.gameState = VirtualAlloc(0, gameMemory.gameStateSize, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+		gameMemory.gameState = (Game*)VirtualAlloc(0, gameMemory.gameStateSize, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
 	}
+
+	if (!gameMemory.frameScoped) {
+		gameMemory.frameScopedSize = align(megabytes(FRAMESCOPED_MEGABYTES), pageSize);
+		gameMemory.frameScoped = VirtualAlloc(0, gameMemory.frameScopedSize, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+	}
+
+	if (!gameMemory.transient) {
+		gameMemory.transientSize = align(megabytes(TRANSIENT_MEGABYTES), pageSize);
+		gameMemory.transient = VirtualAlloc(0, gameMemory.transientSize, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+	}
+
+	gameMemory.platform.log = &logger::log;
 }
 
 FILETIME fileGetLastWriteTime(const char *filename)
@@ -115,7 +128,7 @@ void loadGameCode(GameCode& gameCode)
 			if ((newDLLFileTime.dwLowDateTime || newDLLFileTime.dwHighDateTime)
 				&& CompareFileTime(&newDLLFileTime, &gameCode.dllLastWriteTime) != 0)
 			{
-				logger.info("new game.dll detected...");
+				logger::info("new game.dll detected...");
 				unloadGameCode(gameCode);
 				
 				CopyFileA(newGameDLLPath, gameDLLPath, FALSE);
@@ -128,7 +141,7 @@ void loadGameCode(GameCode& gameCode)
 					gameCode.isValid = (gameCode.updateAndRender);
 				}
 
-				logger.info(gameCode.isValid ? "loaded!" : "ERROR LOADING");
+				logger::info(gameCode.isValid ? "loaded!" : "ERROR LOADING");
 			}
 		}
 	}
@@ -257,15 +270,19 @@ void createGameContext(GameContext& gameContext, SDLApplication* app)
 	createGameMemory(gameContext.gameMemory);
 	loadGameCode(gameContext.gameCode);
 	
-	gameContext.input.eventsQueue.init(sizeof(input::InputEvent), INPUTSYSTEM_EVENTSQUEUE_CAPACITY);
-	gameContext.input.motionEventsQueue.init(sizeof(input::InputEvent), INPUTSYSTEM_MOTIONEVENTSQUEUE_CAPACITY);
+	gameContext.input.eventsQueue.init(sizeof(input::InputEvent), PLATFORMINPUT_EVENTSQUEUE_CAPACITY);
+	gameContext.input.popEvents.init(sizeof(input::InputEvent), PLATFORMINPUT_EVENTSQUEUE_CAPACITY);
+	gameContext.input.motionEventsQueue.init(sizeof(input::InputEvent), PLATFORMINPUT_MOTIONEVENTSQUEUE_CAPACITY);
+	gameContext.input.popMotionEvents.init(sizeof(input::InputEvent), PLATFORMINPUT_MOTIONEVENTSQUEUE_CAPACITY);
 }
 
 
 void destroyGameContext(GameContext& gameContext)
 {
 	gameContext.input.eventsQueue.deinit();
+	gameContext.input.popEvents.deinit();
 	gameContext.input.motionEventsQueue.deinit();
+	gameContext.input.popMotionEvents.deinit();
 }
 
 

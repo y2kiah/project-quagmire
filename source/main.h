@@ -14,4 +14,3 @@
 #include "platform/platform.h"
 #include "platform/timer.h"
 #include "input/platform_input.h"
-#include "game.h"
