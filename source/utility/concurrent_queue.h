@@ -23,11 +23,12 @@ struct ConcurrentQueue {
 
 	explicit ConcurrentQueue() {}
 	
-	explicit ConcurrentQueue(u16 elementSizeB,
-							 u32 capacity,
-							 void* buffer = nullptr,
-							 u8 assertOnFull = 1) :
-		queue(elementSizeB, capacity, buffer, assertOnFull)
+	explicit ConcurrentQueue(
+		u16 elementSizeB,
+		u32 capacity,
+		void* buffer = nullptr,
+		u8 assertOnFull = 1)
+		: queue(elementSizeB, capacity, buffer, assertOnFull)
 	{
 		lock = SDL_CreateMutex();
 		cond = SDL_CreateCond();
@@ -42,17 +43,19 @@ struct ConcurrentQueue {
 	 * Thread-safe push onto the queue. Also updates the condition variable so any threads
 	 * locked in waitPop will take the mutex and process the pop.
 	 * @param[in]	inData	item to be copied into queue
+	 * @param[in]	zero	if val is nullptr, pass true to zero the new item memory
 	 * @returns pointer to new item, or nullptr if the container is full
 	 */
-	void* push(void* inData);
+	void* push(void* inData, bool zero = true);
 
 	/**
 	 * Copies {count} items from inData into the queue.
 	 * @param[in]	inData	container of items to be copied into queue
 	 * @param[in]	count	number of objects to push
+	 * @param[in]	zero	if val is nullptr, pass true to zero the new item memory
 	 * @returns pointer to first new item, or nullptr if the container is full
 	 */
-	void* push_n(void* inData, int count);
+	void* push_n(void* inData, u32 count, bool zero = true);
 
 	/**
 	 * Pops an item from the queue, or returns immediately without waiting if the list is
@@ -76,10 +79,19 @@ struct ConcurrentQueue {
 	 * Pops several items from the queue, or returns immediately without waiting if the list is
 	 * empty. Items are popped only up to a max count passed in.
 	 * @param[out]	outData		The popped items are copied to the provided address.
-	 * @param[in]	max			maximum number of items to pop, or 0 (default) for unlimited
+	 * @param[in]	max			maximum number of items to pop; may be related to capacity in
+	 * 							outData to avoid overflowing the buffer
 	 * @returns number of items popped
 	 */
-	u32 try_pop_all(void* outData, int max = 0);
+	u32 try_pop_all(void* outData, u32 max);
+
+	/**
+	 * Pops several items from the queue, or returns immediately without waiting if the list is
+	 * empty. Items are pushed into the @c pushTo queue, up to the available capacity of the queue. 
+	 * @param[in]	pushTo		DenseQueue to push the popped items into
+	 * @returns number of items popped / pushed
+	 */
+	u32 try_pop_all_push(DenseQueue& pushTo);
 
 	/**
 	 * Pops an item from the queue, or returns immediately without waiting if the list is empty
@@ -95,10 +107,12 @@ struct ConcurrentQueue {
 	 * Pops several items from the queue, or returns immediately without waiting if the list is
 	 * empty. Items are popped only while the provided predicate function evaluates to true.
 	 * @param[out]	outData		The popped items are copied to the provided address
+	 * @param[in]	max			The maximum number of items to pop; may be related to capacity
+	 * 							in outData to avoid overflowing the buffer
 	 * @param[in]	p_			predicate must return bool and accept a single param of type void*
 	 * @returns number of items popped
 	 */
-	u32 try_pop_all_if(void* outData, UnaryPredicate* p_);
+	u32 try_pop_while(void* outData, u32 max, UnaryPredicate* p_);
 
 	/**
 	 * Waits indefinitely for a condition variable that indicates data is available in the
@@ -127,16 +141,15 @@ struct ConcurrentQueue {
 	u32 unsafe_size() { return queue.length; }
 
 	/**
-	 * unsafe_capacity is not concurrency-safe and can produce incorrect results if called
-	 * concurrently with calls to push*, pop*, and empty methods.
 	 * @returns capacity of the queue
 	 */
-	u32 unsafe_capacity() { return queue.capacity; }
+	u32 capacity() { return queue.capacity; }
 
-	void init(u16 elementSizeB,
-			  u32 capacity,
-			  void* buffer = nullptr,
-			  u8 assertOnFull = 1);
+	void init(
+		u16 elementSizeB,
+		u32 capacity,
+		void* buffer = nullptr,
+		u8 assertOnFull = 1);
 
 	void deinit();
 };
@@ -144,11 +157,11 @@ struct ConcurrentQueue {
 static_assert(sizeof(ConcurrentQueue) == 64, "ConcurrentQueue expected to be 64 bytes");
 
 
-void* ConcurrentQueue::push(void* inData)
+void* ConcurrentQueue::push(void* inData, bool zero)
 {
 	SDL_LockMutex(lock);
 	
-	void* addr = queue.push_back(inData);
+	void* addr = queue.push_back(inData, zero);
 	
 	SDL_UnlockMutex(lock);
 	SDL_CondSignal(cond);
@@ -156,11 +169,11 @@ void* ConcurrentQueue::push(void* inData)
 }
 
 
-void* ConcurrentQueue::push_n(void* inData, int count)
+void* ConcurrentQueue::push_n(void* inData, u32 count, bool zero)
 {
 	SDL_LockMutex(lock);
 
-	void* addr = queue.push_back_n(count, inData);
+	void* addr = queue.push_back_n(count, inData, zero);
 
 	SDL_UnlockMutex(lock);
 	SDL_CondSignal(cond);
@@ -206,7 +219,7 @@ bool ConcurrentQueue::try_pop(void* outData, u32 timeoutMS)
 }
 
 
-u32 ConcurrentQueue::try_pop_all(void* outData, int max)
+u32 ConcurrentQueue::try_pop_all(void* outData, u32 max)
 {
 	SDL_LockMutex(lock);
 
@@ -215,6 +228,28 @@ u32 ConcurrentQueue::try_pop_all(void* outData, int max)
 	SDL_UnlockMutex(lock);
 	
 	return numPopped;
+}
+
+
+u32 ConcurrentQueue::try_pop_all_push(DenseQueue& pushTo)
+{
+	SDL_LockMutex(lock);
+
+	u32 totalPopped = 0;
+	while (!queue.empty() && !pushTo.full()) {
+		u32 numPopped = queue.pop_front_n(pushTo.maxContiguous(), pushTo.nextBack());
+		if (numPopped > 1) {
+			pushTo.push_back_n(numPopped, nullptr, false);
+		}
+		else if (numPopped == 1) {
+			pushTo.push_back(nullptr, false);
+		}
+		totalPopped += numPopped;
+	}
+
+	SDL_UnlockMutex(lock);
+
+	return totalPopped;
 }
 
 
@@ -233,14 +268,14 @@ bool ConcurrentQueue::try_pop_if(void* outData, UnaryPredicate* p_)
 }
 
 
-u32 ConcurrentQueue::try_pop_all_if(void* outData, UnaryPredicate* p_)
+u32 ConcurrentQueue::try_pop_while(void* outData, u32 max, UnaryPredicate* p_)
 {
 	SDL_LockMutex(lock);
 
 	// get number of items that pass the predicate to pop
 	u32 numPopped = 0;
 	for (u32 i = 0;
-		 i < queue.length && p_(queue[i]);
+		 i < queue.length && i < max && p_(queue[i]);
 		 ++i)
 	{
 		++numPopped;
@@ -317,5 +352,37 @@ void ConcurrentQueue::deinit()
 
 	queue.deinit();
 }
+
+
+// Helper Macros
+
+// Macro for defining a type-safe ConcurrentQueue wrapper that avoids void* and elementSizeB in the api
+#define ConcurrentQueueTyped(Type, name) \
+	struct name {\
+		enum { TypeSize = sizeof(Type) };\
+		ConcurrentQueue _q;\
+		name() {}\
+		explicit name(u32 capacity, void* buffer = nullptr, u8 assertOnFull = 1)\
+			: _q(TypeSize, capacity, buffer, assertOnFull) {}\
+		Type* push(Type* inData)					{ return (Type*)_q.push((void*)inData); }\
+		Type* push_n(Type* inData, u32 count) 		{ return (Type*)_q.push_n((void*)inData, count); }\
+		bool try_pop(Type* outData) 				{ return _q.try_pop((void*)outData); }\
+		bool try_pop(Type* outData, u32 timeoutMS)	{ return _q.try_pop((void*)outData, timeoutMS); }\
+		u32 try_pop_all(Type* outData, u32 max = 0)	{ return _q.try_pop_all((void*)outData, max); }\
+		u32 try_pop_all_push(DenseQueue& pushTo)	{ return _q.try_pop_all_push(pushTo); }\
+		bool try_pop_if(Type* outData, ConcurrentQueue::UnaryPredicate* p_)\
+													{ return _q.try_pop_if((void*)outData, p_); }\
+		u32 try_pop_while(Type* outData, u32 max, ConcurrentQueue::UnaryPredicate* p_)\
+													{ return _q.try_pop_while((void*)outData, max, p_); }\
+		void wait_pop(Type* outData) 				{ _q.wait_pop((void*)outData); }\
+		void clear() 								{ return _q.clear(); }\
+		bool empty() 								{ return _q.empty(); }\
+		u32 unsafe_size() 							{ return _q.unsafe_size(); }\
+		u32 capacity() 								{ return _q.capacity(); }\
+		void init(u32 capacity, void* buffer = nullptr, u8 assertOnFull = 1)\
+													{ _q.init(TypeSize, capacity, buffer, assertOnFull); }\
+		void deinit() 								{ _q.deinit(); }\
+		Type* data()								{ return (Type*)_q.queue.items; }\
+	};
 
 #endif

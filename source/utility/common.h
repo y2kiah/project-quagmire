@@ -3,6 +3,8 @@
 
 #include "types.h"
 
+#define countof(Array) (sizeof(Array) / sizeof(Array[0]))
+
 // stringize macros
 #define xstr(s) str(s)
 #define str(s) #s
@@ -49,6 +51,21 @@
 #define _export __attribute__ ((visibility ("default")))
 #endif
 
+// malloc macros
+#if defined(QUAGMIRE_ALLOW_MALLOC) && QUAGMIRE_ALLOW_MALLOC != 0
+
+#define Q_malloc(size)   malloc(size)
+
+#else
+
+#if defined(QUAGMIRE_SLOWCHECKS) && QUAGMIRE_SLOWCHECKS != 0
+#define Q_malloc(size)   nullptr; assert(false && "malloc not allowed")
+#else
+// if assert is ignored, just crash
+#define Q_malloc(size)   nullptr; *(int*)0 = 0
+#endif
+
+#endif
 
 // min/max functions, should avoid using macros for this due to possible double-evaluation
 inline u8  min(u8 a, u8 b)   { return (a < b ? a : b); }

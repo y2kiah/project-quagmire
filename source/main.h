@@ -7,7 +7,8 @@
 #include <GL/glew.h>
 #include "utility/common.h"
 #include "utility/nstring.h"
-#include "utility/handle_map.h"
+#include "utility/dense_handle_map_16.h"
+#include "utility/dense_handle_map_32.h"
 #include "utility/dense_queue.h"
 #include "utility/concurrent_queue.h"
 #include "utility/logger.h"

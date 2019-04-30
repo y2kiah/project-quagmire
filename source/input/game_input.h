@@ -4,7 +4,7 @@
 #include <SDL_events.h>
 #include "capacity.h"
 #include "utility/concurrent_queue.h"
-#include "utility/handle_map.h"
+#include "utility/dense_handle_map_16.h"
 #include "utility/fixed_timestep.h"
 #include "platform_input.h"
 
@@ -98,8 +98,8 @@ namespace input {
 		u8						slider      = 0;			// 0=false, 1=true axis is a slider
 		f32						sensitivity = 1.0f;			// sensitivity multiplier, mainly for mouse movement in relative mode
 		// all events
-		Id_t					mappingId   = NullId_t;		// the id handle of this mapping
-		Id_t					contextId   = NullId_t;		// the id handle of the context
+		h32						mappingId   = null_h32;		// the id handle of this mapping
+		h32						contextId   = null_h32;		// the id handle of the context
 		char					name[32]    = {};			// display name of the mapping
 	};
 
@@ -107,8 +107,8 @@ namespace input {
 	 * Mapped action for a frame.
 	 */
 	struct MappedAction {
-		Id_t			mappingId;
 		InputMapping*	inputMapping;
+		h32				mappingId;
 		f32				x;
 		f32				y;			// mouse clicks include normalized position here
 		i32				xRaw;
@@ -121,8 +121,8 @@ namespace input {
 	 * rate, therefor the first frame a state becomes active includes the full frame timestep.
 	 */
 	struct MappedState {
-		Id_t			mappingId;
 		InputMapping*	inputMapping;
+		h32				mappingId;
 		f64				totalMs;		// total millis the state has been active
 		i64				startCounts;	// clock counts when state began
 		i64				totalCounts;	// currentCounts - startCounts + countsPerTick
@@ -149,11 +149,10 @@ namespace input {
 	 * MappedAxis matches up AxisMotion with a valid InputMapping for a frame.
 	 */
 	struct MappedAxis {
-		Id_t			mappingId;
 		InputMapping*	inputMapping;
 		AxisMotion*		axisMotion;
+		h32				mappingId;
 		bool			handled;		// flag set to true when event has been handled by a callback
-		u8				_padding[4];
 	};
 
 	/**
@@ -182,12 +181,12 @@ namespace input {
 	};
 
 	struct InputContext {
+		h32				contextId;		// the id handle of this context
 		u8				options;		// all input context options
 		u8				priority;		// input context priority
-		u8				_padding[6];
-		Id_t			contextId;		// the id handle of this context
+		u8				_padding[2];
 		// stores input mapping to actions, states, axes
-		Id_t			inputMappings[INPUTCONTEXT_MAPPINGS_CAPACITY];
+		h32				inputMappings[INPUTCONTEXT_MAPPINGS_CAPACITY];
 		char			name[32];		// display name of the context
 		//u32			cursorIndex;	// lookup into input system's cursor table
 	};
@@ -196,16 +195,15 @@ namespace input {
 	 * Active Input Context record
 	 */
 	struct ActiveInputContext {
-		Id_t			contextId;
-		bool			active;
-		u8				priority;
-		u8				_padding[3];
+		h32				contextId;
+		u16				priority;
+		u8				active;
+		u8				_padding;
 	};
 
 	struct CallbackPriority {
-		Id_t			callbackId;
+		h32				callbackId;
 		i32				priority;
-		u8				_padding[4];
 	};
 
 	
@@ -215,9 +213,9 @@ namespace input {
 	typedef bool InputAxisFunc(MappedAxis&, InputContext&);
 	typedef bool InputTextFunc(FrameMappedInput&, InputContext&);
 	
-	HandleMapTyped(InputMapping, HandleMap_InputMapping, 0);
-	HandleMapTyped(InputContext, HandleMap_InputContext, 1);
-	HandleMapTyped(InputCallbackFunc*, HandleMap_InputCallback, 2);
+	DenseHandleMap16Typed(InputMapping, HandleMap_InputMapping, 0);
+	DenseHandleMap16Typed(InputContext, HandleMap_InputContext, 1);
+	DenseHandleMap16Typed(InputCallbackFunc*, HandleMap_InputCallback, 2);
 
 
 	struct GameInput {
@@ -225,9 +223,9 @@ namespace input {
 		HandleMap_InputContext		inputContexts;	// collection of input contexts
 		HandleMap_InputCallback		callbacks;		// map storing all registered callbacks
 
-		HandleMapBuffer(InputMapping, inputMappingsBuffer, GAMEINPUT_MAPPINGS_CAPACITY);
-		HandleMapBuffer(InputContext, inputContextsBuffer, GAMEINPUT_CONTEXTS_CAPACITY);
-		HandleMapBuffer(InputCallbackFunc*, callbacksBuffer, GAMEINPUT_CALLBACKS_CAPACITY);
+		DenseHandleMap16Buffer(InputMapping, inputMappingsBuffer, GAMEINPUT_MAPPINGS_CAPACITY);
+		DenseHandleMap16Buffer(InputContext, inputContextsBuffer, GAMEINPUT_CONTEXTS_CAPACITY);
+		DenseHandleMap16Buffer(InputCallbackFunc*, callbacksBuffer, GAMEINPUT_CALLBACKS_CAPACITY);
 
 		// active input contexts sorted by priority
 		ActiveInputContext	activeInputContexts[GAMEINPUT_CONTEXTS_CAPACITY];
@@ -265,15 +263,15 @@ namespace input {
 		 * Slow function to get an input mapping id from its name, systems use this at startup
 		 * and store the handle for later use
 		 * @name		mapping name found in config/inputcontexts.json
-		 * @return	Id of the mapping, NullId_t if name not found within context
+		 * @return	Id of the mapping, null_h32 if name not found within context
 		 */
-		Id_t getInputMappingHandle(const char* name, Id_t contextId);
+		h32 getInputMappingHandle(const char* name, h32 contextId);
 		
 
 		/**
 		 * Get index of active state in frame states array, -1 if not present.
 		 */
-		int findActiveState(Id_t mappingId);
+		int findActiveState(h32 mappingId);
 
 
 		// Input Contexts
@@ -281,33 +279,33 @@ namespace input {
 		/**
 		 * Create a context and get back its handle
 		 */
-		Id_t createContext(u8 options, u8 priority, bool makeActive = false);
+		h32 createContext(u8 options, u8 priority, bool makeActive = false);
 
 		/**
 		 * Slow function to get an input context id from its name, systems use this at startup
 		 * and store the handle for later use
 		 * @name		context name found in config/inputcontexts.json
-		 * @return	Id of the context, NullId_t if name not found
+		 * @return	Id of the context, null_h32 if name not found
 		 */
-		Id_t getInputContextHandle(const char* name);
+		h32 getInputContextHandle(const char* name);
 
 		/**
 		 * Set the InputContext, returns true on success
 		 */
-		bool setContextActive(Id_t contextId, bool active = true, i8 priority = -1);
+		bool setContextActive(h32 contextId, bool active = true, i8 priority = -1);
 
 		// Callbacks
 		
-		Id_t registerCallback(i32 priority, InputCallbackFunc* func);
+		h32 registerCallback(i32 priority, InputCallbackFunc* func);
 
-		bool unregisterCallback(Id_t callbackId);
+		bool unregisterCallback(h32 callbackId);
 
 		/**
 		 * Convenience function for handling a single active mapped action event
 		 * @param	callback	returns true if input was handled, false if not handled
 		 * @return	true if a mapped action is found and handled by the callback
 		 */
-		bool handleInputAction(Id_t mappingId,
+		bool handleInputAction(h32 mappingId,
 							   FrameMappedInput& mappedInput,
 							   InputActionFunc* callback);
 
@@ -316,7 +314,7 @@ namespace input {
 		 * @param	callback	returns true if input was handled, false if not handled
 		 * @return	true if a mapped state is found and handled by the callback
 		 */
-		bool handleInputState(Id_t mappingId,
+		bool handleInputState(h32 mappingId,
 							  FrameMappedInput& mappedInput,
 							  InputStateFunc* callback);
 
@@ -325,7 +323,7 @@ namespace input {
 		 * @param	callback	returns true if input was handled, false if not handled
 		 * @return	true if a mapped axis is found and handled by the callback
 		 */
-		bool handleInputAxis(Id_t mappingId,
+		bool handleInputAxis(h32 mappingId,
 							 FrameMappedInput& mappedInput,
 							 InputAxisFunc* callback);
 
@@ -338,7 +336,7 @@ namespace input {
 			* @param	callback	returns true if text input was consumed, false if not consumed
 			* @return	true if text input was consumed by the callback
 			*/
-		bool handleTextInput(Id_t contextId,
+		bool handleTextInput(h32 contextId,
 							 FrameMappedInput& mappedInput,
 							 InputTextFunc* callback);
 

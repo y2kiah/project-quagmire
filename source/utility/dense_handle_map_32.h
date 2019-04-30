@@ -1,61 +1,27 @@
-#ifndef _HANDLE_MAP_H
-#define _HANDLE_MAP_H
+#ifndef _DENSE_HANDLE_MAP_32_H
+#define _DENSE_HANDLE_MAP_32_H
 
 #include <cstdlib>
 #include <cstring>
-#include "types.h"
-
-/**
- * @struct Id_t
- * @var	free		0 if active, 1 if slot is part of freelist, only applicable to inner ids
- * @var	typeId		relates to itemTypeId parameter of HandleMap
- * @var	generation	incrementing generation of data at the index, for tracking accesses to old data
- * @var	index		When used as a handle (outer id, given to the client):
- *						free==0, index of id in the sparseIds array
- *					When used as an inner id (stored in sparseIds array):
- *						free==0, index of the item in the dense items array
- *						free==1, index of next free slot, forming an embedded linked list
- * @var	value		unioned with the above four vars, used for direct comparison of ids
- */
-struct Id_t {
-	union {
-		/**
-		* the order of this bitfield is important for sorting prioritized by free, then typeId,
-		* then generation, then index
-		*/
-		struct {
-			u32 index;
-			u16 generation;
-			u16 typeId : 15;
-			u16 free : 1;
-		};
-		u64 value;
-	};
-};
-
-#define NullId_t	Id_t{}
-
-
-// Id_t comparison functions
-
-bool operator==(const Id_t& a, const Id_t& b) { return (a.value == b.value); }
-bool operator!=(const Id_t& a, const Id_t& b) { return (a.value != b.value); }
-bool operator< (const Id_t& a, const Id_t& b) { return (a.value < b.value); }
-bool operator> (const Id_t& a, const Id_t& b) { return (a.value > b.value); }
+#include "common.h"
 
 
 /**
- * @struct HandleMap
+ * @struct DenseHandleMap32
  *	Stores objects using a dense inner array and sparse outer array scheme for good cache coherence
  *	of the inner items. The sparse array contains handles (outer ids) used to identify the item,
  *	and provides an extra indirection allowing the inner array to move items in memory to keep them
  *	tightly packed. The sparse array contains an embedded LIFO freelist, where removed ids push to
  *	the top of the list so the sparse set remains relatively dense.
+ *
+ *	Uses 64-bit handles allowing up to 2^32 stored items, 65535 unique type ids, and 32768
+ *	generations before wrapping. 16 bits store the element size, allowing storage of items up to 64K
+ *	bytes.
  */
-struct HandleMap {
+struct DenseHandleMap32 {
 	// Variables
 	void*	items = nullptr;			// array of stored objects, must have one extra element above capacity used in defragment
-	Id_t*	sparseIds = nullptr;		// array of Id_ts, these are "inner" ids indexing into items
+	h64*	sparseIds = nullptr;		// array of h64, these are "inner" ids indexing into items
 	u32*	denseToSparse = nullptr;	// array of indices into sparseIds array
 
 	u32		length = 0;					// current number of objects contained in map
@@ -63,7 +29,7 @@ struct HandleMap {
 	u32		capacity = 0;				// maximum number of objects that can be stored
 	u16		elementSizeB = 0;			// size in bytes of individual stored objects
 	u8		_fragmented = 0;			// set to 1 if modified by insert or erase since last complete defragment
-	u8		_memoryOwned = 0;			// set to 1 if buffer memory is owned by HandleMap
+	u8		_memoryOwned = 0;			// set to 1 if buffer memory is owned by DenseHandleMap32
 
 	// Functions
 	
@@ -74,24 +40,25 @@ struct HandleMap {
 	 * Constructor
 	 * @param	elementSizeB	size in bytes of individual objects stored
 	 * @param	capacity		maximum number of objects that can be stored
-	 * @param	itemTypeId		typeId used by the Id_t::typeId variable for this container
+	 * @param	itemTypeId		typeId used by the h64::typeId variable for this container
 	 * @param	buffer
-	 *	Optional pre-allocated buffer for all dynamic storage used in the HandleMap, with ample
+	 *	Optional pre-allocated buffer for all dynamic storage used in the DenseHandleMap32, with ample
 	 *	size (obtained by call to getTotalBufferSize). If passed, the memory is not owned by
-	 *	HandleMap and thus not freed on delete. Pass nullptr (default) to allocate the storage on
+	 *	DenseHandleMap32 and thus not freed on delete. Pass nullptr (default) to allocate the storage on
 	 *	create and free on delete.
 	 */
-	explicit HandleMap(u16 _elementSizeB,
-					   u32 _capacity,
-					   u16 itemTypeId = 0,
-					   void* buffer = nullptr)
+	explicit DenseHandleMap32(
+		u16 _elementSizeB,
+		u32 _capacity,
+		u16 itemTypeId = 0,
+		void* buffer = nullptr)
 	{
 		init(_elementSizeB, _capacity, itemTypeId, buffer);
 	}
 
-	explicit HandleMap() {}
+	explicit DenseHandleMap32() {}
 
-	~HandleMap() {
+	~DenseHandleMap32() {
 		deinit();
 	}
 
@@ -101,9 +68,9 @@ struct HandleMap {
 	 * @param[in]	handle		id of the item
 	 * @returns pointer to the item
 	 */
-	void* at(Id_t handle);
+	void* at(h64 handle);
 	
-	void* operator[](Id_t handle) {
+	void* operator[](h64 handle) {
 		return at(handle);
 	}
 
@@ -112,7 +79,7 @@ struct HandleMap {
 	 * @param[in]	handle		id of the item
 	 * @returns true if item removed, false if not found
 	 */
-	bool erase(Id_t handle);
+	bool erase(h64 handle);
 
 	/**
 	 * Add one item to the store, return the id, optionally return pointer to the new object for
@@ -121,13 +88,13 @@ struct HandleMap {
 	 * @param[out]	out		optional return pointer to the new object
 	 * @returns the id
 	 */
-	Id_t insert(void* src = nullptr, void** out = nullptr);
+	h64 insert(void* src = nullptr, void** out = nullptr);
 
 	/**
 	 * Removes all items, leaving the sparseIds set intact by adding each entry to the free-
-	 * list and incrementing its generation. This operation is slower than @c reset, but safer
-	 * for the detection of stale handle lookups later (in debug builds). Prefer to use @c reset
-	 * if safety is not a concern.
+	 * list and keeping its generation. This operation is slower than @c reset, but safer for the
+	 * detection of stale handle lookups later (in debug builds). Prefer to use @c reset if safety
+	 * is not a concern.
 	 * Complexity is linear.
 	 */
 	void clear();
@@ -144,7 +111,7 @@ struct HandleMap {
 	/**
 	* @returns true if handle handle refers to a valid item
 	*/
-	bool has(Id_t handle);
+	bool has(h64 handle);
 
 	/**
 	 * defragment uses the comparison function @c comp to establish an ideal order for the dense
@@ -166,12 +133,12 @@ struct HandleMap {
 	/**
 	 * @returns index into the inner DenseSet for a given outer id
 	 */
-	u32 getInnerIndex(Id_t handle);
+	u32 getInnerIndex(h64 handle);
 
 	/**
 	 * @return the outer id (handle) for a given dense set index
 	 */
-	Id_t getHandleForInnerIndex(size_t innerIndex);
+	h64 getHandleForInnerIndex(size_t innerIndex);
 
 	inline void* item(u32 innerIndex)
 	{
@@ -209,28 +176,28 @@ struct HandleMap {
 
 	void deinit();
 };
-static_assert_aligned_size(HandleMap,8);
+static_assert_aligned_size(DenseHandleMap32,8);
 
 
-size_t HandleMap::getTotalBufferSize(u16 elementSizeB, u32 capacity)
+size_t DenseHandleMap32::getTotalBufferSize(u16 elementSizeB, u32 capacity)
 {
 	// handle aligned storage, which may increase total size due to padding between buffers
 	// add an extra item to the items array for scratch memory used by defragment sort
-	size_t size = align(elementSizeB * (capacity+1), 8);
-	size = align(size + (sizeof(Id_t) * capacity), 4);
+	size_t size = align((size_t)elementSizeB * (capacity+1), 8);
+	size = align(size + (sizeof(h64) * capacity), 4);
 	size += (sizeof(u32) * capacity);
 	return size;
 }
 
 
-Id_t HandleMap::insert(void* src, void** out)
+h64 DenseHandleMap32::insert(void* src, void** out)
 {
-	assert(length < capacity && "HandleMap is full");
-	Id_t handle = NullId_t;
+	assert(length < capacity && "DenseHandleMap32 is full");
+	h64 handle = null_h64;
 	
 	if (length < capacity) {
 		u32 sparseIndex = freeListFront;
-		Id_t innerId = sparseIds[sparseIndex];
+		h64 innerId = sparseIds[sparseIndex];
 
 		freeListFront = innerId.index; // the index of a free slot refers to the next free slot
 
@@ -247,7 +214,6 @@ Id_t HandleMap::insert(void* src, void** out)
 		
 		void* pItem = item(length);
 		if (src) {
-			// TODO: memmove?? also consider rewriting this once we have a dynamic array type
 			itemcpy(pItem, src);
 		}
 		else {
@@ -265,13 +231,13 @@ Id_t HandleMap::insert(void* src, void** out)
 }
 
 
-bool HandleMap::erase(Id_t handle)
+bool DenseHandleMap32::erase(h64 handle)
 {
 	if (!has(handle)) {
 		return false;
 	}
 
-	Id_t innerId = sparseIds[handle.index];
+	h64 innerId = sparseIds[handle.index];
 	u32 innerIndex = innerId.index;
 
 	// put this slot at the front of the freelist
@@ -304,12 +270,12 @@ bool HandleMap::erase(Id_t handle)
 }
 
 
-void HandleMap::clear()
+void DenseHandleMap32::clear()
 {
 	if (length > 0) {
 		for (u32 i = 0; i < length; ++i) {
 			u32 sparseIndex = denseToSparse[i];
-			Id_t innerId = sparseIds[sparseIndex];
+			h64 innerId = sparseIds[sparseIndex];
 			innerId.free = 1;
 			innerId.index = freeListFront;
 			sparseIds[sparseIndex] = innerId;
@@ -327,9 +293,9 @@ void HandleMap::clear()
 }
 
 
-void HandleMap::reset()
+void DenseHandleMap32::reset()
 {
-	Id_t innerId = { 0, 0, sparseIds[0].typeId, 1 };
+	h64 innerId = { 0, sparseIds[0].typeId, 0, 1 };
 	for (u32 i = 0; i < capacity; ++i) {
 		++innerId.index;
 		sparseIds[i].value = innerId.value;
@@ -348,22 +314,22 @@ void HandleMap::reset()
 }
 
 
-void* HandleMap::at(Id_t handle)
+void* DenseHandleMap32::at(h64 handle)
 {
 	void* pItem = nullptr;
 	if (has(handle)) {
-		Id_t innerId = sparseIds[handle.index];
+		h64 innerId = sparseIds[handle.index];
 		pItem = item(innerId.index);
 	}
 	return pItem;
 }
 
 
-bool HandleMap::has(Id_t handle)
+bool DenseHandleMap32::has(h64 handle)
 {
 	assert(handle.index < capacity && "handle index out of range");
 	
-	Id_t innerId = sparseIds[handle.index];
+	h64 innerId = sparseIds[handle.index];
 	
 	assert(innerId.free == 0 && "handle to a removed object");
 	assert(innerId.index < length && "inner index out of range");
@@ -378,7 +344,7 @@ bool HandleMap::has(Id_t handle)
 }
 
 
-u32 HandleMap::getInnerIndex(Id_t handle)
+u32 DenseHandleMap32::getInnerIndex(h64 handle)
 {
 	u32 index = UINT_MAX;
 	if (has(handle)) {
@@ -388,19 +354,19 @@ u32 HandleMap::getInnerIndex(Id_t handle)
 }
 
 
-Id_t HandleMap::getHandleForInnerIndex(size_t innerIndex)
+h64 DenseHandleMap32::getHandleForInnerIndex(size_t innerIndex)
 {
 	assert(innerIndex < length && innerIndex >= 0 && "inner index out of range");
 	
 	u32 sparseIndex = denseToSparse[innerIndex];
-	Id_t handle = sparseIds[sparseIndex];
+	h64 handle = sparseIds[sparseIndex];
 	handle.index = sparseIndex;
 	
 	return handle;
 }
 
 
-size_t HandleMap::defragment(Compare* comp, size_t maxSwaps)
+size_t DenseHandleMap32::defragment(Compare* comp, size_t maxSwaps)
 {
 	if (_fragmented == 0) {
 		return 0;
@@ -441,7 +407,7 @@ size_t HandleMap::defragment(Compare* comp, size_t maxSwaps)
 }
 
 
-void HandleMap::init(
+void DenseHandleMap32::init(
 	u16 _elementSizeB,
 	u32 _capacity,
 	u16 itemTypeId,
@@ -452,7 +418,7 @@ void HandleMap::init(
 
 	if (!buffer) {
 		size_t size = getTotalBufferSize(elementSizeB, capacity);
-		buffer = malloc(size);
+		buffer = Q_malloc(size);
 		memset(buffer, 0, size);
 		_memoryOwned = 1;
 	}
@@ -460,20 +426,20 @@ void HandleMap::init(
 	items = buffer;
 	// round up to aligned storage
 	// add an extra item to the items array for scratch memory used by defragment sort
-	sparseIds = (Id_t*)align((uintptr_t)items + (elementSizeB * (capacity+1)), 8);
-	denseToSparse = (u32*)align((uintptr_t)sparseIds + (sizeof(Id_t) * capacity), 4);
+	sparseIds = (h64*)align((uintptr_t)items + (elementSizeB * (capacity+1)), 8);
+	denseToSparse = (u32*)align((uintptr_t)sparseIds + (sizeof(h64) * capacity), 4);
 
 	// check resulting alignment in case element storage plus padding doesn't leave us 8-byte aligned
 	assert(is_aligned(sparseIds, 8) && "sparseIds not properly aligned");
 	assert(is_aligned(denseToSparse, 4) && "denseToSparse not properly aligned");
 
 	// reset to set up the sparseIds freelist
-	sparseIds[0].typeId = itemTypeId & 0x7FFF;
+	sparseIds[0].typeId = itemTypeId;
 	reset();
 }
 
 
-void HandleMap::deinit()
+void DenseHandleMap32::deinit()
 {
 	if (_memoryOwned && items) {
 		free(items);
@@ -484,34 +450,34 @@ void HandleMap::deinit()
 
 // Helper Macros
 
-// Macro for defining a HandleMap storage buffer
-#define HandleMapBuffer(Type, name, capacity) \
-	u8 name[(sizeof(Type)*(capacity+1)) + (sizeof(Id_t)*capacity) + (sizeof(u32)*capacity)];\
+// Macro for defining a DenseHandleMap32 storage buffer
+#define DenseHandleMap32Buffer(Type, name, capacity) \
+	u8 name[(sizeof(Type)*(capacity+1)) + (sizeof(h64)*capacity) + (sizeof(u32)*capacity)];\
 	static_assert(is_aligned(sizeof(Type)*(capacity+1),8),"sizeof items array must be a multiple of 8");
 
 
-// Macro for defining a type-safe HandleMap wrapper that avoids void* and elementSizeB in the api
-#define HandleMapTyped(Type, name, TypeId) \
+// Macro for defining a type-safe DenseHandleMap32 wrapper that avoids void* and elementSizeB in the api
+#define DenseHandleMap32Typed(Type, name, TypeId) \
 	struct name {\
 		enum { TypeSize = sizeof(Type) };\
-		HandleMap _map;\
+		DenseHandleMap32 _map;\
 		static size_t getTotalBufferSize(u32 capacity)\
-											{ return HandleMap::getTotalBufferSize(TypeSize, capacity); }\
+											{ return DenseHandleMap32::getTotalBufferSize(TypeSize, capacity); }\
 		explicit name(u32 _capacity, void* buffer = nullptr)\
 											{ _map.init(TypeSize, _capacity, TypeId, buffer); }\
 		explicit name() {}\
-		Type* at(Id_t handle)				{ return (Type*)_map.at(handle); }\
-		Type* operator[](Id_t handle)		{ return at(handle); }\
-		bool erase(Id_t handle)				{ return _map.erase(handle); }\
-		Id_t insert(Type* src = nullptr, Type** out = nullptr)\
+		Type* at(h64 handle)				{ return (Type*)_map.at(handle); }\
+		Type* operator[](h64 handle)		{ return at(handle); }\
+		bool erase(h64 handle)				{ return _map.erase(handle); }\
+		h64 insert(Type* src = nullptr, Type** out = nullptr)\
 											{ return _map.insert((void*)src, (void**)out); }\
 		void clear()						{ _map.clear(); }\
 		void reset()						{ _map.reset(); }\
-		bool has(Id_t handle)				{ return _map.has(handle); }\
-		size_t defragment(HandleMap::Compare* comp, size_t maxSwaps = 0)\
+		bool has(h64 handle)				{ return _map.has(handle); }\
+		size_t defragment(DenseHandleMap32::Compare* comp, size_t maxSwaps = 0)\
 											{ return _map.defragment(comp, maxSwaps); }\
-		u32 getInnerIndex(Id_t handle)		{ return _map.getInnerIndex(handle); }\
-		Id_t getHandleForInnerIndex(size_t innerIndex)\
+		u32 getInnerIndex(h64 handle)		{ return _map.getInnerIndex(handle); }\
+		h64 getHandleForInnerIndex(size_t innerIndex)\
 											{ return _map.getHandleForInnerIndex(innerIndex); }\
 		inline Type* item(u32 innerIndex)	{ return (Type*)_map.item(innerIndex); }\
 		void init(u32 capacity, void* buffer = nullptr)\

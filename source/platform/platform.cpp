@@ -270,10 +270,12 @@ void createGameContext(GameContext& gameContext, SDLApplication* app)
 	createGameMemory(gameContext.gameMemory);
 	loadGameCode(gameContext.gameCode);
 	
-	gameContext.input.eventsQueue.init(sizeof(input::InputEvent), PLATFORMINPUT_EVENTSQUEUE_CAPACITY);
-	gameContext.input.popEvents.init(sizeof(input::InputEvent), PLATFORMINPUT_EVENTSQUEUE_CAPACITY);
-	gameContext.input.motionEventsQueue.init(sizeof(input::InputEvent), PLATFORMINPUT_MOTIONEVENTSQUEUE_CAPACITY);
-	gameContext.input.popMotionEvents.init(sizeof(input::InputEvent), PLATFORMINPUT_MOTIONEVENTSQUEUE_CAPACITY);
+	// Note: not asserting on full for the event concurrent queues, if the game stops processing
+	// events, the queue will fill up quickly. We will simply ignore inputs in that case.
+	gameContext.input.eventsQueue.init(PLATFORMINPUT_EVENTSQUEUE_CAPACITY, nullptr, 0);
+	gameContext.input.popEvents.init(PLATFORMINPUT_EVENTSPOPQUEUE_CAPACITY);
+	gameContext.input.motionEventsQueue.init(PLATFORMINPUT_MOTIONEVENTSQUEUE_CAPACITY, nullptr, 0);
+	gameContext.input.popMotionEvents.init(PLATFORMINPUT_MOTIONEVENTSPOPQUEUE_CAPACITY);
 }
 
 

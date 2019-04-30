@@ -69,7 +69,7 @@ namespace logger {
 	 */
 	void flush()
 	{
-		popArrayLen = messageQueue.try_pop_all(popArray);
+		popArrayLen = messageQueue.try_pop_all(popArray, countof(popArray));
 		for (int i = 0; i < popArrayLen; ++i) {
 			write(popArray[i]);
 		}

@@ -7,6 +7,10 @@ namespace input {
 	{
 		bool handled = false;
 		
+		InputEvent evt{};
+		evt.timeStampCounts = timestamp;
+		evt.evt = event;
+
 		switch (event.type) {
 			case SDL_KEYDOWN:
 			case SDL_KEYUP: {
@@ -15,8 +19,11 @@ namespace input {
 					//			"key event=%d: state=%d: key=%d: repeat=%d: realTime=%lu: name=%s\n",
 					//			event.type, event.key.state, event.key.keysym.sym, event.key.repeat, timestamp, SDL_GetKeyName(event.key.keysym.sym));
 
-					InputEvent evt = { timestamp, event, Event_Keyboard, {} };
-					input.eventsQueue.push((void*)&evt);
+					evt.eventType = Event_Keyboard;
+					auto pushed = input.eventsQueue.push(&evt);
+					if (!pushed) {
+						logger::info(logger::Category_Input, "missed input, eventsQueue is full");
+					}
 				}
 				handled = true;
 				break;
@@ -27,8 +34,11 @@ namespace input {
 							"key event=%d: text=%s: length=%d: start=%d: windowID=%d: realTime=%lu\n",
 							event.type, event.edit.text, event.edit.length, event.edit.start, event.edit.windowID, timestamp);*/
 
-				InputEvent evt = { timestamp, event, Event_TextInput, {} };
-				input.eventsQueue.push((void*)&evt);
+				evt.eventType = Event_TextInput;
+				auto pushed = input.eventsQueue.push(&evt);
+				if (!pushed) {
+					logger::info(logger::Category_Input, "missed input, eventsQueue is full");
+				}
 
 				handled = true;
 				break;
@@ -38,8 +48,11 @@ namespace input {
 							"key event=%d: text=%s: windowID=%d: realTime=%lu\n",
 							event.type, event.text.text, event.text.windowID, timestamp);*/
 
-				InputEvent evt = { timestamp, event, Event_TextInput, {} };
-				input.eventsQueue.push((void*)&evt);
+				evt.eventType = Event_TextInput;
+				auto pushed = input.eventsQueue.push(&evt);
+				if (!pushed) {
+					logger::info(logger::Category_Input, "missed input, eventsQueue is full");
+				}
 
 				handled = true;
 				break;
@@ -51,9 +64,12 @@ namespace input {
 				//			event.type, event.motion.which, event.motion.state, event.motion.windowID,
 				//			event.motion.x, event.motion.y, event.motion.xrel, event.motion.yrel, timestamp);
 
-				InputEvent evt = { timestamp, event, Event_Mouse, {} };
-				input.motionEventsQueue.push((void*)&evt);
+				evt.eventType = Event_Mouse;
+				auto pushed = input.motionEventsQueue.push(&evt);
 				handled = true;
+				if (!pushed) {
+					logger::info(logger::Category_Input, "missed input, motionEventsQueue is full");
+				}
 				break;
 			}
 			case SDL_JOYAXISMOTION:
@@ -62,9 +78,12 @@ namespace input {
 							event.type, event.jaxis.which, event.jaxis.axis, event.jaxis.value, timestamp);*/
 			case SDL_JOYBALLMOTION:
 			case SDL_JOYHATMOTION: {
-				InputEvent evt = { timestamp, event, Event_Joystick, {} };
-				input.motionEventsQueue.push((void*)&evt);
+				evt.eventType = Event_Joystick;
+				auto pushed = input.motionEventsQueue.push(&evt);
 				handled = true;
+				if (!pushed) {
+					logger::info(logger::Category_Input, "missed input, motionEventsQueue is full");
+				}
 				break;
 			}
 
@@ -74,8 +93,8 @@ namespace input {
 //							event.type, event.wheel.which, event.wheel.windowID,
 //							event.wheel.x, event.wheel.y, timestamp);
 
-				InputEvent evt = { timestamp, event, Event_Mouse, {} };
-				input.eventsQueue.push((void*)&evt);
+				evt.eventType = Event_Mouse;
+				input.eventsQueue.push(&evt);
 				handled = true;
 				break;
 			}
@@ -86,8 +105,11 @@ namespace input {
 //							event.type, event.button.which, event.button.button, event.button.state,
 //							event.button.clicks, event.button.windowID, event.button.x, event.button.y, timestamp);
 
-				InputEvent evt = { timestamp, event, Event_Mouse, {} };
-				input.eventsQueue.push((void*)&evt);
+				evt.eventType = Event_Mouse;
+				auto pushed = input.eventsQueue.push(&evt);
+				if (!pushed) {
+					logger::info(logger::Category_Input, "missed input, eventsQueue is full");
+				}
 				handled = true;
 				break;
 			}
@@ -105,8 +127,11 @@ namespace input {
 //							"joystick button event=%d: which=%d: button=%d: state=%d: realTime=%lu\n",
 //							event.type, event.jbutton.which, event.jbutton.button, event.jbutton.state, timestamp);
 				
-				InputEvent evt = { timestamp, event, Event_Joystick, {} };
-				input.eventsQueue.push((void*)&evt);
+				evt.eventType = Event_Joystick;
+				auto pushed = input.eventsQueue.push(&evt);
+				if (!pushed) {
+					logger::info(logger::Category_Input, "missed input, eventsQueue is full");
+				}
 				handled = true;
 				break;
 			}

@@ -3,7 +3,8 @@
 
 #include "utility/common.h"
 #include "utility/nstring.h"
-#include "utility/handle_map.h"
+#include "utility/dense_handle_map_16.h"
+#include "utility/dense_handle_map_32.h"
 #include "utility/dense_queue.h"
 #include "utility/concurrent_queue.h"
 #include "utility/logger.h"
@@ -28,7 +29,7 @@ struct Game {
 	FixedTimestep		simulationUpdate = {};
 
 	//ThreadPoolPtr					threadPool		= nullptr;
-	input::GameInput	gameInput = {};
+	input::GameInput	gameInput;
 	//resource::ResourceLoaderPtr		resourceLoader	= nullptr;
 	//render::RenderSystemPtr			renderSystem	= nullptr;
 	//render::ShaderManagerPtr		shaderManager	= nullptr;

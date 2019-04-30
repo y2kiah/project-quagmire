@@ -77,12 +77,13 @@ struct DenseQueue {
 
 	// Functions
 
-	explicit DenseQueue() {}
+	DenseQueue() {}
 	
-	explicit DenseQueue(u16 _elementSizeB,
-						u32 _capacity,
-						void* buffer = nullptr,
-						u8 _assertOnFull = 1)
+	explicit DenseQueue(
+		u16 _elementSizeB,
+		u32 _capacity,
+		void* buffer = nullptr,
+		u8 _assertOnFull = 1)
 	{
 		init(_elementSizeB, _capacity, buffer, _assertOnFull);
 	}
@@ -95,22 +96,53 @@ struct DenseQueue {
 	inline bool empty() {
 		return (length == 0);
 	}
+
+	inline bool full() {
+		return (length == capacity);
+	}
 	
+	/**
+	 * @returns address of the front item, or nullptr if empty
+	 */
 	inline void* front() {
 		return (length == 0 ? nullptr : item(0));
 	}
 
+	/**
+	 * @returns address of the back item, or nullptr if empty
+	 */
 	inline void* back() {
 		return (length == 0 ? nullptr : item(length-1));
+	}
+
+	/**
+	 * @returns address of the next open item at the back (back+1), or nullptr if full
+	 */
+	inline void* nextBack() {
+		return (length < capacity ? item(length) : nullptr);
+	}
+
+	/**
+	 * Since this is a circular buffer, free slots may wrap to the beginning before the buffer is
+	 * full, so multi-n writes into the buffer may have to be split into 2 writes. This function
+	 * returns the n count of the first (and possible only) contiguous section.
+	 */
+	inline u32 maxContiguous() {
+		u32 mc = 0;
+		u32 backCursor = ((u64)frontCursor + length) % capacity;
+		return (backCursor < frontCursor)
+			? (frontCursor - backCursor)
+			: (capacity - backCursor);
 	}
 
 	/**
 	 * Pushes item to the back of the queue.
 	 * @param[in]	val		optional, pass this to copy the val into the new item
 	 *	and optionally copying from the val pointer.
+	 * @param[in]	zero	if val is nullptr, pass true to zero the new item memory
 	 * @returns pointer to new item, or nullptr if the container is full
 	 */
-	void* push_back(void* val = nullptr);
+	void* push_back(void* val = nullptr, bool zero = true);
 
 	/**
 	 * Pushes n items to the back of the queue. This is done using one or two bulk memory copies,
@@ -118,18 +150,20 @@ struct DenseQueue {
 	 * copied and nullptr is returned.
 	 * @param[in]	n		number of items to push
 	 * @param[in]	val		optional, pass this to copy n vals into the new items
-	 * and optionally copying from the val pointer.
+	 *	and optionally copying from the val pointer.
+	 * @param[in]	zero	if val is nullptr, pass true to zero the new item memory
 	 * @returns pointer to first new item, or nullptr if the container is full
 	 */
-	void* push_back_n(u32 n, void* vals = nullptr);
+	void* push_back_n(u32 n, void* vals = nullptr, bool zero = true);
 
 	/**
 	 * Pushes item to the front of the queue.
 	 * @param[in]	val		optional, pass this to copy the val into the new item
-	 * and optionally copying from the val pointer.
+	 *	and optionally copying from the val pointer.
+	 * @param[in]	zero	if val is nullptr, pass true to zero the new item memory
 	 * @returns pointer to new item, or nullptr if the container is full
 	 */
-	void* push_front(void* val = nullptr);
+	void* push_front(void* val = nullptr, bool zero = true);
 	
 	/**
 	 * Removes item from back of queue for LIFO behavior when push_back is used.
@@ -157,8 +191,8 @@ struct DenseQueue {
 	/**
 	 * Use push, pop_fifo and pop_lifo for worry-free queue semantics.
 	 */
-	inline void* push(void* val = nullptr) { return push_back(val); }
-	inline void* push_n(u32 n, void* val = nullptr) { return push_back_n(n,val); }
+	inline void* push(void* val = nullptr, bool zero = true) { return push_back(val,zero); }
+	inline void* push_n(u32 n, void* val = nullptr, bool zero = true) { return push_back_n(n,val,zero); }
 	inline void* pop_fifo(void* dst = nullptr) { return pop_front(dst); }
 	inline void* pop_lifo(void* dst = nullptr) { return pop_back(dst); }
 	inline u32   pop_fifo_n(u32 n, void* dst = nullptr) { return pop_front_n(n,dst); }
@@ -187,7 +221,7 @@ struct DenseQueue {
 	inline void* item(u32 i)
 	{
 		assert(i < capacity && "index out of range");
-		return (void*)((uintptr_t)items + (((u64)frontCursor + i % capacity) * elementSizeB));
+		return (void*)((uintptr_t)items + ((((u64)frontCursor + i) % capacity) * elementSizeB));
 	}
 
 	inline void itemcpy(void* dst, void* src)
@@ -213,17 +247,18 @@ struct DenseQueue {
 		}
 	}
 
-	void init(u16 elementSizeB,
-			  u32 capacity,
-			  void* buffer = nullptr,
-			  u8 assertOnFull = 1);
+	void init(
+		u16 elementSizeB,
+		u32 capacity,
+		void* buffer = nullptr,
+		u8 assertOnFull = 1);
 
 	void deinit();
 };
 static_assert_aligned_size(DenseQueue,8);
 
 
-void* DenseQueue::push_front(void* val)
+void* DenseQueue::push_front(void* val, bool zero)
 {
 	assert(!assertOnFull || length < capacity && "queue is full");
 	
@@ -236,7 +271,7 @@ void* DenseQueue::push_front(void* val)
 		if (val) {
 			itemcpy(addr, val);
 		}
-		else {
+		else if (zero) {
 			itemzero(addr);
 		}
 	}
@@ -244,7 +279,7 @@ void* DenseQueue::push_front(void* val)
 }
 
 
-void* DenseQueue::push_back(void* val)
+void* DenseQueue::push_back(void* val, bool zero)
 {
 	assert(!assertOnFull || length < capacity && "queue is full");
 
@@ -256,7 +291,7 @@ void* DenseQueue::push_back(void* val)
 		if (val) {
 			itemcpy(addr, val);
 		}
-		else {
+		else if (zero) {
 			itemzero(addr);
 		}
 	}
@@ -264,14 +299,14 @@ void* DenseQueue::push_back(void* val)
 }
 
 
-void* DenseQueue::push_back_n(u32 n, void* vals)
+void* DenseQueue::push_back_n(u32 n, void* vals, bool zero)
 {
 	assert(!assertOnFull || length + n <= capacity && "queue is full");
 	assert(n > 1 && "n should be > 1, for n == 1 use push_back");
 
 	void* addr = nullptr;
 	if (length + n <= capacity) {
-		u32 backCursor = ((u64)frontCursor + length % capacity);
+		u32 backCursor = ((u64)frontCursor + length) % capacity;
 		u32 firstn = min(capacity - backCursor, n);
 		addr = item(length);
 		length += n;
@@ -282,7 +317,7 @@ void* DenseQueue::push_back_n(u32 n, void* vals)
 				memcpy(items, vals, elementSizeB * (n - firstn));
 			}
 		}
-		else {
+		else if (zero) {
 			memset(addr, 0, elementSizeB * firstn);
 			if (firstn < n) {
 				memset(items, 0, elementSizeB * (n - firstn));
@@ -381,7 +416,7 @@ void DenseQueue::init(
 	
 	if (!buffer) {
 		size_t size = elementSizeB * capacity;
-		buffer = malloc(size);
+		buffer = Q_malloc(size);
 		memset(buffer, 0, size);
 		_memoryOwned = 1;
 	}
@@ -397,5 +432,48 @@ void DenseQueue::deinit()
 		items = nullptr;
 	}
 }
+
+
+// Helper Macros
+
+// Macro for defining a type-safe DenseQueue wrapper that avoids void* and elementSizeB in the api
+#define DenseQueueTyped(Type, name) \
+	struct name {\
+		enum { TypeSize = sizeof(Type) };\
+		DenseQueue _q;\
+		name() {}\
+		explicit name(u32 capacity, void* buffer = nullptr, u8 assertOnFull = 1)\
+			: _q(TypeSize, capacity, buffer, assertOnFull) {}\
+		inline bool empty()								{ return _q.empty(); }\
+		inline bool full()								{ return _q.full(); }\
+		inline Type* front()							{ return (Type*)_q.front(); }\
+		inline Type* back()								{ return (Type*)_q.back(); }\
+		inline Type* nextBack()							{ return (Type*)_q.nextBack(); }\
+		inline u32 maxContiguous()						{ return _q.maxContiguous(); }\
+		Type* push_back(Type* val = nullptr, bool zero = true)\
+														{ return (Type*)_q.push_back((void*)val, zero); }\
+		Type* push_back_n(u32 n, Type* vals = nullptr, bool zero = true)\
+														{ return (Type*)_q.push_back_n(n, (void*)vals, zero); }\
+		Type* push_front(Type* val = nullptr, bool zero = true)\
+														{ return (Type*)_q.push_front((void*)val, zero); }\
+		Type* pop_back(Type* dst = nullptr)				{ return (Type*)_q.pop_back((void*)dst); }\
+		Type* pop_front(Type* dst = nullptr)			{ return (Type*)_q.pop_front((void*)dst); }\
+		u32 pop_front_n(u32 n, Type* dst)				{ return _q.pop_front_n(n, (void*)dst); }\
+		inline Type* push(Type* val = nullptr, bool zero = true)\
+														{ return push_back(val,zero); }\
+		inline Type* push_n(u32 n, Type* val = nullptr, bool zero = true)\
+														{ return push_back_n(n,val,zero); }\
+		inline Type* pop_fifo(Type* dst = nullptr)		{ return pop_front(dst); }\
+		inline Type* pop_lifo(Type* dst = nullptr)		{ return pop_back(dst); }\
+		inline u32   pop_fifo_n(u32 n, Type* dst = nullptr)\
+														{ return pop_front_n(n,dst); }\
+		Type* at(u32 i)									{ return (Type*)_q.at(i); }\
+		Type* operator[](u32 i)							{ return at(i); }\
+		void clear()									{ _q.clear(); }\
+		inline Type* item(u32 i)						{ return (Type*)_q.item(i); }\
+		void init(u32 capacity, void* buffer = nullptr, u8 assertOnFull = 1)\
+														{ _q.init(TypeSize, capacity, buffer, assertOnFull); }\
+		void deinit()									{ _q.deinit(); }\
+	};
 
 #endif

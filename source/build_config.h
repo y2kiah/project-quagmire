@@ -3,6 +3,7 @@
 #define QUAGMIRE_LOG_ASSERTS	0	// set 1 to log failed asserts rather than hard stop when SLOWCHECKS is enabled, could be useful during play testing if you prefer not to crash
 #define QUAGMIRE_MEMPROFILE		0	// set 1 to enable memory profiling
 #define QUAGMIRE_DEBUG_LOG		1	// set 1 to enable debug level logging TODO: is this necessary?
+#define QUAGMIRE_ALLOW_MALLOC   1   // set 1 to allow calls to malloc for ease of development, 0 to assert for production readiness 
 
 #define GL_GLEXT_PROTOTYPES
 #define GLEW_STATIC

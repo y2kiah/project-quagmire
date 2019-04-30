@@ -5,15 +5,13 @@
 
 namespace input {
 
-/*	void GameInput::updateFrameTick(const UpdateInfo& ui, PlatformInput& platformInput)
+	void GameInput::updateFrameTick(const UpdateInfo& ui, PlatformInput& platformInput)
 	{
-		// pop all events up to the game's virtual time, key events are kept in buffer for the frame
-		platformInput.popEvents.clear();
-		platformInput.eventsQueue.try_pop_all_if(platformInput.popEvents, [&](const InputEvent& i) {
-			return (ui.virtualTime >= i.timeStampCounts);
-		});
-
-		platformInput.motionEventsQueue.try_pop_all(platformInput.popMotionEvents); // need to pop all motion events because of the underlying use of vector_queue
+		platformInput.eventsQueue.try_pop_all_push(platformInput.popEvents._q);
+		platformInput.motionEventsQueue.try_pop_all_push(platformInput.popMotionEvents._q);
+// TEMP instead of processing
+platformInput.popEvents.clear();
+platformInput.popMotionEvents.clear();
 
 		// clear previous frame actions and axis mappings
 		frameMappedInput.actionsSize = 0;
@@ -23,7 +21,7 @@ namespace input {
 		frameMappedInput.textInputHandled = false;
 
 		// remove active states that are no longer mappings in any active context
-		frameMappedInput.states.erase(
+/*		frameMappedInput.states.erase(
 			std::remove_if(frameMappedInput.states.begin(), frameMappedInput.states.end(),
 				[&](const MappedState& state) {
 					for (const auto& ac : activeInputContexts) {
@@ -69,13 +67,19 @@ namespace input {
 			auto& cb = callbacks[cp.callbackId];
 			cb(frameMappedInput);
 		}
+*/
 	}
 
 
-	void GameInput::mapFrameInputs(const UpdateInfo& ui)
+/*	void GameInput::mapFrameInputs(const UpdateInfo& ui)
 	{
 		// process this frame's input events
 		for (auto& evt : popEvents) {							// for each input event
+			// if timestamp is greater than frame time, we're done
+			if (evt.timeStampCounts > ui.virtualTime) {
+				break;
+			}
+			
 			bool matched = false;
 
 			for (const auto& ac : activeInputContexts) {		// for each active context
@@ -593,13 +597,13 @@ namespace input {
 	void GameInput::init()
 	{
 		inputMappings.init(GAMEINPUT_MAPPINGS_CAPACITY, inputMappingsBuffer);
-		assert(sizeof(inputMappingsBuffer) == HandleMap::getTotalBufferSize(sizeof(InputMapping),GAMEINPUT_MAPPINGS_CAPACITY));
+		assert(sizeof(inputMappingsBuffer) == HandleMap_InputMapping::getTotalBufferSize(GAMEINPUT_MAPPINGS_CAPACITY));
 		
 		inputContexts.init(GAMEINPUT_CONTEXTS_CAPACITY, inputContextsBuffer);
-		assert(sizeof(inputContextsBuffer) == HandleMap::getTotalBufferSize(sizeof(InputContext),GAMEINPUT_CONTEXTS_CAPACITY));
+		assert(sizeof(inputContextsBuffer) == HandleMap_InputContext::getTotalBufferSize(GAMEINPUT_CONTEXTS_CAPACITY));
 
 		callbacks.init(GAMEINPUT_CALLBACKS_CAPACITY, callbacksBuffer);
-		assert(sizeof(callbacksBuffer) == HandleMap::getTotalBufferSize(sizeof(InputCallbackFunc*),GAMEINPUT_CALLBACKS_CAPACITY));
+		assert(sizeof(callbacksBuffer) == HandleMap_InputCallback::getTotalBufferSize(GAMEINPUT_CALLBACKS_CAPACITY));
 
 		// the data structure that holds all of the metadata queried here should use the reflection
 		// system, and be made available to Lua script

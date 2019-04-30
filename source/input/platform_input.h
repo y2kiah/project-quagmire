@@ -14,20 +14,28 @@ namespace input {
 	};
 
 	struct InputEvent {
-		i64				timeStampCounts;
-		SDL_Event		evt;
-		InputEventType	eventType;
-		u8				_padding[7];
+		i64						timeStampCounts;
+		union {
+			SDL_Event			evt;
+			struct {
+				u8				_padding[55];
+				InputEventType	eventType;	// the last byte of SDL_Event is just padding so we use it for our own flag
+			};
+		};
 	};
+	static_assert(sizeof(SDL_Event) == 56 && sizeof(InputEvent) == 64, "SDL_Event size is not 56, check the InputEvent union");
+
+	ConcurrentQueueTyped(InputEvent, ConcurrentQueue_InputEvent);
+	DenseQueueTyped(InputEvent, DenseQueue_InputEvent);
 
 	/**
 	 * platform input events are pushed on the input thread and popped on the game update thread
 	 */
 	struct PlatformInput {
-		ConcurrentQueue		eventsQueue;
-		ConcurrentQueue		motionEventsQueue;
-		DenseQueue			popEvents;
-		DenseQueue			popMotionEvents;
+		ConcurrentQueue_InputEvent	eventsQueue;
+		ConcurrentQueue_InputEvent	motionEventsQueue;
+		DenseQueue_InputEvent		popEvents;
+		DenseQueue_InputEvent		popMotionEvents;
 	};
 
 }

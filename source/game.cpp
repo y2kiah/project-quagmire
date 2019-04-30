@@ -39,14 +39,10 @@ void gameUpdateFrameTick(UpdateInfo& ui, void* _ctx)
 
 	//engine.threadPool->executeFixedThreadTasks(ThreadAffinity::Thread_Update);
 
-	// if all systems operate on 1(+) frame-old-data, can all systems be run in parallel?
-	// should this list become a task flow graph?
+	// if some systems operate on 1(+) frame-old-data, can they be run in parallel?
+	// should part of this list become a task flow?
 
-	// TEMP instead of popping
-	simContext.input.eventsQueue.clear();
-	simContext.input.motionEventsQueue.clear();
-	//gameMemory.
-//	input::updateFrameTick(ui, simContext.input);
+	simContext.game.gameInput.updateFrameTick(ui, simContext.input);
 
 	//	ResourceLoader
 	//	AISystem

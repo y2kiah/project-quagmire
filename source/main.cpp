@@ -286,22 +286,22 @@ int main(int argc, char *argv[])
 	createGameContext(gameContext, &app);
 
 	// run tests at startup
-	using Something = Id_t;
+	using Something = h64;
 	Something s = { 1, 1, 1, 1 };
-	HandleMap testMap(sizeof(Something), 100, 1);
+	DenseHandleMap32 testMap(sizeof(Something), 100, 1);
 	Something* items = (Something*)testMap.items;
-	Id_t h1 = testMap.insert();
-	Id_t h2 = testMap.insert(&s);
+	h64 h1 = testMap.insert();
+	h64 h2 = testMap.insert(&s);
 	Something* s3 = nullptr;
-	Id_t h3 = testMap.insert(&s, (void**)&s3);
+	h64 h3 = testMap.insert(&s, (void**)&s3);
 	*s3 = { 3, 3, 3, 1 }; 
 	testMap.erase(h3);
 
-	auto component_insert = [](HandleMap& hm, Something&& val)->Id_t {
+	auto component_insert = [](DenseHandleMap32& hm, Something&& val)->h64 {
 		return hm.insert((void*)&val);
 	};
 
-	Id_t h4 = component_insert(testMap, { 4, 4, 4, 1 });
+	h64 h4 = component_insert(testMap, { 4, 4, 4, 1 });
 	
 	testMap.erase(h4);
 	testMap.insert();
