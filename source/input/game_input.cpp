@@ -10,237 +10,320 @@ namespace input {
 		platformInput.eventsQueue.try_pop_all_push(platformInput.popEvents._q);
 		platformInput.motionEventsQueue.try_pop_all_push(platformInput.popMotionEvents._q);
 // TEMP instead of processing
-platformInput.popEvents.clear();
+//platformInput.popEvents.clear();
 platformInput.popMotionEvents.clear();
 
 		// clear previous frame actions and axis mappings
-		frameMappedInput.actionsSize = 0;
-		frameMappedInput.axesSize = 0;
+		frameMappedInput.activeActionCount = 0;
+		frameMappedInput.activeAxisCount = 0;
 
-		// clear handled flag of frame's text input, the input string itself may persist many frames
-		frameMappedInput.textInputHandled = false;
+		// clear handled flag of frame's text input
+		// TODO: does the input string itself need to persist many frames for compositing, or should we clear it too?
+		frameMappedInput.textInputHandled = 0;
 
-		// remove active states that are no longer mappings in any active context
-/*		frameMappedInput.states.erase(
-			std::remove_if(frameMappedInput.states.begin(), frameMappedInput.states.end(),
-				[&](const MappedState& state) {
-					for (const auto& ac : activeInputContexts) {
-						if (!ac.active) { continue; }
-						auto& context = inputContexts[ac.contextId];
-				
-						// Apply this filter to states where keypress down is active. Don't apply it to toggles
-						// or bindings where the key being unpressed is active. Also don't filter states where
-						// the mappingId is found in the active context.
-						bool hasDownUpBinding = (state.inputMapping->bindIn == Bind_Down && state.inputMapping->bindOut == Bind_Up);
-						if (!hasDownUpBinding ||
-							std::find(context.inputMappings.begin(), context.inputMappings.end(), state.mappingId) != context.inputMappings.end())
-						{
-							return false;
-						}
-					}
-					return true;
-				}),
-			frameMappedInput.states.end());
+		// Remove active states where the context is no longer active, swap and pop.
+		// Apply this filter to bindings where key down is active. Don't apply it to toggles or
+		// bindings where key up is active.
+		u16 s = 0;
+		while (s < frameMappedInput.activeStateCount)
+		{
+			InputState& state = states._states[frameMappedInput.activeStates[s]];
+			bool hasDownUpBinding = (state.binding.bindIn == Bind_Down && state.binding.bindOut == Bind_Up);
+
+			if (hasDownUpBinding
+				&& !contexts._contexts[state.context].active)
+			{
+				frameMappedInput.activeStates[s] =
+					frameMappedInput.activeStates[--frameMappedInput.activeStateCount-1];
+			}
+			else {
+				++s;
+			}
+		}
 
 		// loop over active states, add to totalCounts, totalMS and totalFrames, reset handled flag
-		for (auto& state : frameMappedInput.states) {
-			state.totalFrames += 1;
-			state.totalCounts += ui.deltaCounts;
-			state.totalMs += ui.deltaMs;
-			state.handled = false;
+		for (s = 0; s < frameMappedInput.activeStateCount; ++s)
+		{
+			InputState& state = states._states[frameMappedInput.activeStates[s]];
+			++state.mapping.totalFrames;
+			state.mapping.totalCounts += ui.deltaCounts;
+			state.mapping.totalMs += ui.deltaMs;
+			state.handled = 0;
 		}
 
 		// map inputs using active contexts
-		mapFrameInputs(ui);
-		mapFrameMotion(ui);
+		mapFrameInputs(ui, platformInput.popEvents);
+//		mapFrameMotion(ui, platformInput.popMotionEvents);
 
 		// TEMP output mapped inputs
-		// for (const auto& s : frameMappedInput.states) {
-		// 	logger.debug(Logger::Category_Input, "state \"%s\" active", s.inputMapping->name);
-		// }
-		// for (const auto& a : frameMappedInput.actions) {
-		// 	logger.debug(Logger::Category_Input, "action \"%s\" triggered", a.inputMapping->name);
-		// }
+		for (u16 a = 0; a < frameMappedInput.activeActionCount; ++a) {
+			logger::info(
+					logger::Category_Input,
+					"action \"%s\" active",
+					InputActionNames[frameMappedInput.activeActions[a]]);
+		}
+		for (s = 0; s < frameMappedInput.activeStateCount; ++s) {
+			logger::info(
+					logger::Category_Input,
+					"state \"%s\" active",
+					InputStateNames[frameMappedInput.activeStates[s]]);
+		}
 
 		// invoke all callbacks in priority order, passing this frame's mapped input
-		for (auto& cp : callbackPriorityList) {
-			auto& cb = callbacks[cp.callbackId];
-			cb(frameMappedInput);
-		}
-*/
+		//for (auto& cp : callbackPriorityList) {
+		//	auto& cb = callbacks[cp.callbackId];
+		//	cb(frameMappedInput);
+		//}
 	}
 
 
-/*	void GameInput::mapFrameInputs(const UpdateInfo& ui)
+	void GameInput::mapFrameInputs(
+		const UpdateInfo& ui,
+		DenseQueue_InputEvent& events)
 	{
-		// process this frame's input events
-		for (auto& evt : popEvents) {							// for each input event
-			// if timestamp is greater than frame time, we're done
-			if (evt.timeStampCounts > ui.virtualTime) {
-				break;
+		// Find the highest priority active context that eats events, these block mappings at lower priority.
+		// For example, a menu pops up with a higher context that blocks mouse look camera control.
+		u8 highestPriorityKeyboardEvent = 0xFF;
+		u8 highestPriorityMouseEvent = 0xFF;
+		u8 highestPriorityJoystickEvent = 0xFF;
+		u8 highestPriorityTextEvent = 0xFF;
+
+		for (u8 c = 0; c < _InputContextsCount; ++c) {
+			InputContext& context = contexts._contexts[c];
+			if (context.active) {
+				if (context.priority <= highestPriorityKeyboardEvent && context.options & EatKeyboardEvents) {
+					highestPriorityKeyboardEvent = context.priority;
+				}
+				if (context.priority <= highestPriorityMouseEvent && context.options & EatMouseEvents) {
+					highestPriorityMouseEvent = context.priority;
+				}
+				if (context.priority <= highestPriorityJoystickEvent && context.options & EatJoystickEvents) {
+					highestPriorityJoystickEvent = context.priority;
+				}
+				if (context.priority <= highestPriorityTextEvent && context.options & CaptureTextInput) {
+					highestPriorityTextEvent = context.priority;
+				}
 			}
-			
-			bool matched = false;
+		}
 
-			for (const auto& ac : activeInputContexts) {		// for each active context
-				if (!ac.active) { continue; }
+		// process events timestamped up to the current simulation frame time
+		while (!events.empty()
+				&& events.front()->timeStampCounts <= ui.virtualTime)
+		{
+			InputEvent& evt = *events.pop_fifo();
 
-				auto& context = inputContexts[ac.contextId];
-				
-				// handle key and button events
-				if (evt.eventType == Event_Keyboard ||
-					evt.eventType == Event_Joystick ||
-					evt.eventType == Event_Mouse)
-				{
-					for (Id_t mappingId : context.inputMappings) {	// check all input mappings for a match
-						const auto& mapping = inputMappings[mappingId];
+			// handle key and button events
+			if (evt.eventType == Event_Keyboard ||
+				evt.eventType == Event_Joystick ||
+				evt.eventType == Event_Mouse)
+			{
+				u8 highestActionContextPriority = 0xFF;
+				u8 mappedActionIndex = 0xFF;
 
-						// check for action mappings
-						if (mapping.type == Type_Action) {
-							MappedAction ma{};
+				// for each action, find the one in the highest priority active
+				// context with a matching binding 
+				for (u8 a = 0; a < _InputActionsCount; ++a) {
+					InputAction& action = actions._actions[a];
+					InputContext& context = contexts._contexts[action.context];
+					
+					if (context.active
+						&& context.priority < highestActionContextPriority
+						// make sure event wasn't eaten by a higher priority context
+						&& (evt.eventType != Event_Keyboard || context.priority <= highestPriorityKeyboardEvent)
+						&& (evt.eventType != Event_Joystick || context.priority <= highestPriorityJoystickEvent)
+						&& (evt.eventType != Event_Mouse    || context.priority <= highestPriorityMouseEvent))
+					{
+						InputActionBinding& binding = action.binding;
+						bool matched = false;
 
-							if ((mapping.bindIn == Bind_Down && evt.evt.type == SDL_KEYDOWN) ||
-								(mapping.bindIn == Bind_Up   && evt.evt.type == SDL_KEYUP))
-							{
-								u16 mod = evt.evt.key.keysym.mod & ~(KMOD_NUM | KMOD_CAPS | KMOD_MODE); // ignore these mods
-								matched = (evt.evt.key.keysym.sym == mapping.keycode &&
-										mod == mapping.modifier);
-							}
-							else if ((mapping.bindIn == Bind_Down && evt.evt.type == SDL_MOUSEBUTTONDOWN) ||
-									(mapping.bindIn == Bind_Up   && evt.evt.type == SDL_MOUSEBUTTONUP))
-							{
-								matched = (evt.evt.button.button == mapping.keycode &&
-										evt.evt.button.clicks == mapping.clicks);
-								if (matched) {
-									ma.xRaw = evt.evt.button.x;
-									ma.yRaw = evt.evt.button.y;
-								}
-							}
-							else if ((mapping.bindIn == Bind_Down && evt.evt.type == SDL_JOYBUTTONDOWN) ||
-									(mapping.bindIn == Bind_Up   && evt.evt.type == SDL_JOYBUTTONUP))
-							{
-								matched = (evt.evt.jbutton.which == mapping.device &&
-										evt.evt.jbutton.button == mapping.keycode);
-							}
-							else if (evt.evt.type == SDL_MOUSEWHEEL)
-							{
-								matched = mapping.mouseWheel == 1 &&
-										((mapping.axis == 0 && mapping.bindIn == Bind_Up   && evt.evt.wheel.x > 0) ||
-										(mapping.axis == 0 && mapping.bindIn == Bind_Down && evt.evt.wheel.x < 0) ||
-										(mapping.axis == 1 && mapping.bindIn == Bind_Up   && evt.evt.wheel.y > 0) ||
-										(mapping.axis == 1 && mapping.bindIn == Bind_Down && evt.evt.wheel.y < 0));
-							}
-
-							// found a matching action mapping for the event
-							if (matched) {
-								ma.mappingId = mappingId;
-								ma.inputMapping = &mapping;
-								
-								frameMappedInput.actions.push_back(std::move(ma));
-								break; // skip checking the rest of the mappings
-							}
+						if ((binding.bind == Bind_Down && evt.evt.type == SDL_KEYDOWN) ||
+							(binding.bind == Bind_Up   && evt.evt.type == SDL_KEYUP))
+						{
+							u16 mod = evt.evt.key.keysym.mod & ~(KMOD_NUM | KMOD_CAPS | KMOD_MODE); // ignore these mods
+							matched = ((u32)evt.evt.key.keysym.sym == binding.keycode
+										&& mod == binding.modifier);
+						}
+						else if ((binding.bind == Bind_Down && evt.evt.type == SDL_MOUSEBUTTONDOWN) ||
+								 (binding.bind == Bind_Up   && evt.evt.type == SDL_MOUSEBUTTONUP))
+						{
+							matched = (evt.evt.button.button == binding.keycode
+										&& evt.evt.button.clicks == binding.clicks);
+						}
+						else if ((binding.bind == Bind_Down && evt.evt.type == SDL_JOYBUTTONDOWN) ||
+								 (binding.bind == Bind_Up   && evt.evt.type == SDL_JOYBUTTONUP))
+						{
+							matched = ((u32)evt.evt.jbutton.which == binding.device
+										&& evt.evt.jbutton.button == binding.keycode);
+						}
+						else if (evt.evt.type == SDL_MOUSEWHEEL)
+						{
+							matched = (binding.bind == Bind_MouseWheelDown  && evt.evt.wheel.y < 0) ||
+									  (binding.bind == Bind_MouseWheelUp    && evt.evt.wheel.y > 0) ||
+									  (binding.bind == Bind_MouseWheelLeft  && evt.evt.wheel.x < 0) ||
+									  (binding.bind == Bind_MouseWheelRight && evt.evt.wheel.x > 0);
 						}
 
-						// check for state mappings
-						else if (mapping.type == Type_State) {
-							auto stateIndex = findActiveState(mappingId);
-							bool stateActive = (stateIndex != -1);
+						// found a matching action mapping for the event
+						if (matched) {
+							highestActionContextPriority = context.priority;
+							mappedActionIndex = a;
+						}
+					}
+				}
 
-							if (!stateActive) {
-								if ((mapping.bindIn == Bind_Down && evt.evt.type == SDL_KEYDOWN) ||
-									(mapping.bindIn == Bind_Up   && evt.evt.type == SDL_KEYUP) &&
-									(mapping.bindIn != mapping.bindOut || !evt.evt.key.repeat)) // prevent repeat key events from changing toggle states
-								{
-									matched = (evt.evt.key.keysym.sym == mapping.keycode);
-												//&& evt.evt.key.keysym.mod == mapping.modifier);
-									// TODO: states cannot use modifiers currently, make sure this is ok
-									// might want to support modifiers but check whether modifier "matters" or not - if there is a matching key mapping
-									// with the modifier, then it matters, otherwise it doesn't
-								}
-								else if ((mapping.bindIn == Bind_Down && evt.evt.type == SDL_MOUSEBUTTONDOWN) ||
-										(mapping.bindIn == Bind_Up   && evt.evt.type == SDL_MOUSEBUTTONUP))
-								{
-									matched = (evt.evt.button.button == mapping.keycode);
-								}
-								else if ((mapping.bindIn == Bind_Down && evt.evt.type == SDL_JOYBUTTONDOWN) ||
-										(mapping.bindIn == Bind_Up   && evt.evt.type == SDL_JOYBUTTONUP))
-								{
-									matched = (evt.evt.jbutton.which == mapping.device &&
-											evt.evt.jbutton.button == mapping.keycode);
-								}
-							}
-							else { // stateActive
-								if ((mapping.bindOut == Bind_Down && evt.evt.type == SDL_KEYDOWN) ||
-									(mapping.bindOut == Bind_Up   && evt.evt.type == SDL_KEYUP))
-								{
-									matched = (evt.evt.key.keysym.sym == mapping.keycode);
-												//&& evt.evt.key.keysym.mod == mapping.modifier);
-									// TODO: maybe need to look for sym and mod keys separately here and make state inactive for either one
-									// if the modifier OR the key is lifted in either order, the state should be deactivated
-								}
-								else if ((mapping.bindOut == Bind_Down && evt.evt.type == SDL_MOUSEBUTTONDOWN) ||
-										(mapping.bindOut == Bind_Up   && evt.evt.type == SDL_MOUSEBUTTONUP))
-								{
-									matched = (evt.evt.button.button == mapping.keycode);
-								}
-								else if ((mapping.bindOut == Bind_Down && evt.evt.type == SDL_JOYBUTTONDOWN) ||
-										(mapping.bindOut == Bind_Up   && evt.evt.type == SDL_JOYBUTTONUP))
-								{
-									matched = (evt.evt.jbutton.which == mapping.device &&
-											evt.evt.jbutton.button == mapping.keycode);
-								}
-							}
+				u8 highestStateContextPriority = 0xFF;
+				u8 mappedStateIndex = 0xFF;
+				u8 mappedActiveStateIndex = 0xFF;
 
-							// found a new active state mapping with this event
-							if (matched && !stateActive) {
-								MappedState ms{};
-								ms.mappingId = mappingId;
-								ms.inputMapping = &mapping;
-								ms.startCounts = ui.gameTime;
-								ms.startFrame = ui.frame;
+				// for each state, find the one in the highest priority active
+				// context with a matching binding 
+				for (u8 s = 0; s < _InputStatesCount; ++s) {
+					InputState& state = states._states[s];
+					InputContext& context = contexts._contexts[state.context];
+					
+					if (context.active
+						&& context.priority <= highestActionContextPriority
+						&& context.priority < highestStateContextPriority
+						// make sure event wasn't eaten by a higher priority context
+						&& (evt.eventType != Event_Keyboard || context.priority <= highestPriorityKeyboardEvent)
+						&& (evt.eventType != Event_Joystick || context.priority <= highestPriorityJoystickEvent)
+						&& (evt.eventType != Event_Mouse    || context.priority <= highestPriorityMouseEvent))
+					{
+						InputStateBinding& binding = state.binding;
+						bool matched = false;
 
-								frameMappedInput.states.push_back(std::move(ms));
-								break; // skip checking the rest of the mappings
-							}
-							// make state inactive
-							else if (matched && stateActive) {
-								// make inactive, remove from states list by swap with last and pop_back
-								if (stateIndex != frameMappedInput.states.size() - 1) {
-									std::swap(frameMappedInput.states.at(stateIndex), frameMappedInput.states.back());
-								}
-								frameMappedInput.states.pop_back();
+						u8 stateActiveIndex = 0xFF;
+						for (u8 act = 0; act < frameMappedInput.activeStateCount; ++act) {
+							if (frameMappedInput.activeStates[act] == s) {
+								stateActiveIndex = act;
 								break;
 							}
 						}
-					}
 
-					// found a mapping, move on to the next input event
-					if (matched) { break; }
-				}
-				// handle text input events
-				else if (context.options[CaptureTextInput] && evt.eventType == Event_TextInput) {
-					if (evt.evt.type == SDL_TEXTINPUT) {
-						frameMappedInput.textInput += converter.from_bytes(evt.evt.text.text);
+						// state is currently inactive
+						if (stateActiveIndex == 0xFF)
+						{
+							if ((binding.bindIn == Bind_Down && evt.evt.type == SDL_KEYDOWN) ||
+								(binding.bindIn == Bind_Up   && evt.evt.type == SDL_KEYUP) &&
+								// prevent repeat key events from changing toggle states
+								(binding.bindIn != binding.bindOut || !evt.evt.key.repeat))
+							{
+								matched = ((u32)evt.evt.key.keysym.sym == binding.keycode);
+											//&& evt.evt.key.keysym.mod == binding.modifier);
+								// TODO: states cannot use modifiers currently, make sure this is ok
+								// might want to support modifiers but check whether modifier "matters" or not - if there is a matching key binding
+								// with the modifier, then it matters, otherwise it doesn't
+							}
+							else if ((binding.bindIn == Bind_Down && evt.evt.type == SDL_MOUSEBUTTONDOWN) ||
+									 (binding.bindIn == Bind_Up   && evt.evt.type == SDL_MOUSEBUTTONUP))
+							{
+								matched = (evt.evt.button.button == binding.keycode);
+							}
+							else if ((binding.bindIn == Bind_Down && evt.evt.type == SDL_JOYBUTTONDOWN) ||
+									 (binding.bindIn == Bind_Up   && evt.evt.type == SDL_JOYBUTTONUP))
+							{
+								matched = ((u32)evt.evt.jbutton.which == binding.device
+											&& evt.evt.jbutton.button == binding.keycode);
+							}
+						}
+						// state is currently active
+						else {
+							if ((binding.bindOut == Bind_Down && evt.evt.type == SDL_KEYDOWN) ||
+								(binding.bindOut == Bind_Up   && evt.evt.type == SDL_KEYUP))
+							{
+								matched = ((u32)evt.evt.key.keysym.sym == binding.keycode);
+											//&& evt.evt.key.keysym.mod == binding.modifier);
+								// TODO: maybe need to look for sym and mod keys separately here and make state inactive for either one
+								// if the modifier OR the key is lifted in either order, the state should be deactivated
+							}
+							else if ((binding.bindOut == Bind_Down && evt.evt.type == SDL_MOUSEBUTTONDOWN) ||
+									 (binding.bindOut == Bind_Up   && evt.evt.type == SDL_MOUSEBUTTONUP))
+							{
+								matched = (evt.evt.button.button == binding.keycode);
+							}
+							else if ((binding.bindOut == Bind_Down && evt.evt.type == SDL_JOYBUTTONDOWN) ||
+									 (binding.bindOut == Bind_Up   && evt.evt.type == SDL_JOYBUTTONUP))
+							{
+								matched = ((u32)evt.evt.jbutton.which == binding.device
+											&& evt.evt.jbutton.button == binding.keycode);
+							}
+						}
+
+						// found a matching state mapping for the event
+						if (matched) {
+							highestStateContextPriority = context.priority;
+							mappedStateIndex = s;
+							mappedActiveStateIndex = stateActiveIndex;
+						}
 					}
-					if (evt.evt.type == SDL_TEXTEDITING) {
-						frameMappedInput.textComposition = converter.from_bytes(evt.evt.edit.text);
-						frameMappedInput.cursorPos = evt.evt.edit.start;
-						frameMappedInput.selectionLength = evt.evt.edit.length;
-					}
-					break;
 				}
 
-				// didn't find a match, check if this context eats input events or passes them down
-				if (context.options[EatMouseEvents]    && evt.eventType == Event_Mouse)    { break; }
-				if (context.options[EatJoystickEvents] && evt.eventType == Event_Joystick) { break; }
-				if (context.options[EatKeyboardEvents] &&
-					(evt.eventType == Event_Keyboard || evt.eventType == Event_TextInput)) { break; }
+				// Now process the mapped events, actions and states with overlapping bindings can
+				// exist at the same level, and both will be processed, but a higher priority on
+				// one will always take precendence over the other.
+
+				// found an action mapping, make it active
+				if (mappedActionIndex != 0xFF
+					&& highestActionContextPriority <= highestStateContextPriority)
+				{
+					InputAction& action = actions._actions[mappedActionIndex];
+					
+					action.mapping.gameTime = ui.gameTime;
+					action.mapping.frame = ui.frame;
+					if (evt.evt.type == SDL_MOUSEBUTTONDOWN || evt.evt.type == SDL_MOUSEBUTTONUP) {
+						action.mapping.xRaw = evt.evt.button.x;
+						action.mapping.yRaw = evt.evt.button.y;
+					}
+					else {
+						action.mapping.xRaw = action.mapping.yRaw = 0;
+					}
+					action.handled = 0;
+
+					frameMappedInput.activeActions[++frameMappedInput.activeActionCount] =
+						(InputActionIndex)mappedActionIndex;
+				}
+				// found a state mapping
+				if (mappedStateIndex != 0xFF
+					&& highestStateContextPriority <= highestActionContextPriority)
+				{
+					// make state active
+					if (mappedActiveStateIndex == 0xFF) {
+						InputState& state = states._states[mappedStateIndex];
+						state.mapping.startCounts = ui.gameTime;
+						state.mapping.startFrame = ui.frame;
+						state.handled = 0;
+						
+						frameMappedInput.activeStates[++frameMappedInput.activeStateCount] =
+							(InputStateIndex)mappedStateIndex;
+					}
+					// make state inactive
+					else {
+						// make inactive, remove from active states by swap and pop
+						frameMappedInput.activeStates[mappedActiveStateIndex] =
+							frameMappedInput.activeStates[--frameMappedInput.activeStateCount-1];
+						break;
+					}
+				}
+			}
+			// handle text input events if there is any active context that captures text input
+			else if (evt.eventType == Event_TextInput
+					 && highestPriorityTextEvent != 0xFF
+					 && highestPriorityTextEvent <= highestPriorityKeyboardEvent)
+			{
+				if (evt.evt.type == SDL_TEXTINPUT) {
+					memcpy(frameMappedInput.textInput, evt.evt.text.text, SDL_TEXTINPUTEVENT_TEXT_SIZE);
+				}
+				else if (evt.evt.type == SDL_TEXTEDITING) {
+					memcpy(frameMappedInput.textComposition, evt.evt.edit.text, SDL_TEXTINPUTEVENT_TEXT_SIZE);
+					frameMappedInput.cursorPos = evt.evt.edit.start;
+					frameMappedInput.selectionLength = evt.evt.edit.length;
+				}
 			}
 		}
 	}
 
 
-	void GameInput::mapFrameMotion(const UpdateInfo& ui)
+/*	void GameInput::mapFrameMotion(const UpdateInfo& ui)
 	{
 		f32 inverseWindowWidth  = 1.0f / app->getPrimaryWindow().width;
 		f32 inverseWindowHeight = 1.0f / app->getPrimaryWindow().height;
@@ -471,31 +554,6 @@ platformInput.popMotionEvents.clear();
 	}
 
 
-	Id_t GameInput::getInputMappingHandle(const char* name, Id_t contextId)
-	{
-		const auto& context = inputContexts[contextId];
-
-		for (Id_t m : context.inputMappings) {
-			const auto& mapping = inputMappings[m];
-			if (strncmp(mapping.name, name, sizeof(mapping.name)) == 0) {
-				return mapping.mappingId;
-			}
-		}
-		return NullId_t;
-	}
-
-
-	int GameInput::findActiveState(Id_t mappingId)
-	{
-		for (size_t s = 0; s < frameMappedInput.states.size(); ++s) {
-			if (frameMappedInput.states[s].mappingId.value == mappingId.value) {
-				return static_cast<int>(s);
-			}
-		}
-		return -1;
-	}
-
-
 	Id_t GameInput::createContext(u8 options, u8 priority, bool makeActive)
 	{
 		//auto f = tss_([optionsMask, priority](ThreadSafeState& tss_) {
@@ -538,17 +596,6 @@ platformInput.popMotionEvents.clear();
 			return true;
 		}
 		return false;
-	}
-
-
-	Id_t GameInput::getInputContextHandle(const char* name)
-	{
-		for (const auto& i : inputContexts.getItems()) {
-			if (strncmp(i.name, name, sizeof(i.name)) == 0) {
-				return i.contextId;
-			}
-		}
-		return NullId_t;
 	}
 
 
@@ -596,111 +643,27 @@ platformInput.popMotionEvents.clear();
 
 	void GameInput::init()
 	{
-		inputMappings.init(GAMEINPUT_MAPPINGS_CAPACITY, inputMappingsBuffer);
-		assert(sizeof(inputMappingsBuffer) == HandleMap_InputMapping::getTotalBufferSize(GAMEINPUT_MAPPINGS_CAPACITY));
+		// TODO: for now I'm doing this here, but eventually this should probably move to a higher level function
+		contexts.inGame.active = 1;
+		contexts.playerFPS.active = 1;
+
+	//	inputMappings.init(GAMEINPUT_MAPPINGS_CAPACITY, inputMappingsBuffer);
+	//	assert(sizeof(inputMappingsBuffer) == HandleMap_InputMapping::getTotalBufferSize(GAMEINPUT_MAPPINGS_CAPACITY));
 		
-		inputContexts.init(GAMEINPUT_CONTEXTS_CAPACITY, inputContextsBuffer);
-		assert(sizeof(inputContextsBuffer) == HandleMap_InputContext::getTotalBufferSize(GAMEINPUT_CONTEXTS_CAPACITY));
+	//	inputContexts.init(GAMEINPUT_CONTEXTS_CAPACITY, inputContextsBuffer);
+	//	assert(sizeof(inputContextsBuffer) == HandleMap_InputContext::getTotalBufferSize(GAMEINPUT_CONTEXTS_CAPACITY));
 
-		callbacks.init(GAMEINPUT_CALLBACKS_CAPACITY, callbacksBuffer);
-		assert(sizeof(callbacksBuffer) == HandleMap_InputCallback::getTotalBufferSize(GAMEINPUT_CALLBACKS_CAPACITY));
-
-		// the data structure that holds all of the metadata queried here should use the reflection
-		// system, and be made available to Lua script
-
-		// Initialize the mouse cursors table
-		cursors[Cursor_Arrow]     = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW);
-		cursors[Cursor_Hand]      = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND);
-		cursors[Cursor_Wait]      = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_WAIT);
-		cursors[Cursor_IBeam]     = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_IBEAM);
-		cursors[Cursor_Crosshair] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_CROSSHAIR);
-
-
-		// Get number of input devices
-		int numJoysticks = SDL_NumJoysticks();
-		assert(numJoysticks <= GAMEINPUT_JOYSTICKS_CAPACITY && "not enough joysticks supported");
-		joysticksSize = (u8)numJoysticks;
-		int motionAxis = 0;
-
-		// Initialize the mouse
-		int numPointingDevices = 1; //SDL_GetNumInputDevices();
-		// mouse is always index 0 and 1 (x and y) in AxisMotion array
-		{ // this scope would be a loop in future SDL versions that support multiple mice
-			int numAxes = 2;
-			for (int axis = 0; axis < numAxes; ++axis) {
-				AxisMotion& m = frameMappedInput.motion[motionAxis];
-				m.device = 0;
-				m.deviceName = "mouse";//SDL_GetInputDeviceName();
-				m.axis = axis;
-				++motionAxis;
-			}
-		}
-		
-		// Initialize the joysticks
-		for (int j = 0; j < numJoysticks; ++j) {
-			// Open joystick
-			SDL_Joystick* joy = SDL_JoystickOpen(j);
-			
-			if (joy != nullptr) {
-				joysticks[j] = joy;
-
-				// for each axis, create an AxisMotion struct
-				int numAxes = SDL_JoystickNumAxes(joy);
-				for (int axis = 0; axis < numAxes; ++axis) {
-					AxisMotion& m = frameMappedInput.motion[motionAxis];
-					m.device = SDL_JoystickInstanceID(joy);
-					m.deviceName = SDL_JoystickName(joy);
-					m.axis = axis;
-					
-					++motionAxis;
-					if (motionAxis == GAMEINPUT_AXIS_CAPACITY) {
-						assert(false && "not enough axes supported");
-						break;
-					}
-				}
-				
-				char guid[33] = {};
-				SDL_JoystickGetGUIDString(SDL_JoystickGetGUID(joy), guid, sizeof(guid));
-
-				logger::debug(logger::Category_Input, "Opened Joystick %d", j);
-				logger::debug(logger::Category_Input, "  Name: %s", SDL_JoystickNameForIndex(j));
-				logger::debug(logger::Category_Input, "  Number of Axes: %d", SDL_JoystickNumAxes(joy));
-				logger::debug(logger::Category_Input, "  Number of Buttons: %d", SDL_JoystickNumButtons(joy));
-				logger::debug(logger::Category_Input, "  Number of Hats: %d", SDL_JoystickNumHats(joy));
-				logger::debug(logger::Category_Input, "  Number of Balls: %d", SDL_JoystickNumBalls(joy));
-				logger::debug(logger::Category_Input, "  Instance ID: %d", SDL_JoystickInstanceID(joy));
-				logger::debug(logger::Category_Input, "  GUID: %s", guid);
-				
-			}
-			else {
-				logger::warn(logger::Category_Input, "Couldn't open Joystick %d", j);
-			}
-		}
-		// The device_index passed as an argument refers to the N'th joystick presently recognized by SDL on the system.
-		// It is NOT the same as the instance ID used to identify the joystick in future events.
-		// See SDL_JoystickInstanceID() for more details about instance IDs.
+	//	callbacks.init(GAMEINPUT_CALLBACKS_CAPACITY, callbacksBuffer);
+	//	assert(sizeof(callbacksBuffer) == HandleMap_InputCallback::getTotalBufferSize(GAMEINPUT_CALLBACKS_CAPACITY));
 
 	}
 
 
 	void GameInput::deinit()
 	{
-		// close all joysticks
-		for (int j = 0; j < joysticksSize; ++j) {
-			SDL_Joystick* joy = joysticks[j];
-			if (SDL_JoystickGetAttached(joy)) {
-				SDL_JoystickClose(joy);
-			}
-		}
-
-		// free all cursors
-		for (int c = 0; c < _InputMouseCursorCount; ++c) {
-			SDL_FreeCursor(cursors[c]);
-		}
-
-		inputMappings.deinit();
-		inputContexts.deinit();
-		callbacks.deinit();
+//		inputMappings.deinit();
+//		inputContexts.deinit();
+//		callbacks.deinit();
 	}
 
 }

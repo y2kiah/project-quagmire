@@ -46,12 +46,29 @@ struct SystemInfo {
 	int				systemRAM;		// amount of system RAM in MB
 };
 
+struct JoystickInfo {
+	SDL_Joystick*	joysticks[GAMEINPUT_JOYSTICKS_CAPACITY];
+	u32				numJoysticks;
+	u32				totalAxes;
+};
+
+enum InputMouseCursor : u8 {
+	Cursor_Arrow = 0,
+	Cursor_Hand,
+	Cursor_Wait,
+	Cursor_IBeam,
+	Cursor_Crosshair,
+	_InputMouseCursorCount
+};
+
 struct SDLApplication {
 	WindowData		windowData = {};
 	SystemInfo		systemInfo = {};
 	Environment		environment = {};
+	JoystickInfo	joystickInfo = {};
 	int				numDisplays = 0;
 	DisplayData		displayData[50] = {};
+	SDL_Cursor*		cursors[_InputMouseCursorCount];
 };
 
 struct PlatformApi {

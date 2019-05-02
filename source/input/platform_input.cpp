@@ -3,8 +3,9 @@
 
 namespace input {
 
-	bool handleMessage(PlatformInput& input, const SDL_Event& event, i64 timestamp)
+	bool handleMessage(GameContext& gameContext, const SDL_Event& event, i64 timestamp)
 	{
+		PlatformInput& input = gameContext.input;
 		bool handled = false;
 		
 		InputEvent evt{};
@@ -116,7 +117,7 @@ namespace input {
 
 			case SDL_JOYDEVICEADDED:
 			case SDL_JOYDEVICEREMOVED: {
-
+				i32 instance_id = event.jdevice.which;
 				handled = true;
 				break;
 			}
@@ -146,4 +147,92 @@ namespace input {
 		return handled;
 	}
 
+
+	bool initPlatformInput(SDLApplication& app) {
+		// Initialize the mouse cursors table
+		app.cursors[Cursor_Arrow]     = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW);
+		app.cursors[Cursor_Hand]      = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND);
+		app.cursors[Cursor_Wait]      = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_WAIT);
+		app.cursors[Cursor_IBeam]     = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_IBEAM);
+		app.cursors[Cursor_Crosshair] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_CROSSHAIR);
+		
+		// Get number of input devices
+		int numJoysticks = min(SDL_NumJoysticks(), GAMEINPUT_JOYSTICKS_CAPACITY);
+		app.joystickInfo.numJoysticks = numJoysticks;
+		
+		// Initialize mouse motion
+		int numPointingDevices = 1; //SDL_GetNumInputDevices();
+		
+		//app.joystickInfo.mouseXMotion = 
+		//		AxisMotion& m = frameMappedInput.motion[motionAxis];
+		//		app.joystickInfo.
+		//		m.device = 0;
+		//		m.deviceName = "mouse";//SDL_GetInputDeviceName();
+		//		m.axis = axis;
+		//		++motionAxis;
+		
+		// Initialize the joysticks
+		//int motionAxis = 0;
+		for (int j = 0; j < numJoysticks; ++j) {
+			// Open joystick
+			SDL_Joystick* joy = SDL_JoystickOpen(j);
+			
+			if (joy != nullptr) {
+				app.joystickInfo.joysticks[j] = joy;
+				int numAxes = SDL_JoystickNumAxes(joy);
+				app.joystickInfo.totalAxes += numAxes;
+
+				// for each axis, create an AxisMotion struct
+				/*for (int axis = 0; axis < numAxes; ++axis) {
+					AxisMotion& m = frameMappedInput.motion[motionAxis];
+					m.device = SDL_JoystickInstanceID(joy);
+					m.deviceName = SDL_JoystickName(joy);
+					m.axis = (u8)axis;
+					
+					++motionAxis;
+					if (motionAxis == GAMEINPUT_AXIS_CAPACITY) {
+						break;
+					}
+				}*/
+				
+				char guid[33] = {};
+				SDL_JoystickGetGUIDString(SDL_JoystickGetGUID(joy), guid, sizeof(guid));
+
+				logger::debug(logger::Category_Input, "Opened Joystick %d", j);
+				logger::debug(logger::Category_Input, "  Name: %s", SDL_JoystickNameForIndex(j));
+				logger::debug(logger::Category_Input, "  Number of Axes: %d", SDL_JoystickNumAxes(joy));
+				logger::debug(logger::Category_Input, "  Number of Buttons: %d", SDL_JoystickNumButtons(joy));
+				logger::debug(logger::Category_Input, "  Number of Hats: %d", SDL_JoystickNumHats(joy));
+				logger::debug(logger::Category_Input, "  Number of Balls: %d", SDL_JoystickNumBalls(joy));
+				logger::debug(logger::Category_Input, "  Instance ID: %d", SDL_JoystickInstanceID(joy));
+				logger::debug(logger::Category_Input, "  GUID: %s", guid);
+				
+			}
+			else {
+				logger::warn(logger::Category_Input, "Couldn't open Joystick %d", j);
+			}
+		}
+		// The device_index passed as an argument refers to the N'th joystick presently recognized by SDL on the system.
+		// It is NOT the same as the instance ID used to identify the joystick in future events.
+		// See SDL_JoystickInstanceID() for more details about instance IDs.
+		
+		return true;
+	}
+
+
+	void deinitPlatformInput(SDLApplication& app)
+	{
+		// close all joysticks
+		for (u32 j = 0; j < app.joystickInfo.numJoysticks; ++j) {
+			SDL_Joystick* joy = app.joystickInfo.joysticks[j];
+			SDL_JoystickClose(joy);
+			app.joystickInfo.joysticks[j] = nullptr;
+		}
+
+		// free all cursors
+		for (u32 c = 0; c < _InputMouseCursorCount; ++c) {
+			SDL_FreeCursor(app.cursors[c]);
+			app.cursors[c] = nullptr;
+		}
+	}
 }

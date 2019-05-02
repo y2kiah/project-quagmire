@@ -10,7 +10,8 @@
  * @see http://www.justsoftwaresolutions.co.uk/threading/implementing-a-thread-safe-queue-using-condition-variables.html
  * @see http://stackoverflow.com/questions/15278343/c11-thread-safe-queue
  */
-struct ConcurrentQueue {
+struct alignas(64) ConcurrentQueue
+{
 	SDL_mutex*	lock = nullptr;
 	SDL_cond*	cond = nullptr;
 	

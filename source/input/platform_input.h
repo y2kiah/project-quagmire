@@ -31,7 +31,7 @@ namespace input {
 	/**
 	 * platform input events are pushed on the input thread and popped on the game update thread
 	 */
-	struct PlatformInput {
+	struct alignas(64) PlatformInput {
 		ConcurrentQueue_InputEvent	eventsQueue;
 		ConcurrentQueue_InputEvent	motionEventsQueue;
 		DenseQueue_InputEvent		popEvents;

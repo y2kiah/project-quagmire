@@ -19,16 +19,7 @@ extern "C" {
 }
 
 
-void initApplication(SDLApplication& app)
-{
-	app.systemInfo.cpuCount = SDL_GetCPUCount();
-	app.systemInfo.systemRAM = SDL_GetSystemRAM();
-}
-
-
-bool initWindow(
-	SDLApplication& app,
-	const char* appName)
+bool initApplication(SDLApplication& app)
 {
 	// initialize all subsystems except audio
 	if (SDL_Init(SDL_INIT_EVERYTHING & ~SDL_INIT_AUDIO) < 0) {
@@ -43,6 +34,18 @@ bool initWindow(
 	// turn off text input to start
 	SDL_StopTextInput();
 
+	// get system info
+	app.systemInfo.cpuCount = SDL_GetCPUCount();
+	app.systemInfo.systemRAM = SDL_GetSystemRAM();
+
+	return true;
+}
+
+
+bool initWindow(
+	SDLApplication& app,
+	const char* appName)
+{
 	// get number of displays
 	app.numDisplays = SDL_GetNumVideoDisplays();
 	if (app.numDisplays <= 0) {
@@ -196,6 +199,8 @@ bool initOpenGL(SDLApplication& app)
 
 void quitApplication(SDLApplication& app)
 {
+	input::deinitPlatformInput(app);
+
 	if (app.windowData.glContext) {
 		SDL_GL_DeleteContext(app.windowData.glContext);
 	}
@@ -273,9 +278,10 @@ int main(int argc, char *argv[])
 	logger::setAllPriorities(logger::Priority_Verbose);
 	
 	SDLApplication app;
-	initApplication(app);
 
-	if (!initWindow(app, PROGRAM_NAME) ||
+	if (!initApplication(app) ||
+		!initWindow(app, PROGRAM_NAME) ||
+		!input::initPlatformInput(app) ||
 		!initOpenGL(app))
 	{
 		quitApplication(app);
@@ -331,7 +337,7 @@ int main(int argc, char *argv[])
 		while (SDL_PollEvent(&event)) {
 			// send to the input system to handle the event
 			i64 eventTimestamp = timer_queryCounts();
-			bool handled = input::handleMessage(gameContext.input, event, eventTimestamp);
+			bool handled = input::handleMessage(gameContext, event, eventTimestamp);
 			
 			if (!handled) {
 				switch (event.type) {

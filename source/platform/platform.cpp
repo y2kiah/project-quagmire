@@ -256,9 +256,9 @@ unloadGameCode(GameCode& gameCode)
 
 struct GameContext {
 	SDLApplication*			app = nullptr;
-	GameMemory				gameMemory = {};
 	GameCode				gameCode = {};
-	input::PlatformInput	input = {};
+	GameMemory				gameMemory = {};
+	input::PlatformInput	input = {}; // TODO: will this be aligned to 64 byte, alignas might not work here
 	std::atomic_bool		done; // TODO: consider using SDL atomics instead of std to avoid the template
 };
 
@@ -276,6 +276,11 @@ void createGameContext(GameContext& gameContext, SDLApplication* app)
 	gameContext.input.popEvents.init(PLATFORMINPUT_EVENTSPOPQUEUE_CAPACITY);
 	gameContext.input.motionEventsQueue.init(PLATFORMINPUT_MOTIONEVENTSQUEUE_CAPACITY, nullptr, 0);
 	gameContext.input.popMotionEvents.init(PLATFORMINPUT_MOTIONEVENTSPOPQUEUE_CAPACITY);
+
+	// gameContext.input should be stored on a cache line boundary due to the concurrent queues
+	// contained within, to prevent possible false sharing
+	assert(is_aligned(&gameContext.input.eventsQueue, 64) && "ConcurrentQueue not stored on a cache line boundary");
+	assert(is_aligned(&gameContext.input.motionEventsQueue, 64) && "ConcurrentQueue not stored on a cache line boundary");
 }
 
 

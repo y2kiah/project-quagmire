@@ -1,55 +1,37 @@
-#ifndef _INPUT_SYSTEM_H
-#define _INPUT_SYSTEM_H
+#ifndef _GAME_INPUT_H
+#define _GAME_INPUT_H
 
 #include <SDL_events.h>
 #include "capacity.h"
 #include "utility/concurrent_queue.h"
-#include "utility/dense_handle_map_16.h"
 #include "utility/fixed_timestep.h"
 #include "platform_input.h"
 
 namespace input {
 
-	/**
-	 * Input Cursor types
-	 */
-	enum InputMouseCursor : u8 {
-		Cursor_Arrow = 0,
-		Cursor_Hand,
-		Cursor_Wait,
-		Cursor_IBeam,
-		Cursor_Crosshair,
-		_InputMouseCursorCount
-	};
+	// TODO: would love some macro or metaprogramming magic to combine all of these
+	// enum / string table definitions like in griffin (without Boost)
 
 	/**
-	 * Input Mapping types
+	 * Input Contexts
 	 */
-	enum InputMappingType : u8 {
-		Type_Action = 0,	// Actions are single-time events
-		Type_State,			// States are on/off
-		Type_Axis			// Axis are ranges of motion normalized to [-1,1]
+
+	enum InputContextIndex : u8 {
+		InputContext_InGame = 0,
+		InputContext_DevConsole,
+		InputContext_DevCamera,
+		InputContext_PlayerFPS,
+		_InputContextsCount
 	};
 
-	/**
-	 * Input Mapping Binding types
-	 */
-	enum InputMappingBindEvent : u8 {
-		Bind_Down = 0,		// Bind to DOWN event of keyboard key, mouse or joystick button
-		Bind_Up				// Bind to UP event of keyboard key, mouse or joystick button
+	const char* InputContextNames[_InputContextsCount] = {
+		"System Controls",
+		"Dev Console Controls",
+		"Dev Camera Controls",
+		"Player Movement"
 	};
 
-	/**
-	 * Input Mapping Axis Curve types
-	 */
-	enum InputMappingAxisCurve : u8 {
-		Curve_Linear = 0,
-		Curve_SCurve
-	};
-
-	/**
-	 * Input Context Options
-	 */
+	// TODO: may need to separate eatmousevents from eatmousemotionevents, same for joystick
 	enum InputContextOptions : u8 {
 		CaptureTextInput  = 0x1,		// true if text input events should be captured by this context
 		RelativeMouseMode = 0x2,		// **Currently Unused** true for relative mouse mode vs. regular "GUI" mode
@@ -59,61 +41,218 @@ namespace input {
 		EatJoystickEvents = 0x20		// prevent joystick events from passing down
 	};
 
-	enum InputStateTransition : u8 {
-		State_Activate = 0,
-		State_Deactivate
+	// TODO: consider reintroducing the activeInputContexts list sorted in priority order, otherwise just get rid of
+	// the priority concept and define them in the order needed for proper cascading of mappings
+	struct InputContext {
+		u8					options;	// all input context options
+		u8					priority;	// input context priority
+		u8					toolsOnly;	// 1 if this is for tools and not the shipping game
+		u8					active;		// 1 if the context is currently active
+		// stores input mapping to actions, states, axes
+		// TODO: need inputMappings length
+//		h32				inputMappings[INPUTCONTEXT_MAPPINGS_CAPACITY];
+		//u32			cursorIndex;	// lookup into input system's cursor table
+	};
+
+	#define DefineContext(priority, toolsOnly, options) \
+		{ options, priority, toolsOnly, 0 }
+
+
+	struct GameInputContexts {
+		union {
+			struct {
+				InputContext inGame;
+				InputContext devConsole;
+				InputContext devCamera;
+				InputContext playerFPS;
+			};
+			InputContext _contexts[_InputContextsCount] = {
+				DefineContext(0, 0, 0), // inGame
+				DefineContext(1, 1, CaptureTextInput | EatKeyboardEvents | EatMouseEvents | EatJoystickEvents), // devConsole
+				DefineContext(2, 1, RelativeMouseMode), // devCamera
+				DefineContext(2, 0, RelativeMouseMode), // playerFPS
+			};
+		};
 	};
 
 
 	/**
-	 * Input mappings map raw input events or position data to Actions, States or Ranges. These
-	 * are high-level game input events obtained from configuration data.
-	 *	Actions: Single-time events, not affected by key repeat, mapped to a single input event
-	 *			 e.g. {keydown-G} or {keyup-G}.
-	 *	States:  Binary on/off flag mapped to two input events e.g. {on:keydown-G, off:keyup-G}
-	 *			 or {on:keydown-G, off:keydown-G}. The first example would be typical of WASD
-	 *			 type movement state, the second example would behave like a toggle.
-	 *	Axis:	 Uses position information of joysticks, throttles, rudder pedals, head
-	 *			 tracking gear, even mouse movement if desired.
+	 * Input Actions
 	 */
-	struct InputMapping {
-		InputMappingType		type        = Type_Action;	// type of this mapping
-		InputMappingBindEvent	bindIn      = Bind_Down;	// event to start the action or state
-		InputMappingBindEvent	bindOut     = Bind_Up;		// event to end the state
-		InputMappingAxisCurve	curve       = Curve_SCurve;	// curve type of axis
-		u32						device      = 0;			// instanceID of the device, comes through event "which"
-		// keyboard, mouse button, joystick button, mouse wheel events
-		u32						keycode     = 0;			// keyboard virtual key code, mouse or joystick button
-		u16						modifier    = 0;			// keyboard modifier, SDL_Keymod, defaults to 0 (KMOD_NONE), for actions only
-		u8						mouseWheel  = 0;			// 0=false, 1=true is a mouse wheel binding
-		u8						clicks      = 1;			// number of mouse clicks for binding (2==double-click)
-		// mouse motion, joystick motion, joystick hat motion, ball motion events
-		u8						axis        = 0;			// index of the joystick axis
-		u8						deadzone    = 0;			// deadzone for axis
-		u8						curvature   = 0;			// curvature of axis
-		u8						saturationX = 100;			// saturation of the x axis
-		u8						saturationY = 100;			// saturation of the y axis
-		u8						relativeMotion = 0;			// 0=false, 1=true motion is relative not absolute
-		u8						invert      = 0;			// 0=false, 1=true axis is inverted
-		u8						slider      = 0;			// 0=false, 1=true axis is a slider
-		f32						sensitivity = 1.0f;			// sensitivity multiplier, mainly for mouse movement in relative mode
-		// all events
-		h32						mappingId   = null_h32;		// the id handle of this mapping
-		h32						contextId   = null_h32;		// the id handle of the context
-		char					name[32]    = {};			// display name of the mapping
+
+	enum InputActionIndex : u8 {
+		InputAction_Exit = 0,
+		InputAction_CaptureMouse,
+		InputAction_ToggleDevCamera,
+		InputAction_ToggleDevConsole,
+		InputAction_Player_Jump,
+		InputAction_Player_Use,
+		InputAction_Player_Reload,
+		InputAction_DevCam_SpeedScrollIncrease,
+		InputAction_DevCam_SpeedScrollDecrease,
+		_InputActionsCount
+	};
+
+	const char* InputActionNames[_InputActionsCount] = {
+		"Exit",
+		"Capture Mouse",
+		"Toggle Dev Camera",
+		"Toggle Dev Console",
+		"Jump",
+		"Use",
+		"Reload",
+		"DevCam Speed Increase",
+		"DevCam Speed Decrease"
+	};
+
+	enum InputBindEvent : u8 {
+		Bind_Down = 0,			// Bind to DOWN event of keyboard key, mouse or joystick button
+		Bind_Up,				// Bind to UP event of keyboard key, mouse or joystick button
+		Bind_MouseWheelDown,	// Bind to mouse wheel -y event
+		Bind_MouseWheelUp,		// Bind to mouse wheel +y event
+		Bind_MouseWheelLeft,	// Bind to mouse wheel -x event
+		Bind_MouseWheelRight	// Bind to mouse wheel +x event
+	};
+
+	enum InputMouseClicks : u8 {
+		Mouse_ClicksNA = 0,
+		Mouse_SingleClick = 1,	// for mouse buttons only, trigger event on single click
+		Mouse_DoubleClick = 2	// for mouse buttons only, trigger event on double click
+	};
+
+	/**
+	 * InputActionBinding maps raw input events to game Actions events. Actions bind to keyboard,
+	 * mouse button, joystick button, and mouse wheel events.
+	 * Actions are single-time events, not affected by key repeat, mapped to a single input event
+	 * e.g. {keydown-G} or {keyup-G}.
+	 */
+	struct InputActionBinding {
+		u32					device;		// instance_id of the device, comes through event "which", keyboard is always 0
+		u32					keycode;	// keyboard virtual key code, mouse or joystick button
+		u16					modifier;	// keyboard modifier, SDL_Keymod, defaults to 0 (KMOD_NONE)
+		InputBindEvent		bind;		// event to trigger the action
+		InputMouseClicks	clicks;		// for mouse buttons only, single or double click
+		u32					_padding;
 	};
 
 	/**
 	 * Mapped action for a frame.
 	 */
 	struct MappedAction {
-		InputMapping*	inputMapping;
-		h32				mappingId;
-		f32				x;
-		f32				y;			// mouse clicks include normalized position here
-		i32				xRaw;
-		i32				yRaw;
-		bool			handled;	// flag set to true when event has been handled by a callback
+		i64					gameTime;	// gameTime in counts when most recent action was triggered
+		i64					frame;		// frame number when most recent action was triggered
+//		f32					x;			// mouse clicks include normalized and raw position
+//		f32					y;
+		i32					xRaw;
+		i32					yRaw;
+	};
+
+	struct InputAction {
+		InputActionBinding	binding;
+		MappedAction		mapping;
+		InputContextIndex	context;
+		u8					handled;	// flag set to 0 on new event, can be set to 1 when event handled by a callback
+		u8					_padding[6];
+	};
+	static_assert_aligned_size(InputAction,8);
+
+	#define DefineAction(context, keycode, modifier, bind) \
+		{ { 0, keycode, modifier, bind, Mouse_ClicksNA }, {}, context, {} }
+
+	#define ActionMouseClick(context, clicks) \
+		{ { 0, 0, 0, Bind_Down, clicks }, {}, context, {} }
+
+	#define ActionMouseWheel(context, bind) \
+		{ { 0, 0, 0, bind, Mouse_ClicksNA }, {}, context, {} }
+
+	struct GameInputActions {
+		union {
+			struct {
+				InputAction	exit;
+				InputAction	captureMouse;
+				InputAction	toggleDevCamera;
+				InputAction	toggleDevConsole;
+				InputAction	player_jump;
+				InputAction	player_use;
+				InputAction	player_reload;
+				InputAction	devCam_speedIncrease;
+				InputAction	devCam_speedDecrease;
+			};
+			InputAction _actions[_InputActionsCount] = {
+				DefineAction(InputContext_InGame,    SDLK_ESCAPE,    KMOD_NONE,  Bind_Down),	// exit
+				DefineAction(InputContext_InGame,    SDLK_LALT,      KMOD_NONE,  Bind_Up),		// captureMouse
+				DefineAction(InputContext_InGame,    SDLK_c,         KMOD_LCTRL, Bind_Down),	// toggleDevCamera
+				DefineAction(InputContext_InGame,    SDLK_BACKQUOTE, KMOD_NONE,  Bind_Down),	// toggleDevConsole
+				DefineAction(InputContext_PlayerFPS, SDLK_SPACE,     KMOD_NONE,  Bind_Down),	// player_jump
+				DefineAction(InputContext_PlayerFPS, SDLK_f,         KMOD_NONE,  Bind_Down),	// player_use
+				DefineAction(InputContext_PlayerFPS, SDLK_r,         KMOD_NONE,  Bind_Down),	// player_reload
+				ActionMouseWheel(InputContext_DevCamera, Bind_MouseWheelUp),					// devCam_speedIncrease
+				ActionMouseWheel(InputContext_DevCamera, Bind_MouseWheelDown)					// devCam_speedDecrease
+			};
+		};
+	};
+
+
+	/**
+	 * Input States
+	 */
+
+	enum InputStateIndex : u8 {
+		InputState_Pause = 0,
+		InputState_Player_MoveForward,
+		InputState_Player_MoveBackward,
+		InputState_Player_MoveLeft,
+		InputState_Player_MoveRight,
+		InputState_Player_Sprint,
+		InputState_Player_Walk,
+		InputState_Player_Crouch,
+		InputState_DevCamera_MoveForward,
+		InputState_DevCamera_MoveBackward,
+		InputState_DevCamera_MoveLeft,
+		InputState_DevCamera_MoveRight,
+		InputState_DevCamera_MoveUp,
+		InputState_DevCamera_MoveDown,
+		InputState_DevCamera_RollLeft,
+		InputState_DevCamera_RollRight,
+		InputState_DevCamera_Speed,
+		_InputStatesCount
+	};
+
+	const char* InputStateNames[_InputStatesCount] = {
+		"Pause",
+		"Move Forward",
+		"Move Backward",
+		"Move Left",
+		"Move Right",
+		"Sprint",
+		"Walk",
+		"Crouch",
+		"DevCam Move Forward",
+		"DevCam Move Backward",
+		"DevCam Move Left",
+		"DevCam Move Right",
+		"DevCam Move Up",
+		"DevCam Move Down",
+		"DevCam Roll Left",
+		"DevCam Roll Right",
+		"DevCam Speed"
+	};
+
+	/**
+	 * InputStateBinding maps raw input events to game States. States bind to keyboard, mouse
+	 * button, joystick button, and mouse wheel events.
+	 * States are binary on/off flags mapped to two input events:
+	 * e.g. {on:keydown-W, off:keyup-W} would be a typical of WASD movement state
+	 * while {on:keydown-C, off:keydown-C} would behave like a "crouch" toggle.
+	 */
+	struct InputStateBinding {
+		u32					device;			// instance_id of the device, comes through event "which", keyboard is always 0
+		u32					keycode;		// keyboard virtual key code, mouse or joystick button
+		u16					modifier;		// keyboard modifier, SDL_Keymod, defaults to 0 (KMOD_NONE)
+		InputBindEvent		bindIn;			// event to start the state
+		InputBindEvent		bindOut;		// event to end the state
+		InputMouseClicks	clicks;			// for mouse buttons only, single or double click
+		u8					_padding[3];
 	};
 
 	/**
@@ -121,89 +260,234 @@ namespace input {
 	 * rate, therefor the first frame a state becomes active includes the full frame timestep.
 	 */
 	struct MappedState {
-		InputMapping*	inputMapping;
-		h32				mappingId;
-		f64				totalMs;		// total millis the state has been active
-		i64				startCounts;	// clock counts when state began
-		i64				totalCounts;	// currentCounts - startCounts + countsPerTick
-		i64				startFrame;		// frame number when state began
-		i32				totalFrames;	// currentFrame - startFrame + 1
-		bool			handled;		// flag set to true when event has been handled by a callback
+		f64					totalMs;		// total millis the state has been active
+		i64					startCounts;	// clock counts when state began
+		i64					totalCounts;	// currentCounts - startCounts + countsPerTick
+		i64					startFrame;		// frame number when state began
+		i32					totalFrames;	// currentFrame - startFrame + 1
 	};
+
+	struct InputState {
+		InputStateBinding	binding;
+		MappedState			mapping;
+		InputContextIndex	context;
+		u8					handled;		// flag set to 0 on new event, can be set to 1 when event handled by a callback
+		u16					_padding;
+	};
+	static_assert_aligned_size(InputState,8);
+
+	#define DefineState(context, keycode, modifier, binddown, bindup, clicks) \
+		{ { 0, keycode, modifier, binddown, bindup, clicks, {} }, {}, context, {} }
+
+	#define StatePress(context, keycode) \
+		{ { 0, keycode, KMOD_NONE, Bind_Down, Bind_Up, Mouse_ClicksNA, {} }, {}, context, {} }
+
+	#define StateToggle(context, keycode) \
+		{ { 0, keycode, KMOD_NONE, Bind_Down, Bind_Down, Mouse_ClicksNA, {} }, {}, context, {} }
+
+	struct GameInputStates {
+		union {
+			struct {
+				InputState	pause;
+				InputState	player_moveForward;
+				InputState	player_moveBackward;
+				InputState	player_moveLeft;
+				InputState	player_moveRight;
+				InputState	player_sprint;
+				InputState	player_walk;
+				InputState	player_crouch;
+				InputState	devCam_moveForward;
+				InputState	devCam_moveBackward;
+				InputState	devCam_moveLeft;
+				InputState	devCam_moveRight;
+				InputState	devCam_moveUp;
+				InputState	devCam_moveDown;
+				InputState	devCam_rollLeft;
+				InputState	devCam_rollRight;
+				InputState	devCam_speed;
+			};
+			InputState _states[_InputStatesCount] = {
+				StateToggle(InputContext_InGame,    SDLK_p ),		// pause
+				StatePress( InputContext_PlayerFPS, SDLK_w ),		// player_moveForward
+				StatePress( InputContext_PlayerFPS, SDLK_s ),		// player_moveBackward
+				StatePress( InputContext_PlayerFPS, SDLK_a ),		// player_moveLeft
+				StatePress( InputContext_PlayerFPS, SDLK_d ),		// player_moveRight
+				StatePress( InputContext_PlayerFPS, SDLK_LSHIFT ),	// player_sprint
+				StatePress( InputContext_PlayerFPS, SDLK_LCTRL ),	// player_walk
+				StateToggle(InputContext_PlayerFPS, SDLK_c ),		// player_crouch
+				StatePress( InputContext_DevCamera, SDLK_w ),		// devCam_moveForward
+				StatePress( InputContext_DevCamera, SDLK_s ),		// devCam_moveBackward
+				StatePress( InputContext_DevCamera, SDLK_a ),		// devCam_moveLeft
+				StatePress( InputContext_DevCamera, SDLK_d ),		// devCam_moveRight
+				StatePress( InputContext_DevCamera, SDLK_x ),		// devCam_moveUp
+				StatePress( InputContext_DevCamera, SDLK_z ),		// devCam_moveDown
+				StatePress( InputContext_DevCamera, SDLK_q ),		// devCam_rollLeft
+				StatePress( InputContext_DevCamera, SDLK_e ),		// devCam_rollRight
+				StatePress( InputContext_DevCamera, SDLK_LSHIFT )	// devCam_speed
+			};
+		};
+	};
+
+
+	/**
+	 * Input Axes
+	 */
+
+	enum InputAxisIndex : u8 {
+		InputAxis_Player_MouseLookX = 0,
+		InputAxis_Player_MouseLookY,
+		InputAxis_DevCam_MouseLookX,
+		InputAxis_DevCam_MouseLookY,
+		_InputAxisCount
+	};
+
+	const char* InputAxisNames[_InputAxisCount] = {
+		"Mouse Look X",
+		"Mouse Look Y",
+		"DevCam Mouse Look X",
+		"DevCam Mouse Look Y"
+	};
+
+	enum InputAxisMotion : u8 {
+		Motion_Absolute = 0,
+		Motion_Relative
+	};
+
+	enum InputAxisInvert : u8 {
+		Axis_NotInverted = 0,	// Axis_NotInverted is the default setting
+		Axis_Inverted			// Axis_Inverted multiplies the range mapping by -1
+	};
+
+	enum InputAxisRange : u8 {
+		Range_NegToPos = 0,		// Range_NegToPos maps range from -1 to 1
+		Range_Pos				// Range_Pos maps 0 to 1, sliders use Range_Pos
+	};
+
+	enum InputAxisCurve : u8 {
+		Curve_Linear = 0,
+		Curve_SCurve
+	};
+
+	/**
+	 * InputAxisBinding maps raw input motion events to game Axis relative motion or absolute
+	 * position. An axis tracks the movement of joystick, throttle, rudder pedals, head tracker,
+	 * trackball and mouse.
+	 */
+	struct InputAxisBinding {
+		u32					device;			// instance_id of the device, comes through event "which", mouse is always 0
+		u8					axis;			// index of the joystick axis, mouse is always 0 (x) and 1 (y)
+		u8					deadzone;		// deadzone for axis
+		u8					curvature;		// curvature of axis
+		InputAxisMotion		motion;			// motion is absolute or relative
+		f32					sensitivity;	// sensitivity multiplier, mainly for mouse movement in relative mode
+		u8					saturationX;	// saturation of the x axis
+		u8					saturationY;	// saturation of the y axis
+		InputAxisInvert		invert;			// invert the axis or not
+		InputAxisRange		range;			// determines -1 to 1, or 0 to 1 range for the axis
+		InputAxisCurve		curve;			// curve type of axis
+		u8					_padding[7];
+		const char*			deviceName;		// name of the device
+	};
+
+	/**
+	 * Mapped active axis. AxisMotion accumulated for the frame is , and
+	 * the last absolute position value is taken for the frame.
+	 */
+	struct MappedAxis {
+		i64					gameTime;		// gameTime in counts when most recent action was triggered
+		i64					frame;			// frame number when most recent action was triggered
+		h32					axisMotion;		// handle to axisMotion corresponding to the mapped axis
+		f32					posMapped;		// absolute position of axis mapped to curve
+		f32					relMapped;		// relative motion of the axis since last frame mapped to curve
+		i32					posRaw;			// raw value from device, not normalized or mapped to curve, may be useful but use posMapped by default
+		i32					relRaw;			// relative raw value of the axis
+	};
+
+	struct InputAxis {
+		InputAxisBinding	binding;
+		MappedAxis			mapping;
+		InputContextIndex	context;
+		u8					handled;		// flag set to 0 on new event, can be set to 1 when event handled by a callback
+		u16					_padding;
+	};
+	static_assert_aligned_size(InputAxis,8);
 
 	/**
 	 * Axis motion for a frame. Motion events are accumulated for the frame to get relative, and
 	 * the last absolute position value is taken for the frame.
 	 */
 	struct AxisMotion {
-		u32				device;			// instanceID of the device that owns this axis, mouse is always 0 (x) and 1 (y)
-		u32				axis;			// axis number on the device
-		f32				posMapped;		// absolute position of axis mapped to curve
-		f32				relMapped;		// relative motion of the axis since last frame mapped to curve
-		i32				posRaw;			// raw value from device, not normalized or mapped to curve, may be useful but use posMapped by default
-		i32				relRaw;			// relative raw value of the axis
-		const char*		deviceName;		// name of the device
+		u32					device;			// instance_id of the device that owns this axis, mouse is always 0 (x) and 1 (y)
+		u8					axis;			// axis number on the device
+		u8					_padding[3];
+		i32					posRaw;			// raw value from device, not normalized or mapped to curve, may be useful but use posMapped by default
+		i32					relRaw;			// relative raw value of the axis
+		const char *		deviceName;		// name of the device
 	};
 
-	/**
-	 * MappedAxis matches up AxisMotion with a valid InputMapping for a frame.
-	 */
-	struct MappedAxis {
-		InputMapping*	inputMapping;
-		AxisMotion*		axisMotion;
-		h32				mappingId;
-		bool			handled;		// flag set to true when event has been handled by a callback
+	#define DefineAxis(context, axis, invert) \
+		{ { 0, axis, 0, 0, Motion_Absolute, 1.0f, 100, 100, invert, Range_NegToPos, Curve_SCurve, {}, nullptr }, {}, context, {} }
+
+	#define AxisSlider(context, axis, invert) \
+		{ { 0, axis, 0, 0, Motion_Absolute, 100, 100, invert, Range_Pos, Curve_Linear, {}, nullptr }, {}, context, {} }
+
+	#define AxisRelative(context, axis, sensitivity, invert) \
+		{ { 0, axis, 0, 0, Motion_Relative, sensitivity, 100, 100, invert, Range_NegToPos, Curve_Linear, {}, nullptr }, {}, context, {} }
+
+	struct GameInputAxes {
+		union {
+			struct {
+				InputAxis	player_mouseLookX;
+				InputAxis	player_mouseLookY;
+				InputAxis	devCam_mouseLookX;
+				InputAxis	devCam_mouseLookY;
+			};
+			InputAxis _axes[_InputAxisCount] = {
+				AxisRelative(InputContext_PlayerFPS, 0, 15.0f, Axis_NotInverted), // player_mouseLookX
+				AxisRelative(InputContext_PlayerFPS, 1, 10.0f, Axis_NotInverted), // player_mouseLookY
+				AxisRelative(InputContext_DevCamera, 0, 15.0f, Axis_NotInverted), // devCam_mouseLookX
+				AxisRelative(InputContext_DevCamera, 1, 10.0f, Axis_NotInverted)  // devCam_mouseLookY
+			};
+		};
 	};
+
 
 	/**
 	 * Container holding all mapped input for a frame, plus text input
 	 */
 	struct FrameMappedInput {
-		u16				actionsSize;
-		u16				statesSize;
-		u16				axesSize;
-		u16				motionSize;
+		u16					activeActionCount;
+		u16					activeStateCount;
+		u16					activeAxisCount;
+		u16					axisMotionCount;
 
-		MappedAction	actions[GAMEINPUT_ACTION_CAPACITY];	// actions mapped to an active InputMapping for the frame
-		MappedState		states[GAMEINPUT_STATE_CAPACITY];	// states mapped to an active InputMapping for the frame
-		MappedAxis		axes[GAMEINPUT_AXIS_CAPACITY];		// axes mapped to an active InputMapping for the frame
-		AxisMotion		motion[GAMEINPUT_AXIS_CAPACITY];	// holds accumulated motion for the mouse and joysticks
+		AxisMotion			axisMotion[GAMEINPUT_AXIS_CAPACITY];
 
-		char			textInput[32];			// text input buffer
-		char			textComposition[32];	// text editing buffer
+		char				textInput[SDL_TEXTINPUTEVENT_TEXT_SIZE];		// text input buffer
+		char				textComposition[SDL_TEXTINPUTEVENT_TEXT_SIZE];	// text editing buffer
 
-		u8				textInputSize;
-		u8				textCompositionSize;
-		u8				textInputHandled;		// flag set to true when text input has been handled by a callback
-		u8				_padding;
-		i32				cursorPos;				// text editing cursor position
-		i32				selectionLength;		// text editing selection length (if any)
+		i32					cursorPos;				// text editing cursor position
+		i32					selectionLength;		// text editing selection length (if any)
+		
+		u8					textInputSize;
+		u8					textCompositionSize;
+		u8					textInputHandled;		// flag set to true when text input has been handled by a callback
+
+		InputActionIndex	activeActions[_InputActionsCount];	// action events mapped to active InputActions for the frame
+		InputStateIndex		activeStates[_InputStatesCount];	// state events mapped to active InputStates for the frame
+		InputAxisIndex		activeAxes[_InputAxisCount];		// axis events mapped to active InputAxis' for the frame
 	};
 
-	struct InputContext {
-		h32				contextId;		// the id handle of this context
-		u8				options;		// all input context options
-		u8				priority;		// input context priority
-		u8				_padding[2];
-		// stores input mapping to actions, states, axes
-		h32				inputMappings[INPUTCONTEXT_MAPPINGS_CAPACITY];
-		char			name[32];		// display name of the context
-		//u32			cursorIndex;	// lookup into input system's cursor table
-	};
-
-	/**
-	 * Active Input Context record
-	 */
-	struct ActiveInputContext {
-		h32				contextId;
-		u16				priority;
-		u8				active;
-		u8				_padding;
-	};
+	/*struct ActiveInputContext {
+		InputContextIndex	context;
+		u8					priority;
+		u8					active;
+		u8					_padding;
+	};*/
 
 	struct CallbackPriority {
-		h32				callbackId;
-		i32				priority;
+		h32					callbackId;
+		i32					priority;
 	};
 
 	
@@ -213,32 +497,25 @@ namespace input {
 	typedef bool InputAxisFunc(MappedAxis&, InputContext&);
 	typedef bool InputTextFunc(FrameMappedInput&, InputContext&);
 	
-	DenseHandleMap16Typed(InputMapping, HandleMap_InputMapping, 0);
-	DenseHandleMap16Typed(InputContext, HandleMap_InputContext, 1);
-	DenseHandleMap16Typed(InputCallbackFunc*, HandleMap_InputCallback, 2);
+//	DenseHandleMap16Typed(InputCallbackFunc*, HandleMap_InputCallback, 2);
 
 
 	struct GameInput {
-		HandleMap_InputMapping		inputMappings;	// collection of input mappings (actions,states,axes)
-		HandleMap_InputContext		inputContexts;	// collection of input contexts
-		HandleMap_InputCallback		callbacks;		// map storing all registered callbacks
+		GameInputContexts	contexts;
+		GameInputActions	actions;
+		GameInputStates		states;
+		GameInputAxes		axes;
 
-		DenseHandleMap16Buffer(InputMapping, inputMappingsBuffer, GAMEINPUT_MAPPINGS_CAPACITY);
-		DenseHandleMap16Buffer(InputContext, inputContextsBuffer, GAMEINPUT_CONTEXTS_CAPACITY);
-		DenseHandleMap16Buffer(InputCallbackFunc*, callbacksBuffer, GAMEINPUT_CALLBACKS_CAPACITY);
+//		HandleMap_InputCallback		callbacks;		// map storing all registered callbacks
+
+//		DenseHandleMap16Buffer(InputCallbackFunc*, callbacksBuffer, GAMEINPUT_CALLBACKS_CAPACITY);
 
 		// active input contexts sorted by priority
-		ActiveInputContext	activeInputContexts[GAMEINPUT_CONTEXTS_CAPACITY];
+//		ActiveInputContext	activeInputContexts[_InputContextsCount];
 		// callback order sorted by priority
-		CallbackPriority	callbackPriorityList[GAMEINPUT_CALLBACKS_CAPACITY];
+//		CallbackPriority	callbackPriorityList[GAMEINPUT_CALLBACKS_CAPACITY];
 		
 		FrameMappedInput	frameMappedInput;	// per-frame mapped input buffer
-
-		// table of mouse cursors
-		SDL_Cursor*			cursors[_InputMouseCursorCount];
-		// list of opened joysticks
-		SDL_Joystick*		joysticks[GAMEINPUT_JOYSTICKS_CAPACITY];
-		u8					joysticksSize;
 
 
 		/**
@@ -257,42 +534,17 @@ namespace input {
 		void updateFrameTick(const UpdateInfo& ui, PlatformInput& platformInput);
 
 
-		// Input Mappings
-
-		/**
-		 * Slow function to get an input mapping id from its name, systems use this at startup
-		 * and store the handle for later use
-		 * @name		mapping name found in config/inputcontexts.json
-		 * @return	Id of the mapping, null_h32 if name not found within context
-		 */
-		h32 getInputMappingHandle(const char* name, h32 contextId);
-		
-
-		/**
-		 * Get index of active state in frame states array, -1 if not present.
-		 */
-		int findActiveState(h32 mappingId);
-
-
 		// Input Contexts
 
 		/**
 		 * Create a context and get back its handle
 		 */
-		h32 createContext(u8 options, u8 priority, bool makeActive = false);
-
-		/**
-		 * Slow function to get an input context id from its name, systems use this at startup
-		 * and store the handle for later use
-		 * @name		context name found in config/inputcontexts.json
-		 * @return	Id of the context, null_h32 if name not found
-		 */
-		h32 getInputContextHandle(const char* name);
+//		h32 createContext(u8 options, u8 priority, bool makeActive = false);
 
 		/**
 		 * Set the InputContext, returns true on success
 		 */
-		bool setContextActive(h32 contextId, bool active = true, i8 priority = -1);
+		bool setContextActive(InputContextIndex context, bool active = true);
 
 		// Callbacks
 		
@@ -305,7 +557,7 @@ namespace input {
 		 * @param	callback	returns true if input was handled, false if not handled
 		 * @return	true if a mapped action is found and handled by the callback
 		 */
-		bool handleInputAction(h32 mappingId,
+		bool handleInputAction(InputActionIndex action,
 							   FrameMappedInput& mappedInput,
 							   InputActionFunc* callback);
 
@@ -314,7 +566,7 @@ namespace input {
 		 * @param	callback	returns true if input was handled, false if not handled
 		 * @return	true if a mapped state is found and handled by the callback
 		 */
-		bool handleInputState(h32 mappingId,
+		bool handleInputState(InputStateIndex state,
 							  FrameMappedInput& mappedInput,
 							  InputStateFunc* callback);
 
@@ -323,7 +575,7 @@ namespace input {
 		 * @param	callback	returns true if input was handled, false if not handled
 		 * @return	true if a mapped axis is found and handled by the callback
 		 */
-		bool handleInputAxis(h32 mappingId,
+		bool handleInputAxis(InputAxisIndex axis,
 							 FrameMappedInput& mappedInput,
 							 InputAxisFunc* callback);
 
@@ -331,12 +583,12 @@ namespace input {
 		 * Convenience function for handling text input events. Returns false if the context
 		 *	asked for is not active or does not capture text input.
 			*	Otherwise returns the result of callback.
-			* @param	contextId	which input context you are capturing text for
+			* @param	context		which input context you are capturing text for
 			* @param	mappedInput	member wstring textInput contains the input text
 			* @param	callback	returns true if text input was consumed, false if not consumed
 			* @return	true if text input was consumed by the callback
 			*/
-		bool handleTextInput(h32 contextId,
+		bool handleTextInput(InputContextIndex context,
 							 FrameMappedInput& mappedInput,
 							 InputTextFunc* callback);
 
@@ -359,8 +611,8 @@ namespace input {
 		/**
 		 * Translate input events into mapped into for one frame
 		 */
-		void mapFrameInputs(const UpdateInfo& ui);
-		void mapFrameMotion(const UpdateInfo& ui);
+		void mapFrameInputs(const UpdateInfo& ui, DenseQueue_InputEvent& events);
+		void mapFrameMotion(const UpdateInfo& ui, DenseQueue_InputEvent& motionEvents);
 	};
 
 }
