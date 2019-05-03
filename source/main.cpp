@@ -240,6 +240,7 @@ int gameProcess(void* ctx)
 			gameContext.gameCode.updateAndRender(
 					&gameContext.gameMemory,
 					&gameContext.input,
+					gameContext.app,
 					realTime,
 					countsPassed,
 					timer.countsPerMs,

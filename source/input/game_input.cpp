@@ -5,17 +5,19 @@
 
 namespace input {
 
-	void GameInput::updateFrameTick(const UpdateInfo& ui, PlatformInput& platformInput)
+	void GameInput::updateFrameTick(
+		const UpdateInfo& ui,
+		PlatformInput& platformInput,
+		u32 windowWidth,
+		u32 windowHeight)
 	{
 		platformInput.eventsQueue.try_pop_all_push(platformInput.popEvents._q);
 		platformInput.motionEventsQueue.try_pop_all_push(platformInput.popMotionEvents._q);
-// TEMP instead of processing
-//platformInput.popEvents.clear();
-platformInput.popMotionEvents.clear();
 
 		// clear previous frame actions and axis mappings
 		frameMappedInput.activeActionCount = 0;
 		frameMappedInput.activeAxisCount = 0;
+		frameMappedInput.axisMotionCount = 0;
 
 		// clear handled flag of frame's text input
 		// TODO: does the input string itself need to persist many frames for compositing, or should we clear it too?
@@ -24,7 +26,7 @@ platformInput.popMotionEvents.clear();
 		// Remove active states where the context is no longer active, swap and pop.
 		// Apply this filter to bindings where key down is active. Don't apply it to toggles or
 		// bindings where key up is active.
-		u16 s = 0;
+		u8 s = 0;
 		while (s < frameMappedInput.activeStateCount)
 		{
 			InputState& state = states._states[frameMappedInput.activeStates[s]];
@@ -33,8 +35,11 @@ platformInput.popMotionEvents.clear();
 			if (hasDownUpBinding
 				&& !contexts._contexts[state.context].active)
 			{
+				state.active = 0;
+				state.activeIndex = 0xFF;
+
 				frameMappedInput.activeStates[s] =
-					frameMappedInput.activeStates[--frameMappedInput.activeStateCount-1];
+					frameMappedInput.activeStates[--frameMappedInput.activeStateCount];
 			}
 			else {
 				++s;
@@ -53,10 +58,10 @@ platformInput.popMotionEvents.clear();
 
 		// map inputs using active contexts
 		mapFrameInputs(ui, platformInput.popEvents);
-//		mapFrameMotion(ui, platformInput.popMotionEvents);
+		mapFrameMotion(ui, platformInput.popMotionEvents, windowWidth, windowHeight);
 
 		// TEMP output mapped inputs
-		for (u16 a = 0; a < frameMappedInput.activeActionCount; ++a) {
+		for (u8 a = 0; a < frameMappedInput.activeActionCount; ++a) {
 			logger::info(
 					logger::Category_Input,
 					"action \"%s\" active",
@@ -173,7 +178,6 @@ platformInput.popMotionEvents.clear();
 
 				u8 highestStateContextPriority = 0xFF;
 				u8 mappedStateIndex = 0xFF;
-				u8 mappedActiveStateIndex = 0xFF;
 
 				// for each state, find the one in the highest priority active
 				// context with a matching binding 
@@ -192,16 +196,8 @@ platformInput.popMotionEvents.clear();
 						InputStateBinding& binding = state.binding;
 						bool matched = false;
 
-						u8 stateActiveIndex = 0xFF;
-						for (u8 act = 0; act < frameMappedInput.activeStateCount; ++act) {
-							if (frameMappedInput.activeStates[act] == s) {
-								stateActiveIndex = act;
-								break;
-							}
-						}
-
 						// state is currently inactive
-						if (stateActiveIndex == 0xFF)
+						if (!state.active)
 						{
 							if ((binding.bindIn == Bind_Down && evt.evt.type == SDL_KEYDOWN) ||
 								(binding.bindIn == Bind_Up   && evt.evt.type == SDL_KEYUP) &&
@@ -253,7 +249,6 @@ platformInput.popMotionEvents.clear();
 						if (matched) {
 							highestStateContextPriority = context.priority;
 							mappedStateIndex = s;
-							mappedActiveStateIndex = stateActiveIndex;
 						}
 					}
 				}
@@ -278,29 +273,36 @@ platformInput.popMotionEvents.clear();
 						action.mapping.xRaw = action.mapping.yRaw = 0;
 					}
 					action.handled = 0;
+					action.active = 1;
 
-					frameMappedInput.activeActions[++frameMappedInput.activeActionCount] =
+					frameMappedInput.activeActions[frameMappedInput.activeActionCount++] =
 						(InputActionIndex)mappedActionIndex;
 				}
 				// found a state mapping
 				if (mappedStateIndex != 0xFF
 					&& highestStateContextPriority <= highestActionContextPriority)
 				{
+					InputState& state = states._states[mappedStateIndex];
 					// make state active
-					if (mappedActiveStateIndex == 0xFF) {
-						InputState& state = states._states[mappedStateIndex];
+					if (!state.active) {
 						state.mapping.startCounts = ui.gameTime;
 						state.mapping.startFrame = ui.frame;
 						state.handled = 0;
+						state.active = 1;
+						state.activeIndex = frameMappedInput.activeStateCount;
+						++frameMappedInput.activeStateCount;
 						
-						frameMappedInput.activeStates[++frameMappedInput.activeStateCount] =
+						frameMappedInput.activeStates[state.activeIndex] =
 							(InputStateIndex)mappedStateIndex;
 					}
 					// make state inactive
 					else {
 						// make inactive, remove from active states by swap and pop
-						frameMappedInput.activeStates[mappedActiveStateIndex] =
-							frameMappedInput.activeStates[--frameMappedInput.activeStateCount-1];
+						frameMappedInput.activeStates[state.activeIndex] =
+							frameMappedInput.activeStates[--frameMappedInput.activeStateCount];
+						
+						state.active = 0;
+						state.activeIndex = 0xFF;
 						break;
 					}
 				}
@@ -323,143 +325,198 @@ platformInput.popMotionEvents.clear();
 	}
 
 
-/*	void GameInput::mapFrameMotion(const UpdateInfo& ui)
+	AxisMotion* getJoystickAxisMotion(
+		InputEvent& motionEvt,
+		FrameMappedInput& frameMappedInput)
 	{
-		f32 inverseWindowWidth  = 1.0f / app->getPrimaryWindow().width;
-		f32 inverseWindowHeight = 1.0f / app->getPrimaryWindow().height;
-		bool relativeMode = relativeMouseModeActive();
-
-		// reset previous frame's relative motion
-		for (auto& motion : frameMappedInput.motion) {
-			motion.relRaw = 0;
-			motion.relMapped = 0.0f;
+		for (u8 m = 0; m < frameMappedInput.axisMotionCount; ++m)
+		{
+			AxisMotion& motion = frameMappedInput.axisMotion[m];
+			if (motion.device == (u32)motionEvt.evt.jaxis.which
+				&& motion.axis == motionEvt.evt.jaxis.axis)
+			{
+				return &motion;
+			}
 		}
 
-		// process all motion events, these go into AxisMotion struct
-		auto frameSize = popMotionEvents.size();
-		for (int e = 0; e < frameSize; ++e) {
-			const auto& motionEvt = popMotionEvents[e];
-			
-			// if timestamp is greater than frame time, we're done
-			if (motionEvt.timeStampCounts > ui.virtualTime) {
-				frameSize = e;
-				break;
-			}
+		AxisMotion* newMotion = nullptr;
+		if (frameMappedInput.axisMotionCount < countof(frameMappedInput.axisMotion)) {
+			AxisMotion& motion = frameMappedInput.axisMotion[frameMappedInput.axisMotionCount++];
+			motion.device = motionEvt.evt.jaxis.which;
+			motion.axis = motionEvt.evt.jaxis.axis;
+			motion.posRaw = 0;
+			motion.relRaw = 0;
+			newMotion = &motion;
+		}
+		return newMotion;
+	}
+
+
+	// TODO: this new stuff needs testing
+	f32 getModifiedPosition(
+		f32 posMapped,
+		InputAxis& axis)
+	{
+		// deadzone
+		f32 deadzone = axis.binding.deadzone * 0.01f;
+		f32 newPos = (posMapped - (posMapped >= 0 ? deadzone : -deadzone)) / (1.0f - deadzone);
+
+		// "curved" relative is (curve(posMapped) - curve(posMapped-relMapped)), not curve(relMapped)
+		//mapping.curve
+		//mapping.curvature
+
+		//mapping.saturationX
+		//mapping.saturationY
+		//mapping.slider
+
+		// inversion
+		newPos *= (axis.binding.invert ? -1.0f : 1.0f);
+		
+		return newPos;
+	}
+
+
+	void GameInput::mapFrameMotion(
+		const UpdateInfo& ui,
+		DenseQueue_InputEvent& motionEvents,
+		u32 windowWidth,
+		u32 windowHeight)
+	{
+		f32 inverseWindowWidth  = 1.0f / windowWidth;
+		f32 inverseWindowHeight = 1.0f / windowHeight;
+		bool relativeMode = relativeMouseModeActive();
+
+		// reset mouse motion
+		AxisMotion& mx = frameMappedInput.mouseXMotion = {};
+		AxisMotion& my = frameMappedInput.mouseYMotion = {};
+
+		// process events timestamped up to the current simulation frame time
+		// into AxisMotion structs
+		while (!motionEvents.empty()
+				&& motionEvents.front()->timeStampCounts <= ui.virtualTime)
+		{
+			InputEvent& motionEvt = *motionEvents.pop_fifo();
 
 			switch (motionEvt.evt.type) {
 				case SDL_MOUSEMOTION: {
-					auto& mouseX = frameMappedInput.motion[0];
-					auto& mouseY = frameMappedInput.motion[1];
-					
-					mouseX.posRaw = motionEvt.evt.motion.x;
-					mouseX.relRaw += motionEvt.evt.motion.xrel;
-					mouseX.posMapped = mouseX.posRaw * inverseWindowWidth;
-					mouseX.relMapped += motionEvt.evt.motion.xrel * inverseWindowWidth;
-
-					mouseY.posRaw = motionEvt.evt.motion.y;
-					mouseY.relRaw += motionEvt.evt.motion.yrel;
-					mouseY.posMapped = mouseY.posRaw * inverseWindowHeight;
-					mouseY.relMapped += motionEvt.evt.motion.yrel * inverseWindowHeight;
+					mx.posRaw = motionEvt.evt.motion.x;
+					mx.relRaw += motionEvt.evt.motion.xrel;
+					my.axis = 1;
+					my.posRaw = motionEvt.evt.motion.y;
+					my.relRaw += motionEvt.evt.motion.yrel;
 					break;
 				}
 				case SDL_JOYAXISMOTION: {
-					auto it = std::find_if(frameMappedInput.motion.begin(), frameMappedInput.motion.end(),
-						[&motionEvt](const AxisMotion& m){
-							return (m.device == motionEvt.evt.jaxis.which &&
-									m.axis == motionEvt.evt.jaxis.axis);
-						});
-
-					if (it != frameMappedInput.motion.end()) {
-						auto& motion = *it;
-						auto newRaw = motionEvt.evt.jaxis.value;
-						motion.relRaw = newRaw - motion.posRaw;
-						motion.posRaw = newRaw;
-						
-						motion.posMapped = motion.posRaw * JOYSTICK_INVERSE_MAX_RAW;
-						motion.relMapped = motion.relRaw * JOYSTICK_INVERSE_MAX_RAW;
+					AxisMotion* motion = getJoystickAxisMotion(motionEvt, frameMappedInput);
+					if (motion)
+					{
+						i32 newRaw = motionEvt.evt.jaxis.value;
+						motion->relRaw = newRaw - motion->posRaw;
+						motion->posRaw = newRaw;
 					}
 					break;
 				}
 			}
 		}
 
-		// erase up to the last event for this frame
-		popMotionEvents.erase(popMotionEvents.begin(), popMotionEvents.begin() + frameSize);
+		// Find the highest priority active context that eats events, these block mappings at lower priority.
+		u8 highestPriorityMouseMotionEvent = 0xFF;
+		u8 highestPriorityJoystickMotionEvent = 0xFF;
+
+		for (u8 c = 0; c < _InputContextsCount; ++c) {
+			InputContext& context = contexts._contexts[c];
+			if (context.active) {
+				if (context.priority <= highestPriorityMouseMotionEvent && context.options & EatMouseMotionEvents) {
+					highestPriorityMouseMotionEvent = context.priority;
+				}
+				if (context.priority <= highestPriorityJoystickMotionEvent && context.options & EatJoystickMotionEvents) {
+					highestPriorityJoystickMotionEvent = context.priority;
+				}
+			}
+		}
 
 		// all AxisMotion is aggregated for frame, now map to active InputMappings
-		for (auto& motion : frameMappedInput.motion) {		// for each axis
-			bool matched = false;
+		for (u8 m = 0; m < frameMappedInput.axisMotionCount + 2; ++m)
+		{
+			AxisMotion& motion = frameMappedInput.mouseAndAxisMotion[m];
 			bool isMouse = (motion.device == 0);
 
-			for (const auto& ac : activeInputContexts) {		// for each active context
-				// skip contexts that aren't active
-				if (!ac.active) { continue; }
+			u8 highestAxisContextPriority = 0xFF;
+			u8 mappedAxisIndex = 0xFF;
 
-				auto& context = inputContexts[ac.contextId];
-
-				for (Id_t mappingId : context.inputMappings) {	// check all input mappings for a match
-					const auto& mapping = inputMappings[mappingId];
+			// for each axis, find the one in the highest priority active
+			// context with a matching binding 
+			for (u8 a = 0; a < _InputAxisCount; ++a) {
+				InputAxis& axis = axes._axes[a];
+				InputContext& context = contexts._contexts[axis.context];
+				
+				if (context.active
+					&& context.priority < highestAxisContextPriority
+					// make sure event wasn't eaten by a higher priority context
+					&& (isMouse  || context.priority <= highestPriorityJoystickMotionEvent)
+					&& (!isMouse || context.priority <= highestPriorityMouseMotionEvent))
+				{
+					InputAxisBinding& binding = axis.binding;
 
 					// check for axis mappings
-					matched = (mapping.type == Type_Axis &&
-							mapping.device == motion.device &&
-							mapping.axis == motion.axis &&
-							((mapping.relativeMotion == 1) == relativeMode) &&
+					bool matched = (
+							binding.device == motion.device &&
+							binding.axis == motion.axis &&
+							((binding.motion == Motion_Relative) == relativeMode) &&
 							(motion.relRaw != 0 || !relativeMode));
+
 					if (matched) {
-						// found a matching axis mapping for the event, apply mapping parameters
-						if (isMouse) {
-							motion.relMapped *= mapping.sensitivity * (mapping.invert == 1 ? -1.0f : 1.0f);
-						}
-						else {
-							// TODO: this new stuff needs testing
-							auto getModifiedPosition = [](f32 posMapped, const InputMapping& mapping) -> f32 {
-								// deadzone
-								f32 deadzone = mapping.deadzone * 0.01f;
-								f32 newPos = (posMapped - (posMapped >= 0 ? deadzone : -deadzone)) / (1.0f - deadzone);
-
-								// "curved" relative is (curve(posMapped) - curve(posMapped-relMapped)), not curve(relMapped)
-								//mapping.curve
-								//mapping.curvature
-
-								//mapping.saturationX
-								//mapping.saturationY
-								//mapping.slider
-
-								// inversion
-								newPos *= (mapping.invert == 1 ? -1.0f : 1.0f);
-								
-								return newPos;
-							};
-							
-							// get new motion after curves and modifications
-							// "curved" relative is (curve(posMapped) - curve(posMapped-relMapped)), not just curve(relMapped)
-							f32 newPos = getModifiedPosition(motion.posMapped, mapping);
-							motion.relMapped = newPos - getModifiedPosition(motion.posMapped - motion.relMapped, mapping);
-							motion.posMapped = newPos;
-						}
-						
-						MappedAxis ma{};
-						ma.mappingId = mappingId;
-						ma.inputMapping = &mapping;
-						ma.axisMotion = &motion;
-
-						frameMappedInput.axes.push_back(std::move(ma));
-						break; // skip checking the rest of the mappings
+						highestAxisContextPriority = context.priority;
+						mappedAxisIndex = a;
 					}
 				}
+			}
 
-				if (matched || // found a mapping, move on to the next input event
-					(context.options[EatMouseEvents] && isMouse) || // didn't find a match, check if this context eats input events or passes them down
-					(context.options[EatJoystickEvents] && !isMouse))
-				{
-					break;
+			// found an axis mapping, make it active
+			if (mappedAxisIndex != 0xFF)
+			{
+				InputAxis& axis = axes._axes[mappedAxisIndex];
+				
+				axis.mapping.gameTime = ui.gameTime;
+				axis.mapping.frame = ui.frame;
+				axis.mapping.posRaw = motion.posRaw;
+				axis.mapping.relRaw = motion.relRaw;
+
+				// found a matching axis mapping for the event, apply mapping parameters
+				if (isMouse) {
+					if (motion.axis == 0) {
+						axis.mapping.posMapped = motion.posRaw * inverseWindowWidth;
+						axis.mapping.relMapped = motion.relRaw * inverseWindowWidth
+							* axis.binding.sensitivity
+							* (axis.binding.invert == 1 ? -1.0f : 1.0f);
+					}
+					else if (motion.axis == 1) {
+						f32 posMapped = motion.posRaw * inverseWindowHeight;
+						f32 relMapped = motion.relRaw * inverseWindowHeight
+							* axis.binding.sensitivity
+							* (axis.binding.invert == 1 ? -1.0f : 1.0f);
+					}
 				}
+				else {
+					// get new motion after curves and modifications
+					// "curved" relative is (curve(posMapped) - curve(posMapped-relMapped)), not just curve(relMapped)
+					f32 posMapped = motion.posRaw * JOYSTICK_INVERSE_MAX_RAW;
+					f32 relMapped = motion.relRaw * JOYSTICK_INVERSE_MAX_RAW;
+					f32 newPos = getModifiedPosition(posMapped, axis);
+					axis.mapping.relMapped = newPos - getModifiedPosition(posMapped - relMapped, axis);
+					axis.mapping.posMapped = newPos;
+				}
+				
+				axis.handled = 0;
+				axis.active = 1;
+
+				frameMappedInput.activeAxes[frameMappedInput.activeAxisCount++] =
+					(InputAxisIndex)mappedAxisIndex;
 			}
 		}
 	}
 
-	Id_t GameInput::registerCallback(i32 priority, InputCallbackFunc* func)
+	/*Id_t GameInput::registerCallback(i32 priority, InputCallbackFunc* func)
 	{
 		Id_t cbId = callbacks.insert(std::move(func));
 		
@@ -597,7 +654,7 @@ platformInput.popMotionEvents.clear();
 		}
 		return false;
 	}
-
+*/
 
 	void GameInput::startTextInput()
 	{
@@ -639,7 +696,7 @@ platformInput.popMotionEvents.clear();
 	{
 		return (SDL_GetRelativeMouseMode() == SDL_TRUE);
 	}
-*/
+
 
 	void GameInput::init()
 	{

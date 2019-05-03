@@ -29,7 +29,7 @@ struct Game {
 	FixedTimestep		simulationUpdate = {};
 
 	//ThreadPoolPtr					threadPool		= nullptr;
-	input::GameInput	gameInput = {};
+	input::GameInput	gameInput;
 	//resource::ResourceLoaderPtr		resourceLoader	= nullptr;
 	//render::RenderSystemPtr			renderSystem	= nullptr;
 	//render::ShaderManagerPtr		shaderManager	= nullptr;

@@ -19,6 +19,7 @@ struct SimulationUpdateContext {
 	Game&					game;
 	input::PlatformInput&	input;
 	GameMemory*				gameMemory;
+	SDLApplication*			app;
 };
 
 PlatformApi* platform = nullptr;
@@ -42,7 +43,11 @@ void gameUpdateFrameTick(UpdateInfo& ui, void* _ctx)
 	// if some systems operate on 1(+) frame-old-data, can they be run in parallel?
 	// should part of this list become a task flow?
 
-	simContext.game.gameInput.updateFrameTick(ui, simContext.input);
+	simContext.game.gameInput.updateFrameTick(
+			ui,
+			simContext.input,
+			simContext.app->windowData.width,
+			simContext.app->windowData.height);
 
 	//	ResourceLoader
 	//	AISystem
@@ -145,6 +150,8 @@ void makeCoreSystems(GameMemory* gameMemory)
 	 * Build the input system
 	 */
 	{
+		// we need to copy a new default constructed GameInput over the existing zero-init memory
+		game.gameInput = input::GameInput();
 		game.gameInput.init();
 
 		// InputSystem.lua contains initInputSystem function
@@ -328,6 +335,8 @@ void destroyGame(GameMemory* gameMemory)
 //	task_base::s_threadPool.reset();
 }
 
+// TODO: define a function to call once on every code reload, for example may need to reinit some
+// game memory but not all, like the GameInput memory for example
 
 extern "C" {
 	_export
@@ -335,6 +344,7 @@ extern "C" {
 	gameUpdateAndRender(
 		GameMemory* gameMemory,
 		input::PlatformInput* input,
+		SDLApplication* app,
 		i64 realTime,
 		i64 countsPassed,
 		i64 countsPerMs,
@@ -349,7 +359,7 @@ extern "C" {
 		}
 
 		Game& game = *(Game*)gameMemory->gameState;
-		SimulationUpdateContext ctx = { game, *input, gameMemory };
+		SimulationUpdateContext ctx = { game, *input, gameMemory, app };
 		
 		float interpolation = game.simulationUpdate.tick(
 				1000.0f / 30.0f,	// deltaMS, run at 30fps

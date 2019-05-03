@@ -13,6 +13,7 @@
 typedef void GameUpdateAndRender(
 		GameMemory* gameMemory,
 		input::PlatformInput* input,
+		SDLApplication* app,
 		i64 realTime,
 		i64 countsPassed,
 		i64 countsPerMs,

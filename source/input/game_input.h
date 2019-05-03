@@ -31,27 +31,28 @@ namespace input {
 		"Player Movement"
 	};
 
-	// TODO: may need to separate eatmousevents from eatmousemotionevents, same for joystick
 	enum InputContextOptions : u8 {
-		CaptureTextInput  = 0x1,		// true if text input events should be captured by this context
-		RelativeMouseMode = 0x2,		// **Currently Unused** true for relative mouse mode vs. regular "GUI" mode
-		ShowMouseCursor   = 0x4,		// **Currently Unused** true to show cursor specified by cursorIndex
-		EatKeyboardEvents = 0x8,		// true to eat all keyboard events, preventing pass-down to lower contexts
-		EatMouseEvents    = 0x10,		// prevent mouse events from passing down
-		EatJoystickEvents = 0x20		// prevent joystick events from passing down
+		CaptureTextInput        = 0x1,		// true if text input events should be captured by this context
+		RelativeMouseMode       = 0x2,		// **Currently Unused** true for relative mouse mode vs. regular "GUI" mode
+		ShowMouseCursor         = 0x4,		// **Currently Unused** true to show cursor specified by cursorIndex
+		EatKeyboardEvents       = 0x8,		// true to eat all keyboard events, preventing pass-down to lower contexts
+		EatMouseEvents          = 0x10,		// prevent mouse button/wheel events from passing down
+		EatJoystickEvents       = 0x20,		// prevent joystick button events from passing down
+		EatMouseMotionEvents    = 0x40,		// prevent mouse motion events from passing down
+		EatJoystickMotionEvents = 0x80		// prevent joystick motion events from passing down
 	};
 
 	// TODO: consider reintroducing the activeInputContexts list sorted in priority order, otherwise just get rid of
 	// the priority concept and define them in the order needed for proper cascading of mappings
 	struct InputContext {
-		u8					options;	// all input context options
-		u8					priority;	// input context priority
-		u8					toolsOnly;	// 1 if this is for tools and not the shipping game
-		u8					active;		// 1 if the context is currently active
+		u8					options;		// all input context options
+		u8					priority;		// input context priority
+		u8					toolsOnly;		// 1 if this is for tools and not the shipping game
+		u8					active;			// 1 if the context is currently active
 		// stores input mapping to actions, states, axes
 		// TODO: need inputMappings length
 //		h32				inputMappings[INPUTCONTEXT_MAPPINGS_CAPACITY];
-		//u32			cursorIndex;	// lookup into input system's cursor table
+		//u32			cursorIndex;		// lookup into input system's cursor table
 	};
 
 	#define DefineContext(priority, toolsOnly, options) \
@@ -68,7 +69,7 @@ namespace input {
 			};
 			InputContext _contexts[_InputContextsCount] = {
 				DefineContext(0, 0, 0), // inGame
-				DefineContext(1, 1, CaptureTextInput | EatKeyboardEvents | EatMouseEvents | EatJoystickEvents), // devConsole
+				DefineContext(1, 1, CaptureTextInput | EatKeyboardEvents), // devConsole
 				DefineContext(2, 1, RelativeMouseMode), // devCamera
 				DefineContext(2, 0, RelativeMouseMode), // playerFPS
 			};
@@ -127,11 +128,11 @@ namespace input {
 	 * e.g. {keydown-G} or {keyup-G}.
 	 */
 	struct InputActionBinding {
-		u32					device;		// instance_id of the device, comes through event "which", keyboard is always 0
-		u32					keycode;	// keyboard virtual key code, mouse or joystick button
-		u16					modifier;	// keyboard modifier, SDL_Keymod, defaults to 0 (KMOD_NONE)
-		InputBindEvent		bind;		// event to trigger the action
-		InputMouseClicks	clicks;		// for mouse buttons only, single or double click
+		u32					device;			// instance_id of the device, comes through event "which", keyboard is always 0
+		u32					keycode;		// keyboard virtual key code, mouse or joystick button
+		u16					modifier;		// keyboard modifier, SDL_Keymod, defaults to 0 (KMOD_NONE)
+		InputBindEvent		bind;			// event to trigger the action
+		InputMouseClicks	clicks;			// for mouse buttons only, single or double click
 		u32					_padding;
 	};
 
@@ -139,9 +140,9 @@ namespace input {
 	 * Mapped action for a frame.
 	 */
 	struct MappedAction {
-		i64					gameTime;	// gameTime in counts when most recent action was triggered
-		i64					frame;		// frame number when most recent action was triggered
-//		f32					x;			// mouse clicks include normalized and raw position
+		i64					gameTime;		// gameTime in counts when most recent action was triggered
+		i64					frame;			// frame number when most recent action was triggered
+//		f32					x;				// mouse clicks include normalized and raw position
 //		f32					y;
 		i32					xRaw;
 		i32					yRaw;
@@ -151,19 +152,23 @@ namespace input {
 		InputActionBinding	binding;
 		MappedAction		mapping;
 		InputContextIndex	context;
-		u8					handled;	// flag set to 0 on new event, can be set to 1 when event handled by a callback
-		u8					_padding[6];
+		u8					handled;		// flag set to 0 on new event, can be set to 1 when event handled by a callback
+		u8					active;			// flag set to 1 when action is active for a frame
+		u8					_padding;
 	};
 	static_assert_aligned_size(InputAction,8);
 
 	#define DefineAction(context, keycode, modifier, bind) \
-		{ { 0, keycode, modifier, bind, Mouse_ClicksNA }, {}, context, {} }
+		{ { 0, keycode, modifier, bind, Mouse_ClicksNA },\
+		  {}, context, 0, 0, 0 }
 
 	#define ActionMouseClick(context, clicks) \
-		{ { 0, 0, 0, Bind_Down, clicks }, {}, context, {} }
+		{ { 0, 0, 0, Bind_Down, clicks },\
+		  {}, context, 0, 0, 0 }
 
 	#define ActionMouseWheel(context, bind) \
-		{ { 0, 0, 0, bind, Mouse_ClicksNA }, {}, context, {} }
+		{ { 0, 0, 0, bind, Mouse_ClicksNA },\
+		  {}, context, 0, 0, 0 }
 
 	struct GameInputActions {
 		union {
@@ -272,18 +277,22 @@ namespace input {
 		MappedState			mapping;
 		InputContextIndex	context;
 		u8					handled;		// flag set to 0 on new event, can be set to 1 when event handled by a callback
-		u16					_padding;
+		u8					active;			// flag set to 1 when action is active for a frame
+		u8					activeIndex; 	// index into the frameMappedInput.activeStates array, or 0xFF when inactive
 	};
 	static_assert_aligned_size(InputState,8);
 
 	#define DefineState(context, keycode, modifier, binddown, bindup, clicks) \
-		{ { 0, keycode, modifier, binddown, bindup, clicks, {} }, {}, context, {} }
+		{ { 0, keycode, modifier, binddown, bindup, clicks, {} },\
+		  {}, context, 0, 0, 0xFF }
 
 	#define StatePress(context, keycode) \
-		{ { 0, keycode, KMOD_NONE, Bind_Down, Bind_Up, Mouse_ClicksNA, {} }, {}, context, {} }
+		{ { 0, keycode, KMOD_NONE, Bind_Down, Bind_Up, Mouse_ClicksNA, {} },\
+		  {}, context, 0, 0, 0xFF }
 
 	#define StateToggle(context, keycode) \
-		{ { 0, keycode, KMOD_NONE, Bind_Down, Bind_Down, Mouse_ClicksNA, {} }, {}, context, {} }
+		{ { 0, keycode, KMOD_NONE, Bind_Down, Bind_Down, Mouse_ClicksNA, {} },\
+		  {}, context, 0, 0, 0xFF }
 
 	struct GameInputStates {
 		union {
@@ -408,7 +417,8 @@ namespace input {
 		MappedAxis			mapping;
 		InputContextIndex	context;
 		u8					handled;		// flag set to 0 on new event, can be set to 1 when event handled by a callback
-		u16					_padding;
+		u8					active;			// flag set to 1 when action is active for a frame
+		u8					_padding;
 	};
 	static_assert_aligned_size(InputAxis,8);
 
@@ -422,17 +432,19 @@ namespace input {
 		u8					_padding[3];
 		i32					posRaw;			// raw value from device, not normalized or mapped to curve, may be useful but use posMapped by default
 		i32					relRaw;			// relative raw value of the axis
-		const char *		deviceName;		// name of the device
 	};
 
 	#define DefineAxis(context, axis, invert) \
-		{ { 0, axis, 0, 0, Motion_Absolute, 1.0f, 100, 100, invert, Range_NegToPos, Curve_SCurve, {}, nullptr }, {}, context, {} }
+		{ { 0, axis, 0, 0, Motion_Absolute, 1.0f, 100, 100, invert, Range_NegToPos, Curve_SCurve, {} },\
+		  {}, context, 0, 0, 0 }
 
 	#define AxisSlider(context, axis, invert) \
-		{ { 0, axis, 0, 0, Motion_Absolute, 100, 100, invert, Range_Pos, Curve_Linear, {}, nullptr }, {}, context, {} }
+		{ { 0, axis, 0, 0, Motion_Absolute, 100, 100, invert, Range_Pos, Curve_Linear, {} },\
+		  {}, context, 0, 0, 0 }
 
 	#define AxisRelative(context, axis, sensitivity, invert) \
-		{ { 0, axis, 0, 0, Motion_Relative, sensitivity, 100, 100, invert, Range_NegToPos, Curve_Linear, {}, nullptr }, {}, context, {} }
+		{ { 0, axis, 0, 0, Motion_Relative, sensitivity, 100, 100, invert, Range_NegToPos, Curve_Linear, {} },\
+		  {}, context, 0, 0, 0 }
 
 	struct GameInputAxes {
 		union {
@@ -456,12 +468,14 @@ namespace input {
 	 * Container holding all mapped input for a frame, plus text input
 	 */
 	struct FrameMappedInput {
-		u16					activeActionCount;
-		u16					activeStateCount;
-		u16					activeAxisCount;
-		u16					axisMotionCount;
-
-		AxisMotion			axisMotion[GAMEINPUT_AXIS_CAPACITY];
+		union {
+			struct {
+				AxisMotion	mouseXMotion;
+				AxisMotion	mouseYMotion;
+				AxisMotion	axisMotion[GAMEINPUT_AXIS_CAPACITY];
+			};
+			AxisMotion		mouseAndAxisMotion[2 + GAMEINPUT_AXIS_CAPACITY];
+		};
 
 		char				textInput[SDL_TEXTINPUTEVENT_TEXT_SIZE];		// text input buffer
 		char				textComposition[SDL_TEXTINPUTEVENT_TEXT_SIZE];	// text editing buffer
@@ -473,17 +487,15 @@ namespace input {
 		u8					textCompositionSize;
 		u8					textInputHandled;		// flag set to true when text input has been handled by a callback
 
+		u8					activeActionCount;		// how many actions are active this frame
+		u8					activeStateCount;		// how many states are active this frame
+		u8					activeAxisCount;		// how many axes are active this frame
+		u8					axisMotionCount;		// how many axes had motion this frame
+
 		InputActionIndex	activeActions[_InputActionsCount];	// action events mapped to active InputActions for the frame
 		InputStateIndex		activeStates[_InputStatesCount];	// state events mapped to active InputStates for the frame
 		InputAxisIndex		activeAxes[_InputAxisCount];		// axis events mapped to active InputAxis' for the frame
 	};
-
-	/*struct ActiveInputContext {
-		InputContextIndex	context;
-		u8					priority;
-		u8					active;
-		u8					_padding;
-	};*/
 
 	struct CallbackPriority {
 		h32					callbackId;
@@ -511,11 +523,11 @@ namespace input {
 //		DenseHandleMap16Buffer(InputCallbackFunc*, callbacksBuffer, GAMEINPUT_CALLBACKS_CAPACITY);
 
 		// active input contexts sorted by priority
-//		ActiveInputContext	activeInputContexts[_InputContextsCount];
+//		ActiveInputContext	activeContexts[_InputContextsCount];
 		// callback order sorted by priority
 //		CallbackPriority	callbackPriorityList[GAMEINPUT_CALLBACKS_CAPACITY];
 		
-		FrameMappedInput	frameMappedInput;	// per-frame mapped input buffer
+		FrameMappedInput	frameMappedInput = {};	// per-frame mapped input buffer
 
 
 		/**
@@ -531,7 +543,10 @@ namespace input {
 		/**
 		 * Executed in the update fixed timestep loop
 		 */
-		void updateFrameTick(const UpdateInfo& ui, PlatformInput& platformInput);
+		void updateFrameTick(const UpdateInfo& ui,
+							 PlatformInput& platformInput,
+							 u32 windowWidth,
+							 u32 windowHeight);
 
 
 		// Input Contexts
@@ -611,8 +626,13 @@ namespace input {
 		/**
 		 * Translate input events into mapped into for one frame
 		 */
-		void mapFrameInputs(const UpdateInfo& ui, DenseQueue_InputEvent& events);
-		void mapFrameMotion(const UpdateInfo& ui, DenseQueue_InputEvent& motionEvents);
+		void mapFrameInputs(const UpdateInfo& ui,
+							DenseQueue_InputEvent& events);
+
+		void mapFrameMotion(const UpdateInfo& ui,
+							DenseQueue_InputEvent& motionEvents,
+							u32 windowWidth,
+							u32 windowHeight);
 	};
 
 }
