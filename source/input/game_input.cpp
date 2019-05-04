@@ -15,8 +15,18 @@ namespace input {
 		platformInput.motionEventsQueue.try_pop_all_push(platformInput.popMotionEvents._q);
 
 		// clear previous frame actions and axis mappings
+		for (u8 a = 0; a < frameMappedInput.activeActionCount; ++a) {
+			actions._actions[a].active = 0;
+			actions._actions[a].activeIndex = 0xFF;
+		}
 		frameMappedInput.activeActionCount = 0;
+		
+		for (u8 a = 0; a < frameMappedInput.activeAxisCount; ++a) {
+			axes._axes[a].active = 0;
+			axes._axes[a].activeIndex = 0xFF;
+		}
 		frameMappedInput.activeAxisCount = 0;
+		
 		frameMappedInput.axisMotionCount = 0;
 
 		// clear handled flag of frame's text input
@@ -56,9 +66,17 @@ namespace input {
 			state.handled = 0;
 		}
 
+		f32 inverseWindowWidth  = 1.0f / windowWidth;
+		f32 inverseWindowHeight = 1.0f / windowHeight;
+
 		// map inputs using active contexts
-		mapFrameInputs(ui, platformInput.popEvents);
-		mapFrameMotion(ui, platformInput.popMotionEvents, windowWidth, windowHeight);
+		mapFrameInputs(
+				ui, platformInput.popEvents,
+				inverseWindowWidth, inverseWindowHeight);
+
+		mapFrameMotion(
+				ui, platformInput.popMotionEvents,
+				inverseWindowWidth, inverseWindowHeight);
 
 		// TEMP output mapped inputs
 		for (u8 a = 0; a < frameMappedInput.activeActionCount; ++a) {
@@ -84,33 +102,10 @@ namespace input {
 
 	void GameInput::mapFrameInputs(
 		const UpdateInfo& ui,
-		DenseQueue_InputEvent& events)
+		DenseQueue_InputEvent& events,
+		f32 inverseWindowWidth,
+		f32 inverseWindowHeight)
 	{
-		// Find the highest priority active context that eats events, these block mappings at lower priority.
-		// For example, a menu pops up with a higher context that blocks mouse look camera control.
-		u8 highestPriorityKeyboardEvent = 0xFF;
-		u8 highestPriorityMouseEvent = 0xFF;
-		u8 highestPriorityJoystickEvent = 0xFF;
-		u8 highestPriorityTextEvent = 0xFF;
-
-		for (u8 c = 0; c < _InputContextsCount; ++c) {
-			InputContext& context = contexts._contexts[c];
-			if (context.active) {
-				if (context.priority <= highestPriorityKeyboardEvent && context.options & EatKeyboardEvents) {
-					highestPriorityKeyboardEvent = context.priority;
-				}
-				if (context.priority <= highestPriorityMouseEvent && context.options & EatMouseEvents) {
-					highestPriorityMouseEvent = context.priority;
-				}
-				if (context.priority <= highestPriorityJoystickEvent && context.options & EatJoystickEvents) {
-					highestPriorityJoystickEvent = context.priority;
-				}
-				if (context.priority <= highestPriorityTextEvent && context.options & CaptureTextInput) {
-					highestPriorityTextEvent = context.priority;
-				}
-			}
-		}
-
 		// process events timestamped up to the current simulation frame time
 		while (!events.empty()
 				&& events.front()->timeStampCounts <= ui.virtualTime)
@@ -134,9 +129,9 @@ namespace input {
 					if (context.active
 						&& context.priority < highestActionContextPriority
 						// make sure event wasn't eaten by a higher priority context
-						&& (evt.eventType != Event_Keyboard || context.priority <= highestPriorityKeyboardEvent)
-						&& (evt.eventType != Event_Joystick || context.priority <= highestPriorityJoystickEvent)
-						&& (evt.eventType != Event_Mouse    || context.priority <= highestPriorityMouseEvent))
+						&& (evt.eventType != Event_Keyboard || context.priority <= highestPriority.keyboardEvent)
+						&& (evt.eventType != Event_Joystick || context.priority <= highestPriority.joystickEvent)
+						&& (evt.eventType != Event_Mouse    || context.priority <= highestPriority.mouseEvent))
 					{
 						InputActionBinding& binding = action.binding;
 						bool matched = false;
@@ -189,9 +184,9 @@ namespace input {
 						&& context.priority <= highestActionContextPriority
 						&& context.priority < highestStateContextPriority
 						// make sure event wasn't eaten by a higher priority context
-						&& (evt.eventType != Event_Keyboard || context.priority <= highestPriorityKeyboardEvent)
-						&& (evt.eventType != Event_Joystick || context.priority <= highestPriorityJoystickEvent)
-						&& (evt.eventType != Event_Mouse    || context.priority <= highestPriorityMouseEvent))
+						&& (evt.eventType != Event_Keyboard || context.priority <= highestPriority.keyboardEvent)
+						&& (evt.eventType != Event_Joystick || context.priority <= highestPriority.joystickEvent)
+						&& (evt.eventType != Event_Mouse    || context.priority <= highestPriority.mouseEvent))
 					{
 						InputStateBinding& binding = state.binding;
 						bool matched = false;
@@ -268,14 +263,18 @@ namespace input {
 					if (evt.evt.type == SDL_MOUSEBUTTONDOWN || evt.evt.type == SDL_MOUSEBUTTONUP) {
 						action.mapping.xRaw = evt.evt.button.x;
 						action.mapping.yRaw = evt.evt.button.y;
+						action.mapping.x = evt.evt.button.x * inverseWindowWidth;
+						action.mapping.y = evt.evt.button.y * inverseWindowHeight;
 					}
 					else {
 						action.mapping.xRaw = action.mapping.yRaw = 0;
 					}
 					action.handled = 0;
 					action.active = 1;
+					action.activeIndex = frameMappedInput.activeActionCount;
+					++frameMappedInput.activeActionCount;
 
-					frameMappedInput.activeActions[frameMappedInput.activeActionCount++] =
+					frameMappedInput.activeActions[action.activeIndex] =
 						(InputActionIndex)mappedActionIndex;
 				}
 				// found a state mapping
@@ -309,8 +308,8 @@ namespace input {
 			}
 			// handle text input events if there is any active context that captures text input
 			else if (evt.eventType == Event_TextInput
-					 && highestPriorityTextEvent != 0xFF
-					 && highestPriorityTextEvent <= highestPriorityKeyboardEvent)
+					 && highestPriority.captureTextInput != 0xFF
+					 && highestPriority.captureTextInput <= highestPriority.keyboardEvent)
 			{
 				if (evt.evt.type == SDL_TEXTINPUT) {
 					memcpy(frameMappedInput.textInput, evt.evt.text.text, SDL_TEXTINPUTEVENT_TEXT_SIZE);
@@ -379,11 +378,9 @@ namespace input {
 	void GameInput::mapFrameMotion(
 		const UpdateInfo& ui,
 		DenseQueue_InputEvent& motionEvents,
-		u32 windowWidth,
-		u32 windowHeight)
+		f32 inverseWindowWidth,
+		f32 inverseWindowHeight)
 	{
-		f32 inverseWindowWidth  = 1.0f / windowWidth;
-		f32 inverseWindowHeight = 1.0f / windowHeight;
 		bool relativeMode = relativeMouseModeActive();
 
 		// reset mouse motion
@@ -419,22 +416,6 @@ namespace input {
 			}
 		}
 
-		// Find the highest priority active context that eats events, these block mappings at lower priority.
-		u8 highestPriorityMouseMotionEvent = 0xFF;
-		u8 highestPriorityJoystickMotionEvent = 0xFF;
-
-		for (u8 c = 0; c < _InputContextsCount; ++c) {
-			InputContext& context = contexts._contexts[c];
-			if (context.active) {
-				if (context.priority <= highestPriorityMouseMotionEvent && context.options & EatMouseMotionEvents) {
-					highestPriorityMouseMotionEvent = context.priority;
-				}
-				if (context.priority <= highestPriorityJoystickMotionEvent && context.options & EatJoystickMotionEvents) {
-					highestPriorityJoystickMotionEvent = context.priority;
-				}
-			}
-		}
-
 		// all AxisMotion is aggregated for frame, now map to active InputMappings
 		for (u8 m = 0; m < frameMappedInput.axisMotionCount + 2; ++m)
 		{
@@ -453,8 +434,8 @@ namespace input {
 				if (context.active
 					&& context.priority < highestAxisContextPriority
 					// make sure event wasn't eaten by a higher priority context
-					&& (isMouse  || context.priority <= highestPriorityJoystickMotionEvent)
-					&& (!isMouse || context.priority <= highestPriorityMouseMotionEvent))
+					&& (isMouse  || context.priority <= highestPriority.joystickMotionEvent)
+					&& (!isMouse || context.priority <= highestPriority.mouseMotionEvent))
 				{
 					InputAxisBinding& binding = axis.binding;
 
@@ -509,8 +490,10 @@ namespace input {
 				
 				axis.handled = 0;
 				axis.active = 1;
+				axis.activeIndex = frameMappedInput.activeAxisCount;
+				++frameMappedInput.activeAxisCount;
 
-				frameMappedInput.activeAxes[frameMappedInput.activeAxisCount++] =
+				frameMappedInput.activeAxes[axis.activeIndex] =
 					(InputAxisIndex)mappedAxisIndex;
 			}
 		}
@@ -609,52 +592,77 @@ namespace input {
 		}
 		return false;
 	}
+*/
 
-
-	Id_t GameInput::createContext(u8 options, u8 priority, bool makeActive)
+	void GameInput::setContextActive(InputContextIndex ctx, bool active)
 	{
-		//auto f = tss_([optionsMask, priority](ThreadSafeState& tss_) {
-		//	return tss_.inputContexts.emplace(optionsMask, priority);
-		//});
-		//return f;
+		InputContext& thisContext = contexts._contexts[ctx];
+		thisContext.active = (active ? 1 : 0);
+		
+		// re-evaluate highest priorities
+		if (thisContext.options > 0)
+		{
+			highestPriority = HighestPriority(); // reset all to 0xFF
 
-		auto contextId = inputContexts.emplace(optionsMask, priority);
-		activeInputContexts.push_back({ contextId, makeActive, priority, {} });
-		std::stable_sort(activeInputContexts.begin(), activeInputContexts.end(),
-						[](const ActiveInputContext& i, const ActiveInputContext& j) {
-							return i.priority < j.priority;
-						});
-
-		return contextId;
-	}
-
-
-	bool GameInput::setContextActive(Id_t contextId, bool active, i8 priority)
-	{
-		if (inputContexts.isValid(contextId)) {
-			for (auto& ac : activeInputContexts) {
-				if (ac.contextId == contextId) {
-					ac.active = active;
-					if (priority >= 0) {
-						ac.priority = (u8)priority;
+			for (u8 c = 0; c < _InputContextsCount; ++c)
+			{
+				InputContext& context = contexts._contexts[c];
+				if (context.active)
+				{
+					if (context.priority <= highestPriority.captureTextInput
+						&& context.options & CaptureTextInput)
+					{
+						highestPriority.captureTextInput = context.priority;
 					}
-					break;
+					if (context.priority <= highestPriority.setRelativeMouseMode
+						&& context.options & SetRelativeMouseMode)
+					{
+						highestPriority.setRelativeMouseMode = context.priority;
+					}
+					if (context.priority <= highestPriority.unsetRelativeMouseMode
+						&& context.options & UnsetRelativeMouseMode)
+					{
+						highestPriority.unsetRelativeMouseMode = context.priority;
+					}
+					if (context.priority <= highestPriority.keyboardEvent
+						&& context.options & EatKeyboardEvents)
+					{
+						highestPriority.keyboardEvent = context.priority;
+					}
+					if (context.priority <= highestPriority.mouseEvent
+						&& context.options & EatMouseEvents)
+					{
+						highestPriority.mouseEvent = context.priority;
+					}
+					if (context.priority <= highestPriority.joystickEvent
+						&& context.options & EatJoystickEvents)
+					{
+						highestPriority.joystickEvent = context.priority;
+					}
+					if (context.priority <= highestPriority.mouseMotionEvent
+						&& context.options & EatMouseMotionEvents)
+					{
+						highestPriority.mouseMotionEvent = context.priority;
+					}
+					if (context.priority <= highestPriority.joystickMotionEvent
+						&& context.options & EatJoystickMotionEvents)
+					{
+						highestPriority.joystickMotionEvent = context.priority;
+					}
 				}
 			}
-
-			if (priority >= 0) {
-				// re-sort the contexts if the priority was set explicitly
-				std::stable_sort(activeInputContexts.begin(), activeInputContexts.end(),
-								[](const ActiveInputContext& i, const ActiveInputContext& j) {
-					return i.priority < j.priority;
-				});
-			}
-
-			return true;
 		}
-		return false;
+		
+		if (highestPriority.setRelativeMouseMode != 0xFF
+			&& highestPriority.setRelativeMouseMode <= highestPriority.unsetRelativeMouseMode
+			&& !relativeMouseModeActive())
+		{
+			startRelativeMouseMode();
+		}
+		else if (relativeMouseModeActive()) {
+			stopRelativeMouseMode();
+		}
 	}
-*/
 
 	void GameInput::startTextInput()
 	{
@@ -701,8 +709,8 @@ namespace input {
 	void GameInput::init()
 	{
 		// TODO: for now I'm doing this here, but eventually this should probably move to a higher level function
-		contexts.inGame.active = 1;
-		contexts.playerFPS.active = 1;
+		setContextActive(InputContext_InGame);
+		setContextActive(InputContext_PlayerFPS);
 
 	//	inputMappings.init(GAMEINPUT_MAPPINGS_CAPACITY, inputMappingsBuffer);
 	//	assert(sizeof(inputMappingsBuffer) == HandleMap_InputMapping::getTotalBufferSize(GAMEINPUT_MAPPINGS_CAPACITY));
