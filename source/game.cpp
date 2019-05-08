@@ -11,18 +11,23 @@
 #include "platform/platform.h"
 #include "input/platform_input.h"
 
-#include "utility/logger.cpp"
-#include "input/game_input.cpp"
-
-
 struct SimulationUpdateContext {
-	Game&					game;
 	input::PlatformInput&	input;
 	GameMemory*				gameMemory;
 	SDLApplication*			app;
 };
 
-PlatformApi* platform = nullptr;
+static PlatformApi* platform = nullptr;
+
+/**
+ * it is possible to have multiple games in gameState memory at once, this pointer holds the game
+ * currently being simulated
+ */
+static Game* _game = nullptr;
+
+#include "utility/memory.cpp"
+#include "utility/logger.cpp"
+#include "input/game_input.cpp"
 
 
 /**
@@ -31,9 +36,12 @@ PlatformApi* platform = nullptr;
  * position and orientation are interpolated automatically, but other values like color that
  * need smooth interpolation for rendering should be handled manually.
  */
-void gameUpdateFrameTick(UpdateInfo& ui, void* _ctx)
+void gameUpdateFrameTick(
+	UpdateInfo& ui,
+	void* _ctx)
 {
 	SimulationUpdateContext& simContext = *(SimulationUpdateContext*)_ctx;
+	Game& game = *_game;
 
 	//logger::verbose("Update virtualTime=%lu: gameTime=%ld: deltaCounts=%ld: countsPerMs=%ld\n",
 	//                ui.virtualTime, ui.gameTime, ui.deltaCounts, ui.countsPerMs);
@@ -43,7 +51,7 @@ void gameUpdateFrameTick(UpdateInfo& ui, void* _ctx)
 	// if some systems operate on 1(+) frame-old-data, can they be run in parallel?
 	// should part of this list become a task flow?
 
-	simContext.game.gameInput.updateFrameTick(
+	game.gameInput.updateFrameTick(
 			ui,
 			simContext.input,
 			simContext.app->windowData.width,
@@ -77,30 +85,33 @@ void gameUpdateFrameTick(UpdateInfo& ui, void* _ctx)
  * smooth animation, state must be kept from the two most recent update ticks, and interpolated
  * in this loop for final rendering.
  */
-void gameRenderFrameTick(GameMemory* gameMemory, float interpolation,
-						 int64_t realTime, int64_t countsPassed)
+void gameRenderFrameTick(
+	GameMemory* gameMemory,
+	float interpolation,
+	int64_t realTime,
+	int64_t countsPassed)
 {
-//	logger::verbose("Render realTime=%lu: interpolation=%0.3f\n", realTime, interpolation);
+	//	logger::verbose("Render realTime=%lu: interpolation=%0.3f\n", realTime, interpolation);
 
-//	engine.resourceLoader->executeCallbacks();
+	//	engine.resourceLoader->executeCallbacks();
 
-//	game.screenShaker.renderFrameTick(game, engine, interpolation, realTime, countsPassed);
+	//	game.screenShaker.renderFrameTick(game, engine, interpolation, realTime, countsPassed);
 
-//	game.devConsole.renderFrameTick(game, engine, interpolation, realTime, countsPassed);
+	//	game.devConsole.renderFrameTick(game, engine, interpolation, realTime, countsPassed);
 
-//	engine.sceneManager->renderActiveScenes(interpolation, engine);
+	//	engine.sceneManager->renderActiveScenes(interpolation, engine);
 
-//	engine.renderSystem->renderFrame(interpolation, engine);
+	//	engine.renderSystem->renderFrame(interpolation, engine);
 }
 
 
 /**
  * Create and init the systems of the griffin engine, and do dependency injection
  */
-void makeCoreSystems(GameMemory* gameMemory)
+void makeCoreSystems(
+	GameMemory* gameMemory,
+	Game& game)
 {
-	Game& game = *(Game*)gameMemory->gameState;
-	
 	/**
 	 * Create thread pool, one worker thread per logical core
 	 */
@@ -241,14 +252,15 @@ void makeCoreSystems(GameMemory* gameMemory)
 
 
 /**
- * Create and init the initial game state and game systems and do dependency injection
+ * Create and init the initial game state and game systems
  */
-void makeGame(GameMemory* gameMemory)
+Game* makeGame(
+	GameMemory* gameMemory)
 {
-	Game& game = *gameMemory->gameState;
+	Game* newGame = allocType(&gameMemory->gameState, Game);
+	Game& game = *newGame;
+	assert(is_aligned(newGame,64) && "game is not cache aligned");
 
-//	GamePtr gamePtr = std::make_shared<Game>();
-//	Game& game = *gamePtr;
 
 	// InputSystem.lua contains initInputSystem function
 //	engine.scriptManager->doFile(engine.engineLuaState, "scripts/game/initGame.lua"); // throws on error
@@ -256,7 +268,7 @@ void makeGame(GameMemory* gameMemory)
 	// invoke Lua function to init the game
 //	engine.scriptManager->callLuaGlobalFunction(engine.engineLuaState, "initGame");
 
-	makeCoreSystems(gameMemory);
+	makeCoreSystems(gameMemory, game);
 
 	// set up game scene
 	{
@@ -294,15 +306,18 @@ void makeGame(GameMemory* gameMemory)
 
 //	return game;
 	gameMemory->initialized = true;
+
+	return newGame;
 }
 
 
 /**
  * Releases all systems on the OpenGL thread
  */
-void destroyGame(GameMemory* gameMemory)
+void destroyGame(
+	GameMemory* gameMemory)
 {
-	Game& game = *gameMemory->gameState;
+	Game& game = *_game;
 
 //	terrain.deinit();
 
@@ -339,10 +354,12 @@ void destroyGame(GameMemory* gameMemory)
 // game memory but not all, like the GameInput memory for example
 
 extern "C" {
+	// TODO: consider returning u8 = 1 to quit the game
 	_export
 	void
 	gameUpdateAndRender(
 		GameMemory* gameMemory,
+		PlatformApi* platformApi,
 		input::PlatformInput* input,
 		SDLApplication* app,
 		i64 realTime,
@@ -350,16 +367,16 @@ extern "C" {
 		i64 countsPerMs,
 		u64 frame)
 	{
-		if (!platform) {
-			platform = &gameMemory->platform;
-			logger::_log = platform->log;
-		}
+		// move these to onLoad/init function
+		platform = platformApi;
+		logger::_log = platform->log;
+
 		if (!gameMemory->initialized) {
-			makeGame(gameMemory);
+			_game = makeGame(gameMemory);
 		}
 
-		Game& game = *(Game*)gameMemory->gameState;
-		SimulationUpdateContext ctx = { game, *input, gameMemory, app };
+		Game& game = *_game;
+		SimulationUpdateContext ctx = { *input, gameMemory, app };
 		
 		float interpolation = game.simulationUpdate.tick(
 				1000.0f / 30.0f,	// deltaMS, run at 30fps
@@ -377,4 +394,6 @@ extern "C" {
 
 		gameRenderFrameTick(gameMemory, interpolation, realTime, countsPassed);
 	}
+
+	// TODO: deinit function calls destroyGame
 }

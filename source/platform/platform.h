@@ -6,7 +6,6 @@
 #include <SDL_syswm.h>
 #include "../utility/types.h"
 #include "../utility/logger.h"
-#include "../game.h"
 
 /*class FileSystemWatcher {
 public:
@@ -44,6 +43,18 @@ struct WindowData {
 struct SystemInfo {
 	int				cpuCount;		// number of logical CPU cores
 	int				systemRAM;		// amount of system RAM in MB
+	
+	u32				pageSize;
+	u32				allocationGranularity;
+	
+	void*			minimumApplicationAddress;
+	void*			maximumApplicationAddress;
+	
+	u64				activeProcessorMask;
+	u32				logicalProcessorCount;
+	u16				processorArchitecture;
+	u16				processorLevel;
+	u16				processorRevision;
 };
 
 struct JoystickInfo {
@@ -71,23 +82,18 @@ struct SDLApplication {
 	SDL_Cursor*		cursors[_InputMouseCursorCount];
 };
 
+typedef MemoryBlock* PlatformAllocateFunc(size_t);
+
 struct PlatformApi {
-	logger::LogFunc* log;
+	logger::LogFunc*		log;
+	PlatformAllocateFunc*	allocate;
 };
 
 struct GameMemory {
-	Game*			gameState;
-	size_t			gameStateSize;
-
-	void*			transient;
-	size_t			transientSize;
-
-	void*			frameScoped;
-	size_t			frameScopedSize;
-	
+	MemoryArena		gameState;
+	MemoryArena		transient;
+	MemoryArena		frameScoped;
 	bool			initialized;
-
-	PlatformApi		platform;
 };
 
 namespace logger {

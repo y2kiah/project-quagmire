@@ -6,11 +6,6 @@
 //#include <resource/ResourceLoader.h>
 //#include <utility/profile/Profile.h>
 //#include <tests/Test.h>
-#include "utility/platform_logger.cpp"
-#include "platform/timer.cpp"
-#include "platform/platform.cpp"
-#include "input/platform_input.cpp"
-
 
 // enable dedicated graphics for NVIDIA and AMD
 extern "C" {
@@ -18,8 +13,17 @@ extern "C" {
 	_export int AmdPowerXpressRequestHighPerformance = 1;
 }
 
+static SDLApplication app;
+static PlatformApi* platform = nullptr;
 
-bool initApplication(SDLApplication& app)
+#include "utility/memory.cpp"
+#include "utility/platform_logger.cpp"
+#include "platform/timer.cpp"
+#include "platform/platform.cpp"
+#include "input/platform_input.cpp"
+
+
+bool initApplication()
 {
 	// initialize all subsystems except audio
 	if (SDL_Init(SDL_INIT_EVERYTHING & ~SDL_INIT_AUDIO) < 0) {
@@ -31,19 +35,16 @@ bool initApplication(SDLApplication& app)
 	// Logger takes over the priority filtering from SDL, so we just set the max level for SDL
 	SDL_LogSetAllPriority(SDL_LOG_PRIORITY_VERBOSE);
 
+	app.systemInfo = platformGetSystemInfo();
+	
 	// turn off text input to start
 	SDL_StopTextInput();
-
-	// get system info
-	app.systemInfo.cpuCount = SDL_GetCPUCount();
-	app.systemInfo.systemRAM = SDL_GetSystemRAM();
 
 	return true;
 }
 
 
 bool initWindow(
-	SDLApplication& app,
 	const char* appName)
 {
 	// get number of displays
@@ -127,7 +128,7 @@ bool initWindow(
 }
 
 
-bool initOpenGL(SDLApplication& app)
+bool initOpenGL()
 {
 	// Initialize GLEW
 	glewExperimental = true; // Needed in core profile
@@ -197,9 +198,9 @@ bool initOpenGL(SDLApplication& app)
 }
 
 
-void quitApplication(SDLApplication& app)
+void quitApplication()
 {
-	input::deinitPlatformInput(app);
+	input::deinitPlatformInput();
 
 	if (app.windowData.glContext) {
 		SDL_GL_DeleteContext(app.windowData.glContext);
@@ -220,7 +221,6 @@ int gameProcess(void* ctx)
 {
 	GameContext& gameContext = *(GameContext*)ctx;
 	gameContext.done = false;
-	SDLApplication& app = *(gameContext.app);
 	Timer timer;
 	u64 frame = 0;
 
@@ -239,6 +239,7 @@ int gameProcess(void* ctx)
 		if (gameContext.gameCode.isValid) {
 			gameContext.gameCode.updateAndRender(
 					&gameContext.gameMemory,
+					platform,
 					&gameContext.input,
 					gameContext.app,
 					realTime,
@@ -274,23 +275,24 @@ int main(int argc, char *argv[])
 {
 	initHighPerfTimer();
 	
+	PlatformApi platformApi = createPlatformApi();
+	platform = &platformApi;
+	
 	logger::_log = &logger::log;
 	//logger::setMode(logger::Mode_Immediate_Thread_Unsafe);
 	logger::setAllPriorities(logger::Priority_Verbose);
-	
-	SDLApplication app;
 
-	if (!initApplication(app) ||
-		!initWindow(app, PROGRAM_NAME) ||
-		!input::initPlatformInput(app) ||
-		!initOpenGL(app))
+	if (!initApplication() ||
+		!initWindow(PROGRAM_NAME) ||
+		!input::initPlatformInput() ||
+		!initOpenGL())
 	{
-		quitApplication(app);
+		quitApplication();
 		return 1;
 	}
 
 	GameContext gameContext = {};
-	createGameContext(gameContext, &app);
+	createGameContext(gameContext);
 
 	// run tests at startup
 	using Something = h64;
@@ -385,7 +387,7 @@ int main(int argc, char *argv[])
 	//enginePtr.reset(); // must delete the engine on the GL thread
 
 	destroyGameContext(gameContext);
-	quitApplication(app);
+	quitApplication();
 
 	return 0;
 }

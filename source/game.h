@@ -2,6 +2,7 @@
 #define _GAME_H
 
 #include "utility/common.h"
+#include "utility/memory.h"
 #include "utility/nstring.h"
 #include "utility/dense_handle_map_16.h"
 #include "utility/dense_handle_map_32.h"

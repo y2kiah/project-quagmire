@@ -148,7 +148,7 @@ namespace input {
 	}
 
 
-	bool initPlatformInput(SDLApplication& app) {
+	bool initPlatformInput() {
 		// Initialize the mouse cursors table
 		app.cursors[Cursor_Arrow]     = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW);
 		app.cursors[Cursor_Hand]      = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND);
@@ -220,7 +220,7 @@ namespace input {
 	}
 
 
-	void deinitPlatformInput(SDLApplication& app)
+	void deinitPlatformInput()
 	{
 		// close all joysticks
 		for (u32 j = 0; j < app.joystickInfo.numJoysticks; ++j) {

@@ -5,6 +5,7 @@
 #include "input/platform_input.h"
 #include "utility/logger.h"
 #include <SDL_filesystem.h>
+#include <SDL_cpuinfo.h>
 
 #ifdef _WIN32
 
@@ -12,6 +13,7 @@
 
 typedef void GameUpdateAndRender(
 		GameMemory* gameMemory,
+		PlatformApi* platform,
 		input::PlatformInput* input,
 		SDLApplication* app,
 		i64 realTime,
@@ -42,7 +44,24 @@ void platformSleep(unsigned long ms) {
 
 void showErrorBox(const char *text, const char *caption)
 {
+	// TODO: need to convert from UTF-8 text to wchar_t here
 	MessageBoxA(NULL, text, caption, MB_OK | MB_ICONERROR | MB_TOPMOST);
+}
+
+void showLastErrorAndQuit()
+{
+	LPWSTR pBuffer = nullptr;
+	FormatMessageW(
+		FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
+		0,
+		GetLastError(),
+		0,
+		(LPWSTR)&pBuffer,
+		0,
+		0);
+	
+	MessageBoxW(NULL, pBuffer, L"Unrecoverable Error", MB_OK | MB_ICONERROR | MB_TOPMOST);
+	exit(1);
 }
 
 void setWindowIcon(const WindowData* windowData)
@@ -56,28 +75,6 @@ void setWindowIcon(const WindowData* windowData)
 //		SetClassLongPtr(hWnd, GCLP_HICON, reinterpret_cast<LONG_PTR>(icon));
 //		SetClassLongPtr(hWnd, GCLP_HICONSM, reinterpret_cast<LONG_PTR>(icon));
 //	}
-}
-
-void createGameMemory(GameMemory& gameMemory)
-{
-	const size_t pageSize = 4096; // TODO: should this just be 64K? allocations must be on 64K boundaries
-	
-	if (!gameMemory.gameState) {
-		gameMemory.gameStateSize = align(sizeof(Game), pageSize);
-		gameMemory.gameState = (Game*)VirtualAlloc(0, gameMemory.gameStateSize, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
-	}
-
-	if (!gameMemory.frameScoped) {
-		gameMemory.frameScopedSize = align(megabytes(FRAMESCOPED_MEGABYTES), pageSize);
-		gameMemory.frameScoped = VirtualAlloc(0, gameMemory.frameScopedSize, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
-	}
-
-	if (!gameMemory.transient) {
-		gameMemory.transientSize = align(megabytes(TRANSIENT_MEGABYTES), pageSize);
-		gameMemory.transient = VirtualAlloc(0, gameMemory.transientSize, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
-	}
-
-	gameMemory.platform.log = &logger::log;
 }
 
 FILETIME fileGetLastWriteTime(const char *filename)
@@ -151,6 +148,52 @@ void loadGameCode(GameCode& gameCode)
 		gameCode.updateAndRender = nullptr;
 	}
 }
+
+SystemInfo platformGetSystemInfo()
+{
+	SystemInfo info{};
+	SYSTEM_INFO si{};
+	GetSystemInfo(&si);
+
+	info.pageSize = si.dwPageSize;
+	info.allocationGranularity = si.dwAllocationGranularity;
+	
+	info.minimumApplicationAddress = si.lpMinimumApplicationAddress;
+	info.maximumApplicationAddress = si.lpMaximumApplicationAddress;
+	
+	info.activeProcessorMask = si.dwActiveProcessorMask;
+	info.logicalProcessorCount = si.dwNumberOfProcessors;
+	info.processorArchitecture = si.wProcessorArchitecture;
+	info.processorLevel = si.wProcessorLevel;
+	info.processorRevision = si.wProcessorRevision;
+
+	info.cpuCount = SDL_GetCPUCount(); // TODO: is this needed?
+	info.systemRAM = SDL_GetSystemRAM();
+
+	// TODO: call IsProcessorFeaturePresent on features we need to check for
+
+	return info;
+}
+
+MemoryBlock* platformAllocate(
+	size_t minimumSize)
+{
+	SIZE_T size = ((minimumSize / app.systemInfo.allocationGranularity) + 1) * app.systemInfo.allocationGranularity;
+	void* memory = VirtualAlloc(0, size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+	
+	// if we can't allocate memory, time to panic (for now)
+	if (!memory) {
+		// TODO: before exiting, we could try to detect and free up memory and retry the allocation
+		showLastErrorAndQuit();
+	}
+
+	MemoryBlock* block = (MemoryBlock*)memory;
+	block->base = (void*)((uintptr_t)memory + sizeof(MemoryBlock));
+	block->size = size - sizeof(MemoryBlock);
+
+	return block;
+}
+
 
 #else
 
@@ -259,16 +302,15 @@ struct GameContext {
 	SDLApplication*			app = nullptr;
 	GameCode				gameCode = {};
 	GameMemory				gameMemory = {};
-	input::PlatformInput	input = {}; // TODO: will this be aligned to 64 byte, alignas might not work here
+	input::PlatformInput	input = {};
 	std::atomic_bool		done; // TODO: consider using SDL atomics instead of std to avoid the template
 };
 
 
-void createGameContext(GameContext& gameContext, SDLApplication* app)
+void createGameContext(GameContext& gameContext)
 {
-	gameContext.app = app;
+	gameContext.app = &app;
 	
-	createGameMemory(gameContext.gameMemory);
 	loadGameCode(gameContext.gameCode);
 	
 	// Note: not asserting on full for the event concurrent queues, if the game stops processing
@@ -316,7 +358,7 @@ bool getWindowInfo(SDL_Window* window, SDL_SysWMinfo* info)
 {
 	SDL_VERSION(&info->version);
 	if (SDL_GetWindowWMInfo(window, info) != SDL_TRUE) {
-		// log (SDL_GetError());
+		logger::error(SDL_GetError());
 		return false;
 	}
 	return true;
@@ -330,4 +372,14 @@ bool getEnvironmentInfo(Environment* env)
 	
 	return strlen(env->preferencesPath) 
 		&& strlen(env->currentWorkingDirectory);
+}
+
+PlatformApi createPlatformApi()
+{
+	PlatformApi api{};
+	
+	api.log = &logger::log;
+	api.allocate = &platformAllocate;
+
+	return api;
 }

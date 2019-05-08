@@ -6,12 +6,14 @@
 #include <SDL_syswm.h>
 #include <GL/glew.h>
 #include "utility/common.h"
+#include "utility/memory.h"
 #include "utility/nstring.h"
 #include "utility/dense_handle_map_16.h"
 #include "utility/dense_handle_map_32.h"
 #include "utility/dense_queue.h"
 #include "utility/concurrent_queue.h"
 #include "utility/logger.h"
+#include "utility/fixed_timestep.h"
 #include "platform/platform.h"
 #include "platform/timer.h"
 #include "input/platform_input.h"
