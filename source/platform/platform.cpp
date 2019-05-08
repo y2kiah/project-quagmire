@@ -11,7 +11,7 @@
 
 #include "Windows.h"
 
-typedef void GameUpdateAndRender(
+typedef u8 GameUpdateAndRenderFunc(
 		GameMemory* gameMemory,
 		PlatformApi* platform,
 		input::PlatformInput* input,
@@ -21,12 +21,24 @@ typedef void GameUpdateAndRender(
 		i64 countsPerMs,
 		u64 frame);
 
+typedef u8 GameOnLoadFunc(
+		GameMemory* gameMemory,
+		PlatformApi* platformApi,
+		SDLApplication* app);
+
+typedef void GameOnExitFunc(
+		GameMemory* gameMemory,
+		PlatformApi* platformApi,
+		SDLApplication* app);
+
 struct GameCode
 {
 	HMODULE		gameDLL;
 	FILETIME	dllLastWriteTime;
 
-	GameUpdateAndRender *updateAndRender = nullptr;
+	GameUpdateAndRenderFunc*	updateAndRender = nullptr;
+	GameOnLoadFunc*				onLoad = nullptr;
+	GameOnExitFunc*				onExit = nullptr;
 	//game_get_sound_samples *getSoundSamples;
 
 	bool isValid = false;
@@ -38,11 +50,15 @@ void yieldThread()
 	SwitchToThread();
 }
 
-void platformSleep(unsigned long ms) {
+void platformSleep(
+	unsigned long ms)
+{
 	Sleep(ms);
 }
 
-void showErrorBox(const char *text, const char *caption)
+void showErrorBox(
+	const char *text,
+	const char *caption)
 {
 	// TODO: need to convert from UTF-8 text to wchar_t here
 	MessageBoxA(NULL, text, caption, MB_OK | MB_ICONERROR | MB_TOPMOST);
@@ -64,7 +80,8 @@ void showLastErrorAndQuit()
 	exit(1);
 }
 
-void setWindowIcon(const WindowData* windowData)
+void setWindowIcon(
+	const WindowData* windowData)
 {
 	HWND hWnd = windowData->wmInfo.info.win.window;
 	HINSTANCE handle = GetModuleHandle(nullptr);
@@ -77,7 +94,8 @@ void setWindowIcon(const WindowData* windowData)
 //	}
 }
 
-FILETIME fileGetLastWriteTime(const char *filename)
+FILETIME fileGetLastWriteTime(
+	const char *filename)
 {
 	FILETIME lastWriteTime = {};
 	
@@ -89,7 +107,8 @@ FILETIME fileGetLastWriteTime(const char *filename)
 	return lastWriteTime;
 }
 
-void unloadGameCode(GameCode& gameCode)
+void unloadGameCode(
+	GameCode& gameCode)
 {
 	if (gameCode.gameDLL) {
 		FreeLibrary(gameCode.gameDLL);
@@ -100,20 +119,37 @@ void unloadGameCode(GameCode& gameCode)
 	gameCode.updateAndRender = nullptr;
 }
 
-void loadGameCode(GameCode& gameCode)
+bool loadGameDLL(
+	GameCode& gameCode,
+	const char* gameDLLPath)
 {
+	gameCode.gameDLL = LoadLibraryA(gameDLLPath);
+	if (gameCode.gameDLL) {
+		gameCode.updateAndRender = (GameUpdateAndRenderFunc*)GetProcAddress(gameCode.gameDLL, "gameUpdateAndRender");
+		gameCode.onLoad = (GameOnLoadFunc*)GetProcAddress(gameCode.gameDLL, "onLoad");
+		gameCode.onExit = (GameOnExitFunc*)GetProcAddress(gameCode.gameDLL, "onExit");
+
+		gameCode.isValid = (gameCode.updateAndRender);
+	}
+	return gameCode.isValid;
+}
+
+/**
+ * @returns true if new code was loaded
+ */
+bool loadGameCode(
+	GameCode& gameCode)
+{
+	bool loaded = false;
 	const char *gameDLLPath    = "game.dll";
 	const char *newGameDLLPath = "./build/game.dll";
 	const char *lockFilePath   = "./build/lock.tmp";
 	
 	// load on startup
 	if (!gameCode.isValid) {
-		gameCode.gameDLL = LoadLibraryA(gameDLLPath);
-		if (gameCode.gameDLL) {
-			gameCode.updateAndRender = (GameUpdateAndRender*)GetProcAddress(gameCode.gameDLL, "gameUpdateAndRender");
+		if (loadGameDLL(gameCode, gameDLLPath)) {
 			gameCode.dllLastWriteTime = fileGetLastWriteTime(gameDLLPath);
-			
-			gameCode.isValid = (gameCode.updateAndRender);
+			loaded = true;
 		}
 	}
 	// try reload from new dll in build directory
@@ -131,12 +167,9 @@ void loadGameCode(GameCode& gameCode)
 				
 				CopyFileA(newGameDLLPath, gameDLLPath, FALSE);
 
-				gameCode.gameDLL = LoadLibraryA(gameDLLPath);
-				if (gameCode.gameDLL) {
-					gameCode.updateAndRender = (GameUpdateAndRender*)GetProcAddress(gameCode.gameDLL, "gameUpdateAndRender");
+				if (loadGameDLL(gameCode, gameDLLPath)) {
 					gameCode.dllLastWriteTime = newDLLFileTime;
-					
-					gameCode.isValid = (gameCode.updateAndRender);
+					loaded = true;
 				}
 
 				logger::info(gameCode.isValid ? "loaded!" : "ERROR LOADING");
@@ -146,7 +179,11 @@ void loadGameCode(GameCode& gameCode)
 
 	if (!gameCode.isValid) {
 		gameCode.updateAndRender = nullptr;
+		gameCode.onLoad = nullptr;
+		gameCode.onExit = nullptr;
 	}
+
+	return loaded;
 }
 
 SystemInfo platformGetSystemInfo()

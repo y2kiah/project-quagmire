@@ -16,14 +16,16 @@ namespace input {
 
 		// clear previous frame actions and axis mappings
 		for (u8 a = 0; a < frameMappedInput.activeActionCount; ++a) {
-			actions._actions[a].active = 0;
-			actions._actions[a].activeIndex = 0xFF;
+			InputActionIndex ai = frameMappedInput.activeActions[a];
+			actions._actions[ai].active = 0;
+			actions._actions[ai].activeIndex = 0xFF;
 		}
 		frameMappedInput.activeActionCount = 0;
 		
 		for (u8 a = 0; a < frameMappedInput.activeAxisCount; ++a) {
-			axes._axes[a].active = 0;
-			axes._axes[a].activeIndex = 0xFF;
+			InputAxisIndex ai = frameMappedInput.activeAxes[a];
+			axes._axes[ai].active = 0;
+			axes._axes[ai].activeIndex = 0xFF;
 		}
 		frameMappedInput.activeAxisCount = 0;
 		

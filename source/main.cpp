@@ -224,6 +224,11 @@ int gameProcess(void* ctx)
 	Timer timer;
 	u64 frame = 0;
 
+	gameContext.gameCode.onLoad(
+			&gameContext.gameMemory,
+			platform,
+			gameContext.app);
+
 	// gl context made current on the main loop thread
 	SDL_GL_MakeCurrent(app.windowData.window, app.windowData.glContext);
 	
@@ -237,15 +242,16 @@ int gameProcess(void* ctx)
 		realTime = timer.stopCounts;
 
 		if (gameContext.gameCode.isValid) {
-			gameContext.gameCode.updateAndRender(
-					&gameContext.gameMemory,
-					platform,
-					&gameContext.input,
-					gameContext.app,
-					realTime,
-					countsPassed,
-					timer.countsPerMs,
-					frame);
+			gameContext.done =
+				gameContext.gameCode.updateAndRender(
+						&gameContext.gameMemory,
+						platform,
+						&gameContext.input,
+						gameContext.app,
+						realTime,
+						countsPassed,
+						timer.countsPerMs,
+						frame);
 		}
 
 		SDL_GL_SwapWindow(app.windowData.window);
@@ -255,12 +261,22 @@ int gameProcess(void* ctx)
 		gameCodeHotLoad.tick(500.0f, realTime, countsPassed, timer.countsPerMs, frame, 1.0f,
 			[](UpdateInfo& ui, void* _gameContext) {
 				GameContext& gameContext = *(GameContext*)_gameContext;
-				loadGameCode(gameContext.gameCode);
+				if (loadGameCode(gameContext.gameCode)) {
+					gameContext.gameCode.onLoad(
+							&gameContext.gameMemory,
+							platform,
+							gameContext.app);
+				}
 			}, ctx);
 		#endif
 
 		yieldThread();
 	}
+
+	gameContext.gameCode.onExit(
+			&gameContext.gameMemory,
+			platform,
+			gameContext.app);
 
 	// NOTE: be sure to wait on important futures here for processes that must finish before exit (e.g. save game)
 

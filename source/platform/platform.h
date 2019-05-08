@@ -93,6 +93,7 @@ struct GameMemory {
 	MemoryArena		gameState;
 	MemoryArena		transient;
 	MemoryArena		frameScoped;
+	void*			game;
 	bool			initialized;
 };
 

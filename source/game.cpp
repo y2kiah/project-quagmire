@@ -77,6 +77,17 @@ void gameUpdateFrameTick(
 //	game.screenShaker.updateFrameTick(game, engine, ui);
 	
 //	engine.sceneManager->updateActiveScenes();
+
+	// handle switching mouse relative mouse mode (and cursor visibility)
+	if (game.gameInput.actions.captureMouse.active) {
+		if (game.gameInput.relativeMouseModeActive()) {
+			game.gameInput.stopRelativeMouseMode();
+		}
+		else {
+			game.gameInput.startRelativeMouseMode();
+		}
+		game.gameInput.actions.captureMouse.handled = 1;
+	}
 }
 
 
@@ -258,6 +269,7 @@ Game* makeGame(
 	GameMemory* gameMemory)
 {
 	Game* newGame = allocType(&gameMemory->gameState, Game);
+	gameMemory->game = (void*)newGame;
 	Game& game = *newGame;
 	assert(is_aligned(newGame,64) && "game is not cache aligned");
 
@@ -315,10 +327,9 @@ Game* makeGame(
  * Releases all systems on the OpenGL thread
  */
 void destroyGame(
-	GameMemory* gameMemory)
+	GameMemory* gameMemory,
+	Game& game)
 {
-	Game& game = *_game;
-
 //	terrain.deinit();
 
 	// Destroy the scene manager
@@ -350,13 +361,10 @@ void destroyGame(
 //	task_base::s_threadPool.reset();
 }
 
-// TODO: define a function to call once on every code reload, for example may need to reinit some
-// game memory but not all, like the GameInput memory for example
 
 extern "C" {
-	// TODO: consider returning u8 = 1 to quit the game
 	_export
-	void
+	u8
 	gameUpdateAndRender(
 		GameMemory* gameMemory,
 		PlatformApi* platformApi,
@@ -367,19 +375,11 @@ extern "C" {
 		i64 countsPerMs,
 		u64 frame)
 	{
-		// move these to onLoad/init function
-		platform = platformApi;
-		logger::_log = platform->log;
-
-		if (!gameMemory->initialized) {
-			_game = makeGame(gameMemory);
-		}
-
 		Game& game = *_game;
 		SimulationUpdateContext ctx = { *input, gameMemory, app };
 		
 		float interpolation = game.simulationUpdate.tick(
-				1000.0f / 30.0f,	// deltaMS, run at 30fps
+				1000.0f / 60.0f,	// deltaMS, run at 60fps
 				realTime,
 				countsPassed,
 				countsPerMs,
@@ -393,7 +393,42 @@ extern "C" {
 		//engine.threadPool->executeFixedThreadTasks(ThreadAffinity::Thread_OpenGL_Render);
 
 		gameRenderFrameTick(gameMemory, interpolation, realTime, countsPassed);
+		
+		// TODO: for now, quitting just involves hitting ESC key, this will obviously change in the future
+		u8 quit = game.gameInput.actions.exit.active;
+		
+		return quit;
 	}
 
-	// TODO: deinit function calls destroyGame
+	_export
+	u8
+	onLoad(
+		GameMemory* gameMemory,
+		PlatformApi* platformApi,
+		SDLApplication* app)
+	{
+		platform = platformApi;
+		logger::_log = platform->log;
+
+		if (!gameMemory->initialized) {
+			_game = makeGame(gameMemory);
+		}
+		else {
+			_game = (Game*)gameMemory->game;
+		}
+
+		return (_game != nullptr ? 1 : 0);
+	}
+
+	_export
+	void
+	onExit(
+		GameMemory* gameMemory,
+		PlatformApi* platformApi,
+		SDLApplication* app)
+	{
+		if (_game) {
+			destroyGame(gameMemory, *_game);
+		}
+	}
 }
