@@ -1,17 +1,17 @@
 #include "memory.h"
-#include "../platform/platform.h"
+#include "../platform/platform_api.h"
 
 
 MemoryBlock* pushBlock(
 	MemoryArena* arena,
 	size_t minimumSize)
 {
-	void* memory = platform->allocate(minimumSize);
-	MemoryBlock* newBlock = (MemoryBlock*)memory;
+	assert(arena && arena->threadID == SDL_ThreadID() && "MemoryArena thread mismatch");
+
+	// MemoryBlock safe to cast directly from PlatformBlock, it is asserted to be the base member
+	MemoryBlock* newBlock = (MemoryBlock*)platform->allocate(minimumSize);
 	
 	if (arena) {
-		SDL_LockMutex(arena->lock);
-		
 		newBlock->prev = arena->lastBlock;
 		if (arena->lastBlock) {
 			arena->lastBlock->next = newBlock;
@@ -22,11 +22,68 @@ MemoryBlock* pushBlock(
 		}
 		arena->totalSize += newBlock->size;
 		++arena->numBlocks;
-
-		SDL_UnlockMutex(arena->lock);
 	}
 
 	return newBlock;
+}
+
+
+bool popBlock(
+	MemoryArena *arena)
+{
+	assert(arena && arena->threadID == SDL_ThreadID() && "MemoryArena thread mismatch");
+
+	MemoryBlock *last = arena->lastBlock;
+	if (last) {
+		if (arena->currentBlock == last) {
+			arena->currentBlock = last->prev;
+		}
+		if (arena->firstBlock == last) {
+			arena->firstBlock = nullptr;
+		}
+		arena->lastBlock = last->prev;
+		
+		--arena->numBlocks;
+		arena->totalSize -= last->size;
+
+		platform->deallocate((PlatformBlock*)last);
+	}
+	return (last != nullptr);
+}
+
+
+void removeBlock(
+	MemoryBlock* block)
+{
+	assert(block);
+	if (block->arena) {
+		MemoryArena& arena = *block->arena;
+		
+		assert(arena.threadID == SDL_ThreadID() && "MemoryArena thread mismatch");
+
+		if (block->next) {
+			block->next->prev = block->prev;
+		}
+		else {
+			arena.lastBlock = block->prev;
+		}
+
+		if (block->prev) {
+			block->prev->next = block->next;
+		}
+		else {
+			arena.firstBlock = block->next;
+		}
+
+		if (arena.currentBlock == block) {
+			arena.currentBlock = (block->next ? block->next : block->prev);
+		}
+
+		--arena.numBlocks;
+		arena.totalSize -= block->size;
+
+		platform->deallocate((PlatformBlock*)block);
+	}
 }
 
 
@@ -43,7 +100,6 @@ BlockFitResult getBlockToFit(
 	size_t requiredSize = size;
 
 	do {
-		// TODO: if block is not a thread match to the original block, skip
 		uintptr_t currentAddr = (uintptr_t)block->base + block->used;
 		uintptr_t alignmentOffset = align(currentAddr, (uintptr_t)align) - currentAddr;
 		requiredSize = size + alignmentOffset;
@@ -68,11 +124,7 @@ BlockFitResult getBlockToFit(
 		size_t blockRemaining = block->size - block->used - requiredSize;
 		size_t startRemaining = startBlock->size - startBlock->used;
 		if (blockRemaining > startRemaining) {
-			// TODO: for now locking this, but once MemoryBlocks are thread specific, and each
-			// thread has its own currentBlock pointer, this will no longer require locking
-			SDL_LockMutex(arena->lock);
 			arena->currentBlock = block;
-			SDL_UnlockMutex(arena->lock);
 		}
 	}
 	
@@ -83,8 +135,10 @@ BlockFitResult getBlockToFit(
 void preemptivelyPushBlock(
 	MemoryArena* arena)
 {
-	if (arena->currentBlock) {
-		size_t remaining = arena->currentBlock->size - arena->currentBlock->used;
+	assert(arena && arena->threadID == SDL_ThreadID() && "MemoryArena thread mismatch");
+
+	if (arena->lastBlock) {
+		size_t remaining = arena->lastBlock->size - arena->lastBlock->used;
 		if (remaining <= PREEMPTIVE_ALLOC_THRESHOLD) {
 			pushBlock(arena);	
 		}
@@ -97,6 +151,8 @@ void* _allocSize(
 	size_t size,
 	u32 align)
 {
+	assert(arena && arena->threadID == SDL_ThreadID() && "MemoryArena thread mismatch");
+
 	void* allocAddr = nullptr;
 
 	if (!arena->currentBlock) {
@@ -112,4 +168,40 @@ void* _allocSize(
 	}
 
 	return allocAddr;
+}
+
+
+void clearArena(
+	MemoryArena* arena)
+{
+	MemoryBlock* block = arena->firstBlock;
+	while (block) {
+		MemoryBlock* next = block->next;
+		platform->deallocate((PlatformBlock*)block);
+		block = next;
+	}
+	*arena = makeArena();
+}
+
+
+void shrinkArena(
+	MemoryArena* arena)
+{
+	while (arena->lastBlock
+		   && arena->lastBlock->used == 0)
+	{
+		MemoryBlock* prev = arena->lastBlock->prev;
+		arena->totalSize -= arena->lastBlock->size;
+		--arena->numBlocks;
+		platform->deallocate((PlatformBlock*)arena->lastBlock);
+		
+		if (arena->currentBlock == arena->lastBlock) {
+			arena->currentBlock = prev;
+		}
+		arena->lastBlock = prev;
+	}
+	if (!arena->lastBlock) {
+		arena->firstBlock = nullptr;
+		assert(arena->numBlocks == 0 && arena->totalSize == 0);
+	}
 }

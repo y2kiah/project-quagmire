@@ -7,8 +7,8 @@
 #include <SDL_render.h>
 #include <SDL_video.h>
 #include <SDL_syswm.h>
+#include "platform/platform_api.h"
 #include "game.h"
-#include "platform/platform.h"
 #include "input/platform_input.h"
 
 struct SimulationUpdateContext {
@@ -269,7 +269,7 @@ Game* makeGame(
 	GameMemory* gameMemory)
 {
 	Game* newGame = allocType(&gameMemory->gameState, Game);
-	gameMemory->game = (void*)newGame;
+	gameMemory->game = newGame;
 	Game& game = *newGame;
 	assert(is_aligned(newGame,64) && "game is not cache aligned");
 
@@ -317,7 +317,6 @@ Game* makeGame(
 //	engine.inputSystem->setContextActive(game.player.playerfpsInputContextId);
 
 //	return game;
-	gameMemory->initialized = true;
 
 	return newGame;
 }
@@ -411,10 +410,16 @@ extern "C" {
 		logger::_log = platform->log;
 
 		if (!gameMemory->initialized) {
+			gameMemory->gameState = makeArena();
+			gameMemory->transient = makeArena();
+			gameMemory->frameScoped = makeArena();
+
 			_game = makeGame(gameMemory);
+			
+			gameMemory->initialized = true;
 		}
 		else {
-			_game = (Game*)gameMemory->game;
+			_game = gameMemory->game;
 		}
 
 		return (_game != nullptr ? 1 : 0);

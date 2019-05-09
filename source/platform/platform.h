@@ -1,113 +1,68 @@
 #ifndef _PLATFORM_H
 #define _PLATFORM_H
 
-#include <SDL_render.h>
-#include <SDL_video.h>
-#include <SDL_syswm.h>
-#include "../utility/types.h"
-#include "../utility/logger.h"
+#include "platform_api.h"
+#include "../input/platform_input.h"
 
-/*class FileSystemWatcher {
-public:
-	void onFileRenamed(std::function<void(const std::wstring&, const std::wstring&)> f);
-	void onFileModified(std::function<void(const std::wstring&)> f);
-	void onFileAdded(std::function<void(const std::wstring&)> f);
-	void onFileRemoved(std::function<void(const std::wstring&)> f);
+typedef u8 GameUpdateAndRenderFunc(
+		GameMemory* gameMemory,
+		PlatformApi* platform,
+		input::PlatformInput* input,
+		SDLApplication* app,
+		i64 realTime,
+		i64 countsPassed,
+		i64 countsPerMs,
+		u64 frame);
 
-};*/
+typedef u8 GameOnLoadFunc(
+		GameMemory* gameMemory,
+		PlatformApi* platformApi,
+		SDLApplication* app);
 
-#define PROGRAM_NAME "Project Quagmire"
+typedef void GameOnExitFunc(
+		GameMemory* gameMemory,
+		PlatformApi* platformApi,
+		SDLApplication* app);
 
-#define MAXPATH		1024
+#ifdef _WIN32
 
+#include "Windows.h"
 
-// TODO: switch these to fstring?
-struct Environment {
-	char preferencesPath[MAXPATH] = {};
-	char currentWorkingDirectory[MAXPATH] = {};
+struct GameCode
+{
+	HMODULE		gameDLL;
+	FILETIME	dllLastWriteTime;
+
+	GameUpdateAndRenderFunc*	updateAndRender = nullptr;
+	GameOnLoadFunc*				onLoad = nullptr;
+	GameOnExitFunc*				onExit = nullptr;
+	//game_get_sound_samples *getSoundSamples;
+
+	bool isValid = false;
 };
 
-struct DisplayData {
-	SDL_Rect		bounds;			// bounds of the display
-	SDL_DisplayMode	displayMode;	// desktop display mode
+#else
+
+struct GameCode
+{
+	void*		gameDLL;
+	time_t		dllLastWriteTime;
+
+	GameUpdateAndRender *updateAndRender = nullptr;
+	//game_get_sound_samples *getSoundSamples;
+
+	bool isValid = false;
 };
 
-struct WindowData {
-	SDL_Window*		window;			// SDL window handle
-	SDL_GLContext	glContext;		// OpenGL context handle
-	u32				width;			// width px of the window
-	u32				height;			// height px of the window
-	SDL_SysWMinfo	wmInfo;			// system-dependent window information
+#endif
+
+struct GameContext {
+	SDLApplication*			app = nullptr;
+	GameCode				gameCode = {};
+	GameMemory				gameMemory = {};
+	PlatformMemory			platformMemory;
+	input::PlatformInput	input = {};
+	std::atomic_bool		done; // TODO: consider using SDL atomics instead of std to avoid the template
 };
-
-struct SystemInfo {
-	int				cpuCount;		// number of logical CPU cores
-	int				systemRAM;		// amount of system RAM in MB
-	
-	u32				pageSize;
-	u32				allocationGranularity;
-	
-	void*			minimumApplicationAddress;
-	void*			maximumApplicationAddress;
-	
-	u64				activeProcessorMask;
-	u32				logicalProcessorCount;
-	u16				processorArchitecture;
-	u16				processorLevel;
-	u16				processorRevision;
-};
-
-struct JoystickInfo {
-	SDL_Joystick*	joysticks[GAMEINPUT_JOYSTICKS_CAPACITY];
-	u32				numJoysticks;
-	u32				totalAxes;
-};
-
-enum InputMouseCursor : u8 {
-	Cursor_Arrow = 0,
-	Cursor_Hand,
-	Cursor_Wait,
-	Cursor_IBeam,
-	Cursor_Crosshair,
-	_InputMouseCursorCount
-};
-
-struct SDLApplication {
-	WindowData		windowData = {};
-	SystemInfo		systemInfo = {};
-	Environment		environment = {};
-	JoystickInfo	joystickInfo = {};
-	int				numDisplays = 0;
-	DisplayData		displayData[50] = {};
-	SDL_Cursor*		cursors[_InputMouseCursorCount];
-};
-
-typedef MemoryBlock* PlatformAllocateFunc(size_t);
-
-struct PlatformApi {
-	logger::LogFunc*		log;
-	PlatformAllocateFunc*	allocate;
-};
-
-struct GameMemory {
-	MemoryArena		gameState;
-	MemoryArena		transient;
-	MemoryArena		frameScoped;
-	void*			game;
-	bool			initialized;
-};
-
-namespace logger {
-	void log(Category, Priority, const char*, va_list);
-}
-//bool getWindowInfo(SDL_Window* window, SDL_SysWMinfo* info);
-//bool getEnvironmentInfo(Environment* env);
-
-//void yieldThread();
-
-//void showErrorBox(const char* text, const char* caption);
-
-//void setWindowIcon(const WindowData *windowData);
-
 
 #endif

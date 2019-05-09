@@ -2,6 +2,7 @@
 #define _MEMORY_H
 
 #include <SDL_mutex.h>
+#include <SDL_thread.h>
 #include "utility/common.h"
 
 struct MemoryArena;
@@ -10,47 +11,79 @@ struct MemoryBlock {
 	void*			base;
 	size_t			size;
 	uintptr_t		used;
-
+	// linked list for blocks in the arena
 	MemoryBlock*	next;
 	MemoryBlock*	prev;
-
+	// TODO: this will result in dangling pointer if arena is destroyed and block remins in the platform list
+	// should this be a handle to an arena instead?
+	// or should we always free blocks when arena is destroyed and set this null
 	MemoryArena*	arena;
+};
 
-	// TODO: should we store a thread id so getBlockToFit chooses a matching block?
-	// this would give us safe single-threaded blocks, within an overall shared arena.
-	// Would require multiple currentBlock pointers in the arena, one for each thread id.
 
-	u64				_padding[2];
+struct PlatformBlock {
+	MemoryBlock		arenaBlock;
+	// linked list for all allocated blocks
+	PlatformBlock*	next;
+	PlatformBlock*	prev;
 };
 /**
- * MemoryBlock headers must be a multiple of 64 so they do not impact the cache
+ * PlatformBlock headers must be a multiple of 64 so they do not impact the cache
  * line alignment of a block allocation
  */
-static_assert_aligned_size(MemoryBlock, 64);
+static_assert_aligned_size(PlatformBlock, 64);
+static_assert(offsetof(PlatformBlock, arenaBlock) == 0, "MemoryBlock must be first member of PlatformBlock");
+
 
 struct MemoryArena {
 	// TODO: do we really need to track first block?
-	MemoryBlock*	firstBlock = nullptr;	// beginning of the block list
-	MemoryBlock*	lastBlock = nullptr;	// end of the block list, new blocks are pushed here
-	MemoryBlock*	currentBlock = nullptr;	// block currently being used for allocations (may not be the last block)
-	
-	SDL_mutex*		lock = nullptr;			// for thread-safe manipulation of the block list, there is not a lot of contention here
+	MemoryBlock*	firstBlock;		// beginning of the block list
+	MemoryBlock*	lastBlock;		// end of the block list, new blocks are pushed here
+	MemoryBlock*	currentBlock;	// block currently being used for allocations (may not be the last block)
 
-	size_t			totalSize = 0;			// total allocated size of all blocks
+	size_t			totalSize;		// total available capacity in all blocks (not including space for headers)
+	u32				numBlocks;
+	u32				threadID;		// threadID is tracked to later assert the threadID matches on allocations
+	// TODO: store allocator type, store flags like readonly, over/underflow protection, etc.
+};
+
+
+/**
+ * PlatformMemory tracks a thread-safe linked list of allocated memory blocks belonging to all
+ * MemoryArenas across the system.
+ */
+struct PlatformMemory {
+	PlatformBlock	sentinel;		// tracks bounds of PlatformBlock list, allows iteration forward and backward
+
+	SDL_mutex*		lock = nullptr;	// for thread-safe manipulation of the block list, there is not a lot of contention here
+
+	size_t			totalSize = 0;	// total allocated size of all blocks
 	u32				numBlocks = 0;
-	
-	// TODO: store allocator type, store flags like readonly, over/underflow protection etc.
-	u32				_padding = 0;
 
-	MemoryArena() {
-		lock = SDL_CreateMutex();
-	}
 
-	~MemoryArena() {
+	PlatformMemory() :
+		lock{ SDL_CreateMutex() },
+		sentinel{ {}, &this->sentinel, &this->sentinel }
+	{}
+
+	~PlatformMemory() {
 		SDL_DestroyMutex(lock);
 	}
 };
 
+
+MemoryArena makeArena()
+{
+	MemoryArena arena{};
+	arena.threadID = SDL_ThreadID();
+	return arena;
+}
+
+void clearArena(
+	MemoryArena* arena);
+
+void shrinkArena(
+	MemoryArena* arena);
 
 /**
  * Adds a new block to the end of the list of at least minimumSize, or the system allocation
@@ -61,6 +94,89 @@ struct MemoryArena {
 MemoryBlock* pushBlock(
 	MemoryArena* arena,
 	size_t minimumSize = 0);
+
+/**
+ * Returns true if the last block is freed, false if the list is empty
+ */
+bool popBlock(
+	MemoryArena *arena);
+
+/**
+ * Frees a block from any spot within the arena list, or not belonging to an arena.
+ */
+void removeBlock(
+	MemoryBlock* block);
+
+
+struct TemporaryMemory {
+	MemoryBlock*	blockStart;
+	uintptr_t		usedStart;
+
+	explicit TemporaryMemory(MemoryBlock* bs, uintptr_t us) :
+		blockStart{ bs },
+		usedStart{ us }
+	{}
+	TemporaryMemory() : blockStart{0}, usedStart{0} {}
+	TemporaryMemory(const TemporaryMemory& t) = delete;
+	TemporaryMemory(TemporaryMemory&& t) :
+		blockStart{ t.blockStart },
+		usedStart{ t.usedStart }
+	{
+		t.blockStart = nullptr;
+		t.usedStart = 0;
+	}
+	~TemporaryMemory()
+	{
+		assert(blockStart == nullptr && "TemporaryMemory token destroyed before it was ended");
+		end();
+	}
+
+	void end()
+	{
+		if (blockStart)
+		{
+			// clear all memory forward of the start block/position, this works because temporary
+			// memory is always taken from the lastBlock of an arena
+			blockStart->used = usedStart;
+			while (blockStart->next)
+			{
+				blockStart = blockStart->next;
+				blockStart->used = 0;
+			}
+			blockStart = nullptr;
+			usedStart = 0;
+		}
+	}
+
+	void keep()
+	{
+		assert(blockStart->used >= usedStart && "Temporary memory has already been freed, possibly by overlapping temporary memory");
+		blockStart = nullptr;
+		usedStart = 0;
+	}
+};
+
+TemporaryMemory beginTemporaryMemory(
+	MemoryArena* arena)
+{
+	assert(arena);
+	// Note: temporary memory MUST come from the last block in the list, not necessarily the
+	// currentBlock, because for unwinding to work, all memory ahead of the start must be unused
+	return TemporaryMemory(arena->lastBlock, arena->lastBlock->used);
+}
+
+void endTemporaryMemory(
+	TemporaryMemory& tm)
+{
+	tm.end();
+}
+
+
+void keepTemporaryMemory(
+	TemporaryMemory& tm)
+{
+	tm.keep();
+}
 
 
 struct BlockFitResult {
@@ -110,5 +226,7 @@ void* _allocSize(
 #define allocType(arena, Type) \
 	(Type*)_allocSize(arena, sizeof(Type), alignof(Type))
 
+#define allocArrayOfType(arena, Type, n) \
+	(Type*)_allocSize(arena, sizeof(Type)*n, alignof(Type))
 
 #endif

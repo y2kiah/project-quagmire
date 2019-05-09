@@ -3,7 +3,7 @@
 
 namespace input {
 
-	bool handleMessage(GameContext& gameContext, const SDL_Event& event, i64 timestamp)
+	bool handleMessage(const SDL_Event& event, i64 timestamp)
 	{
 		PlatformInput& input = gameContext.input;
 		bool handled = false;

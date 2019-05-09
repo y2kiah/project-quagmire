@@ -14,13 +14,14 @@ extern "C" {
 }
 
 static SDLApplication app;
+static GameContext gameContext = {};
 static PlatformApi* platform = nullptr;
 
-#include "utility/memory.cpp"
 #include "utility/platform_logger.cpp"
 #include "platform/timer.cpp"
 #include "platform/platform.cpp"
 #include "input/platform_input.cpp"
+#include "utility/memory.cpp"
 
 
 bool initApplication()
@@ -141,7 +142,11 @@ bool initOpenGL()
 	glGetError(); // clear any error created by GLEW init
 
 	logger::info(logger::Category_Video,
-				"OpenGL Information:\n  Vendor: %s\n  Renderer: %s\n  Version: %s\n  Shading Language Version: %s\n",
+				"OpenGL Information\n"
+				"  Vendor:       %s\n"
+				"  Renderer:     %s\n"
+				"  Version:      %s\n"
+				"  Shd Lang Ver: %s",
 				glGetString(GL_VENDOR),
 				glGetString(GL_RENDERER),
 				glGetString(GL_VERSION),
@@ -219,15 +224,18 @@ void quitApplication()
  */
 int gameProcess(void* ctx)
 {
-	GameContext& gameContext = *(GameContext*)ctx;
 	gameContext.done = false;
 	Timer timer;
 	u64 frame = 0;
 
-	gameContext.gameCode.onLoad(
+	if (!gameContext.gameCode.onLoad(
 			&gameContext.gameMemory,
 			platform,
-			gameContext.app);
+			gameContext.app))
+	{
+		gameContext.done = true;
+		return 1;
+	}
 
 	// gl context made current on the main loop thread
 	SDL_GL_MakeCurrent(app.windowData.window, app.windowData.glContext);
@@ -259,8 +267,7 @@ int gameProcess(void* ctx)
 		#if defined(QUAGMIRE_DEVELOPMENT) && QUAGMIRE_DEVELOPMENT != 0
 		// check for new game code to load
 		gameCodeHotLoad.tick(500.0f, realTime, countsPassed, timer.countsPerMs, frame, 1.0f,
-			[](UpdateInfo& ui, void* _gameContext) {
-				GameContext& gameContext = *(GameContext*)_gameContext;
+			[](UpdateInfo& ui, void* ctx) {
 				if (loadGameCode(gameContext.gameCode)) {
 					gameContext.gameCode.onLoad(
 							&gameContext.gameMemory,
@@ -307,8 +314,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	GameContext gameContext = {};
-	createGameContext(gameContext);
+	initGameContext();
 
 	// run tests at startup
 	using Something = h64;
@@ -356,7 +362,7 @@ int main(int argc, char *argv[])
 		while (SDL_PollEvent(&event)) {
 			// send to the input system to handle the event
 			i64 eventTimestamp = timer_queryCounts();
-			bool handled = input::handleMessage(gameContext, event, eventTimestamp);
+			bool handled = input::handleMessage(event, eventTimestamp);
 			
 			if (!handled) {
 				switch (event.type) {
@@ -402,7 +408,7 @@ int main(int argc, char *argv[])
 	//gamePtr.reset();
 	//enginePtr.reset(); // must delete the engine on the GL thread
 
-	destroyGameContext(gameContext);
+	deinitGameContext();
 	quitApplication();
 
 	return 0;

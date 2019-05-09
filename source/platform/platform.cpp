@@ -1,49 +1,13 @@
 
 #include <atomic>
 #include "../capacity.h"
-#include "platform.h"
+#include "platform_api.h"
 #include "input/platform_input.h"
 #include "utility/logger.h"
 #include <SDL_filesystem.h>
 #include <SDL_cpuinfo.h>
 
 #ifdef _WIN32
-
-#include "Windows.h"
-
-typedef u8 GameUpdateAndRenderFunc(
-		GameMemory* gameMemory,
-		PlatformApi* platform,
-		input::PlatformInput* input,
-		SDLApplication* app,
-		i64 realTime,
-		i64 countsPassed,
-		i64 countsPerMs,
-		u64 frame);
-
-typedef u8 GameOnLoadFunc(
-		GameMemory* gameMemory,
-		PlatformApi* platformApi,
-		SDLApplication* app);
-
-typedef void GameOnExitFunc(
-		GameMemory* gameMemory,
-		PlatformApi* platformApi,
-		SDLApplication* app);
-
-struct GameCode
-{
-	HMODULE		gameDLL;
-	FILETIME	dllLastWriteTime;
-
-	GameUpdateAndRenderFunc*	updateAndRender = nullptr;
-	GameOnLoadFunc*				onLoad = nullptr;
-	GameOnExitFunc*				onExit = nullptr;
-	//game_get_sound_samples *getSoundSamples;
-
-	bool isValid = false;
-};
-
 
 void yieldThread()
 {
@@ -204,15 +168,25 @@ SystemInfo platformGetSystemInfo()
 	info.processorLevel = si.wProcessorLevel;
 	info.processorRevision = si.wProcessorRevision;
 
-	info.cpuCount = SDL_GetCPUCount(); // TODO: is this needed?
 	info.systemRAM = SDL_GetSystemRAM();
 
 	// TODO: call IsProcessorFeaturePresent on features we need to check for
 
+	logger::info(logger::Category_System,
+				"System Information\n"
+				"  pageSize:              %u\n"
+				"  allocationGranularity: %u\n"
+				"  logicalProcessorCount: %u\n"
+				"  systemRAM:             %u",
+				info.pageSize,
+				info.allocationGranularity,
+				info.logicalProcessorCount,
+				info.systemRAM);
+
 	return info;
 }
 
-MemoryBlock* platformAllocate(
+PlatformBlock* platformAllocate(
 	size_t minimumSize)
 {
 	SIZE_T size = ((minimumSize / app.systemInfo.allocationGranularity) + 1) * app.systemInfo.allocationGranularity;
@@ -224,11 +198,53 @@ MemoryBlock* platformAllocate(
 		showLastErrorAndQuit();
 	}
 
-	MemoryBlock* block = (MemoryBlock*)memory;
-	block->base = (void*)((uintptr_t)memory + sizeof(MemoryBlock));
-	block->size = size - sizeof(MemoryBlock);
+	PlatformBlock* block = (PlatformBlock*)memory;
+	block->arenaBlock.base = (void*)((uintptr_t)memory + sizeof(PlatformBlock));
+	block->arenaBlock.size = size - sizeof(PlatformBlock);
+	block->next = &gameContext.platformMemory.sentinel;
+
+	SDL_LockMutex(gameContext.platformMemory.lock);
+	
+	block->prev = gameContext.platformMemory.sentinel.prev;
+    block->prev->next = block;
+    block->next->prev = block;
+
+	gameContext.platformMemory.totalSize += size;
+	++gameContext.platformMemory.numBlocks;
+
+	SDL_UnlockMutex(gameContext.platformMemory.lock);
 
 	return block;
+}
+
+void platformDeallocate(
+	PlatformBlock* block)
+{
+	SDL_LockMutex(gameContext.platformMemory.lock);
+
+	size_t size = block->arenaBlock.size + sizeof(PlatformBlock);
+	gameContext.platformMemory.totalSize -= size;
+	--gameContext.platformMemory.numBlocks;
+	
+	block->prev->next = block->next;
+	block->next->prev = block->prev;
+	
+	// check the integrity of the list
+	PlatformBlock& sentinel = gameContext.platformMemory.sentinel;
+	assert((gameContext.platformMemory.numBlocks > 0
+			&& sentinel.prev != &sentinel
+			&& sentinel.next == &sentinel
+			&& gameContext.platformMemory.totalSize > 0)
+		   ||
+		   (gameContext.platformMemory.numBlocks == 0
+			&& sentinel.prev == &sentinel
+			&& sentinel.next == &sentinel
+			&& gameContext.platformMemory.totalSize == 0));
+
+	SDL_UnlockMutex(gameContext.platformMemory.lock);
+    
+    BOOL result = VirtualFree(block, 0, MEM_RELEASE);
+    assert(result);
 }
 
 
@@ -265,17 +281,6 @@ void setWindowIcon(WindowData *windowData)
 	//	SDL_SetWindowIcon(window, icon);
 	//	SDL_FreeSurface(icon);
 }
-
-struct GameCode
-{
-	void*		gameDLL;
-	time_t		dllLastWriteTime;
-
-	GameUpdateAndRender *updateAndRender = nullptr;
-	//game_get_sound_samples *getSoundSamples;
-
-	bool isValid = false;
-};
 
 GameCode
 loadGameCode(
@@ -331,20 +336,39 @@ unloadGameCode(GameCode& gameCode)
 	gameCode.updateAndRender = nullptr;
 }
 
+SystemInfo platformGetSystemInfo()
+{
+	SystemInfo info{};
+	/*SYSTEM_INFO si{};
+	GetSystemInfo(&si);
+
+	info.pageSize = si.dwPageSize;
+	info.allocationGranularity = si.dwAllocationGranularity;
+	
+	info.minimumApplicationAddress = si.lpMinimumApplicationAddress;
+	info.maximumApplicationAddress = si.lpMaximumApplicationAddress;
+	
+	info.activeProcessorMask = si.dwActiveProcessorMask;
+	info.logicalProcessorCount = si.dwNumberOfProcessors;
+	info.processorArchitecture = si.wProcessorArchitecture;
+	info.processorLevel = si.wProcessorLevel;
+	info.processorRevision = si.wProcessorRevision;
+	*/
+
+	info.logicalProcessorCount = SDL_GetCPUCount();
+	info.systemRAM = SDL_GetSystemRAM();
+
+	// TODO: call IsProcessorFeaturePresent on features we need to check for
+
+	return info;
+}
+
+
 
 #endif
 
 
-struct GameContext {
-	SDLApplication*			app = nullptr;
-	GameCode				gameCode = {};
-	GameMemory				gameMemory = {};
-	input::PlatformInput	input = {};
-	std::atomic_bool		done; // TODO: consider using SDL atomics instead of std to avoid the template
-};
-
-
-void createGameContext(GameContext& gameContext)
+void initGameContext()
 {
 	gameContext.app = &app;
 	
@@ -364,7 +388,7 @@ void createGameContext(GameContext& gameContext)
 }
 
 
-void destroyGameContext(GameContext& gameContext)
+void deinitGameContext()
 {
 	gameContext.input.eventsQueue.deinit();
 	gameContext.input.popEvents.deinit();
@@ -417,6 +441,7 @@ PlatformApi createPlatformApi()
 	
 	api.log = &logger::log;
 	api.allocate = &platformAllocate;
+	api.deallocate = &platformDeallocate;
 
 	return api;
 }
