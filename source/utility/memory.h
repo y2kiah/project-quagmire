@@ -72,7 +72,7 @@ struct PlatformMemory {
 };
 
 
-MemoryArena makeArena()
+MemoryArena makeMemoryArena()
 {
 	MemoryArena arena{};
 	arena.threadID = SDL_ThreadID();
@@ -80,10 +80,10 @@ MemoryArena makeArena()
 }
 
 void clearArena(
-	MemoryArena* arena);
+	MemoryArena& arena);
 
 void shrinkArena(
-	MemoryArena* arena);
+	MemoryArena& arena);
 
 /**
  * Adds a new block to the end of the list of at least minimumSize, or the system allocation
@@ -92,14 +92,14 @@ void shrinkArena(
  * in the block will be the total allocation size (multiple of 64K) minus 64.
  */
 MemoryBlock* pushBlock(
-	MemoryArena* arena,
+	MemoryArena& arena,
 	size_t minimumSize = 0);
 
 /**
  * Returns true if the last block is freed, false if the list is empty
  */
 bool popBlock(
-	MemoryArena *arena);
+	MemoryArena& arena);
 
 /**
  * Frees a block from any spot within the arena list, or not belonging to an arena.
@@ -157,12 +157,11 @@ struct TemporaryMemory {
 };
 
 TemporaryMemory beginTemporaryMemory(
-	MemoryArena* arena)
+	MemoryArena& arena)
 {
-	assert(arena);
 	// Note: temporary memory MUST come from the last block in the list, not necessarily the
 	// currentBlock, because for unwinding to work, all memory ahead of the start must be unused
-	return TemporaryMemory(arena->lastBlock, arena->lastBlock->used);
+	return TemporaryMemory(arena.lastBlock, arena.lastBlock->used);
 }
 
 void endTemporaryMemory(
@@ -196,12 +195,9 @@ struct BlockFitResult {
  * the opposite is true, the currentBlock is left alone while the chosen block is returned. This
  * behavior guards against the case where a large allocation exceeding the normal 64K size would
  * effectively waste a lot of free space in the currentBlock when the new block is pushed.
- * 
- * This function does not take a MemoryArena as a parameter, so you can call it on a MemoryBlock
- * list that is not owned by an arena. If the startBlock belongs to an arena, arena processing
- * detailed above will not be skipped.
  */
 BlockFitResult getBlockToFit(
+	MemoryArena& arena,
 	MemoryBlock* startBlock,
 	size_t size,
 	u32 align);
@@ -214,11 +210,11 @@ BlockFitResult getBlockToFit(
  * within the critical path resulting in frame stutters.
  */
 void preemptivelyPushBlock(
-	MemoryArena* arena);
+	MemoryArena& arena);
 
 
 void* _allocSize(
-	MemoryArena* arena,
+	MemoryArena& arena,
 	size_t size,
 	u32 align);
 

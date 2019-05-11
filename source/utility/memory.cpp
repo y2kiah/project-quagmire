@@ -3,48 +3,46 @@
 
 
 MemoryBlock* pushBlock(
-	MemoryArena* arena,
+	MemoryArena& arena,
 	size_t minimumSize)
 {
-	assert(arena && arena->threadID == SDL_ThreadID() && "MemoryArena thread mismatch");
+	assert(arena.threadID == SDL_ThreadID() && "MemoryArena thread mismatch");
 
 	// MemoryBlock safe to cast directly from PlatformBlock, it is asserted to be the base member
 	MemoryBlock* newBlock = (MemoryBlock*)platform->allocate(minimumSize);
 	
-	if (arena) {
-		newBlock->prev = arena->lastBlock;
-		if (arena->lastBlock) {
-			arena->lastBlock->next = newBlock;
-		}
-		else {
-			// pushing first block in the arena
-			arena->firstBlock = arena->lastBlock = arena->currentBlock = newBlock;
-		}
-		arena->totalSize += newBlock->size;
-		++arena->numBlocks;
+	newBlock->prev = arena.lastBlock;
+	if (arena.lastBlock) {
+		arena.lastBlock->next = newBlock;
 	}
+	else {
+		// pushing first block in the arena
+		arena.firstBlock = arena.lastBlock = arena.currentBlock = newBlock;
+	}
+	arena.totalSize += newBlock->size;
+	++arena.numBlocks;
 
 	return newBlock;
 }
 
 
 bool popBlock(
-	MemoryArena *arena)
+	MemoryArena& arena)
 {
-	assert(arena && arena->threadID == SDL_ThreadID() && "MemoryArena thread mismatch");
+	assert(arena.threadID == SDL_ThreadID() && "MemoryArena thread mismatch");
 
-	MemoryBlock *last = arena->lastBlock;
+	MemoryBlock *last = arena.lastBlock;
 	if (last) {
-		if (arena->currentBlock == last) {
-			arena->currentBlock = last->prev;
+		if (arena.currentBlock == last) {
+			arena.currentBlock = last->prev;
 		}
-		if (arena->firstBlock == last) {
-			arena->firstBlock = nullptr;
+		if (arena.firstBlock == last) {
+			arena.firstBlock = nullptr;
 		}
-		arena->lastBlock = last->prev;
+		arena.lastBlock = last->prev;
 		
-		--arena->numBlocks;
-		arena->totalSize -= last->size;
+		--arena.numBlocks;
+		arena.totalSize -= last->size;
 
 		platform->deallocate((PlatformBlock*)last);
 	}
@@ -88,13 +86,13 @@ void removeBlock(
 
 
 BlockFitResult getBlockToFit(
+	MemoryArena& arena,
 	MemoryBlock* startBlock,
 	size_t size,
 	u32 align)
 {
 	assert(startBlock != nullptr && "don't call getBlockToFit without a starting block, call pushBlock instead");
 
-	MemoryArena* arena = startBlock->arena;
 	MemoryBlock* block = startBlock;
 	void* allocAddr = nullptr;
 	size_t requiredSize = size;
@@ -119,12 +117,12 @@ BlockFitResult getBlockToFit(
 		allocAddr = block->base;
 	}
 	
-	if (arena && block != startBlock)
+	if (block != startBlock)
 	{
 		size_t blockRemaining = block->size - block->used - requiredSize;
 		size_t startRemaining = startBlock->size - startBlock->used;
 		if (blockRemaining > startRemaining) {
-			arena->currentBlock = block;
+			arena.currentBlock = block;
 		}
 	}
 	
@@ -133,12 +131,12 @@ BlockFitResult getBlockToFit(
 
 
 void preemptivelyPushBlock(
-	MemoryArena* arena)
+	MemoryArena& arena)
 {
-	assert(arena && arena->threadID == SDL_ThreadID() && "MemoryArena thread mismatch");
+	assert(arena.threadID == SDL_ThreadID() && "MemoryArena thread mismatch");
 
-	if (arena->lastBlock) {
-		size_t remaining = arena->lastBlock->size - arena->lastBlock->used;
+	if (arena.lastBlock) {
+		size_t remaining = arena.lastBlock->size - arena.lastBlock->used;
 		if (remaining <= PREEMPTIVE_ALLOC_THRESHOLD) {
 			pushBlock(arena);	
 		}
@@ -147,21 +145,21 @@ void preemptivelyPushBlock(
 
 
 void* _allocSize(
-	MemoryArena* arena,
+	MemoryArena& arena,
 	size_t size,
 	u32 align)
 {
-	assert(arena && arena->threadID == SDL_ThreadID() && "MemoryArena thread mismatch");
+	assert(arena.threadID == SDL_ThreadID() && "MemoryArena thread mismatch");
 
 	void* allocAddr = nullptr;
 
-	if (!arena->currentBlock) {
+	if (!arena.currentBlock) {
 		MemoryBlock* block = pushBlock(arena, size);
 		allocAddr = block->base;
 		block->used += size;
 	}
 	else {
-		BlockFitResult fit = getBlockToFit(arena->currentBlock, size, align);
+		BlockFitResult fit = getBlockToFit(arena, arena.currentBlock, size, align);
 		MemoryBlock* block = fit.block;
 		allocAddr = fit.allocAddr;
 		block->used += fit.alignedSize;
@@ -172,15 +170,15 @@ void* _allocSize(
 
 
 void clearArena(
-	MemoryArena* arena)
+	MemoryArena& arena)
 {
-	MemoryBlock* block = arena->firstBlock;
+	MemoryBlock* block = arena.firstBlock;
 	while (block) {
 		MemoryBlock* next = block->next;
 		platform->deallocate((PlatformBlock*)block);
 		block = next;
 	}
-	*arena = makeArena();
+	arena = makeMemoryArena();
 }
 
 

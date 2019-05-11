@@ -14,7 +14,8 @@ extern "C" {
 }
 
 static SDLApplication app;
-static GameContext gameContext = {};
+static GameContext gameContext{};
+static MemoryArena platformMemory = makeMemoryArena();
 static PlatformApi* platform = nullptr;
 
 #include "utility/platform_logger.cpp"
@@ -38,6 +39,25 @@ bool initApplication()
 
 	app.systemInfo = platformGetSystemInfo();
 	
+	logger::messageQueue.init(
+		sizeof(logger::LogMessage),
+		LOGGER_CAPACITY,
+		allocArrayOfType(platformMemory, logger::LogMessage, LOGGER_CAPACITY),
+		0);
+	//logger::setMode(logger::Mode_Immediate_Thread_Unsafe);
+	logger::setAllPriorities(logger::Priority_Verbose);
+
+	logger::info(logger::Category_System,
+				"System Information\n"
+				"  pageSize:              %u\n"
+				"  allocationGranularity: %u\n"
+				"  logicalProcessorCount: %u\n"
+				"  systemRAM:             %u",
+				app.systemInfo.pageSize,
+				app.systemInfo.allocationGranularity,
+				app.systemInfo.logicalProcessorCount,
+				app.systemInfo.systemRAM);
+
 	// turn off text input to start
 	SDL_StopTextInput();
 
@@ -300,10 +320,8 @@ int main(int argc, char *argv[])
 	
 	PlatformApi platformApi = createPlatformApi();
 	platform = &platformApi;
-	
+
 	logger::_log = &logger::log;
-	//logger::setMode(logger::Mode_Immediate_Thread_Unsafe);
-	logger::setAllPriorities(logger::Priority_Verbose);
 
 	if (!initApplication() ||
 		!initWindow(PROGRAM_NAME) ||
@@ -317,9 +335,10 @@ int main(int argc, char *argv[])
 	initGameContext();
 
 	// run tests at startup
+	TemporaryMemory tkn = beginTemporaryMemory(platformMemory);
 	using Something = h64;
 	Something s = { 1, 1, 1, 1 };
-	DenseHandleMap32 testMap(sizeof(Something), 100, 1);
+	DenseHandleMap32 testMap(sizeof(Something), 100, 1, allocArrayOfType(platformMemory, Something, 100));
 	Something* items = (Something*)testMap.items;
 	h64 h1 = testMap.insert();
 	h64 h2 = testMap.insert(&s);
@@ -342,6 +361,7 @@ int main(int argc, char *argv[])
 	});
 
 	testMap.clear();
+	endTemporaryMemory(tkn);
 
 	// test::TestRunner tests;
 	// tests.registerAllTests();

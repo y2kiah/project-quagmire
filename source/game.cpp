@@ -10,6 +10,7 @@
 #include "platform/platform_api.h"
 #include "game.h"
 #include "input/platform_input.h"
+#include "math/vec.h"
 
 struct SimulationUpdateContext {
 	input::PlatformInput&	input;
@@ -43,6 +44,15 @@ void gameUpdateFrameTick(
 	SimulationUpdateContext& simContext = *(SimulationUpdateContext*)_ctx;
 	Game& game = *_game;
 
+	vec2 v2{ 1, 2 };
+	v2.yx = vec2{ 2, 1 };
+	v2 = vec2{ 2, 1 }.yx;
+
+	vec4 v4{ 1, 2, 3, 4 };
+	v4.xzw = vec4{ 1, 2, 3, 4 };
+	v4 = vec4{ 1, 2, 3, 4 }.xzw;
+
+	//vec3 v2 = v.xzw();
 	//logger::verbose("Update virtualTime=%lu: gameTime=%ld: deltaCounts=%ld: countsPerMs=%ld\n",
 	//                ui.virtualTime, ui.gameTime, ui.deltaCounts, ui.countsPerMs);
 
@@ -268,7 +278,7 @@ void makeCoreSystems(
 Game* makeGame(
 	GameMemory* gameMemory)
 {
-	Game* newGame = allocType(&gameMemory->gameState, Game);
+	Game* newGame = allocType(gameMemory->gameState, Game);
 	gameMemory->game = newGame;
 	Game& game = *newGame;
 	assert(is_aligned(newGame,64) && "game is not cache aligned");
@@ -410,9 +420,9 @@ extern "C" {
 		logger::_log = platform->log;
 
 		if (!gameMemory->initialized) {
-			gameMemory->gameState = makeArena();
-			gameMemory->transient = makeArena();
-			gameMemory->frameScoped = makeArena();
+			gameMemory->gameState = makeMemoryArena();
+			gameMemory->transient = makeMemoryArena();
+			gameMemory->frameScoped = makeMemoryArena();
 
 			_game = makeGame(gameMemory);
 			

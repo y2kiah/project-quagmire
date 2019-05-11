@@ -37,8 +37,9 @@ namespace logger {
 	// TODO: keep an entity/gameplay log history file specific to save-game, with save game diffs stacking up. If an old save game is deleted, prepend old diffs into history
 
     Mode loggingMode = Mode_Deferred_Thread_Safe;
-	// TODO: pass in buffer space, currently this mallocs its own
-	global ConcurrentQueue messageQueue(sizeof(LogMessage), LOGGER_CAPACITY, nullptr, 0);
+	
+	global ConcurrentQueue messageQueue;
+
 	int popArrayLen = 0;
 	LogMessage popArray[LOGGER_CAPACITY] = {};
 

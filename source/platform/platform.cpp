@@ -172,17 +172,6 @@ SystemInfo platformGetSystemInfo()
 
 	// TODO: call IsProcessorFeaturePresent on features we need to check for
 
-	logger::info(logger::Category_System,
-				"System Information\n"
-				"  pageSize:              %u\n"
-				"  allocationGranularity: %u\n"
-				"  logicalProcessorCount: %u\n"
-				"  systemRAM:             %u",
-				info.pageSize,
-				info.allocationGranularity,
-				info.logicalProcessorCount,
-				info.systemRAM);
-
 	return info;
 }
 
@@ -376,10 +365,20 @@ void initGameContext()
 	
 	// Note: not asserting on full for the event concurrent queues, if the game stops processing
 	// events, the queue will fill up quickly. We will simply ignore inputs in that case.
-	gameContext.input.eventsQueue.init(PLATFORMINPUT_EVENTSQUEUE_CAPACITY, nullptr, 0);
-	gameContext.input.popEvents.init(PLATFORMINPUT_EVENTSPOPQUEUE_CAPACITY);
-	gameContext.input.motionEventsQueue.init(PLATFORMINPUT_MOTIONEVENTSQUEUE_CAPACITY, nullptr, 0);
-	gameContext.input.popMotionEvents.init(PLATFORMINPUT_MOTIONEVENTSPOPQUEUE_CAPACITY);
+	gameContext.input.eventsQueue.init(
+			PLATFORMINPUT_EVENTSQUEUE_CAPACITY,
+			allocArrayOfType(platformMemory, input::InputEvent, PLATFORMINPUT_EVENTSQUEUE_CAPACITY),
+			0);
+	gameContext.input.motionEventsQueue.init(
+			PLATFORMINPUT_MOTIONEVENTSQUEUE_CAPACITY,
+			allocArrayOfType(platformMemory, input::InputEvent, PLATFORMINPUT_MOTIONEVENTSQUEUE_CAPACITY),
+			0);
+	gameContext.input.popEvents.init(
+			PLATFORMINPUT_EVENTSPOPQUEUE_CAPACITY,
+			allocArrayOfType(platformMemory, input::InputEvent, PLATFORMINPUT_EVENTSPOPQUEUE_CAPACITY));
+	gameContext.input.popMotionEvents.init(
+			PLATFORMINPUT_MOTIONEVENTSPOPQUEUE_CAPACITY,
+			allocArrayOfType(platformMemory, input::InputEvent, PLATFORMINPUT_MOTIONEVENTSPOPQUEUE_CAPACITY));
 
 	// gameContext.input should be stored on a cache line boundary due to the concurrent queues
 	// contained within, to prevent possible false sharing
