@@ -11,6 +11,7 @@
 #include "utility/logger.h"
 #include "utility/fixed_timestep.h"
 #include "input/game_input.h"
+#include "math/qmath.h"
 
 //#define MAX_GAME_COMPONENTS		32
 
