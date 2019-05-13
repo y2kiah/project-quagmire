@@ -37,11 +37,15 @@ struct dvec4
 		x = rhs.x;
 		y = rhs.y;
 		z = rhs.z;
+		w = rhs.w;
 		return *(dvec4*)this;
 	}
 
 	dvec4& operator=(const _dvec4& rhs) {
-		*this = (dvec4&)rhs;
+		x = rhs.x;
+		y = rhs.y;
+		z = rhs.z;
+		w = rhs.w;
 		return *this;
 	}
 };
@@ -130,7 +134,7 @@ dvec4& operator*=(dvec4& lhs, const dvec4& rhs)
 
 dvec4& operator/=(dvec4& lhs, const dvec4& rhs)
 {
-	assert(rhs.x != 0.0f && rhs.y != 0.0f && rhs.z != 0.0f && rhs.w != 0.0f);
+	assert(rhs.x != 0.0 && rhs.y != 0.0 && rhs.z != 0.0 && rhs.w != 0.0);
 	lhs.x /= rhs.x;
 	lhs.y /= rhs.y;
 	lhs.z /= rhs.z;
@@ -170,7 +174,7 @@ dvec4& operator*=(dvec4& lhs, r64 rhs)
 
 dvec4& operator/=(dvec4& lhs, r64 rhs)
 {
-	assert(rhs != 0.0f);
+	assert(rhs != 0.0);
 	lhs.x /= rhs;
 	lhs.y /= rhs;
 	lhs.z /= rhs;
@@ -212,7 +216,7 @@ dvec4 operator*(const dvec4& lhs, const dvec4& rhs)
 
 dvec4 operator/(const dvec4& lhs, const dvec4& rhs)
 {
-	assert(rhs.x != 0.0f && rhs.y != 0.0f && rhs.z != 0.0f && rhs.w != 0.0f);
+	assert(rhs.x != 0.0 && rhs.y != 0.0 && rhs.z != 0.0 && rhs.w != 0.0);
 	return dvec4{
 		lhs.x / rhs.x,
 		lhs.y / rhs.y,
@@ -253,9 +257,19 @@ dvec4 operator*(const dvec4& lhs, r64 rhs)
 	};
 }
 
+dvec4 operator*(r64 lhs, const dvec4& rhs)
+{
+	return dvec4{
+		lhs * rhs.x,
+		lhs * rhs.y,
+		lhs * rhs.z,
+		lhs * rhs.w
+	};
+}
+
 dvec4 operator/(const dvec4& lhs, r64 rhs)
 {
-	assert(rhs != 0.0f);
+	assert(rhs != 0.0);
 	return dvec4{
 		lhs.x / rhs,
 		lhs.y / rhs,
@@ -263,6 +277,18 @@ dvec4 operator/(const dvec4& lhs, r64 rhs)
 		lhs.w / rhs
 	};
 }
+
+dvec4 operator/(r64 lhs, const dvec4& rhs)
+{
+	assert(rhs.x != 0.0 && rhs.y != 0.0 && rhs.z != 0.0 && rhs.w != 0.0);
+	return dvec4{
+		lhs / rhs.x,
+		lhs / rhs.y,
+		lhs / rhs.z,
+		lhs / rhs.w
+	};
+}
+
 
 // Comparison operators
 

@@ -22,7 +22,8 @@ struct dvec2
 	r64  operator[](size_t e) const { assert(e < 2); return E[e]; }
 
 	dvec2& operator=(const _dvec2& rhs) {
-		*this = (dvec2&)rhs;
+		x = rhs.x;
+		y = rhs.y;
 		return *this;
 	}
 };

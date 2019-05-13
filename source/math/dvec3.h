@@ -20,14 +20,18 @@ struct dvec3
 	r64& operator[](size_t e) { assert(e < 3); return E[e]; }
 	r64  operator[](size_t e) const { assert(e < 3); return E[e]; }
 
-	dvec3& operator=(const dvec2& rhs) {
+	dvec3& operator=(const dvec2& rhs)
+	{
 		x = rhs.x;
 		y = rhs.y;
 		return *(dvec3*)this;
 	}
 
-	dvec3& operator=(const _dvec3& rhs) {
-		*this = (dvec3&)rhs;
+	dvec3& operator=(const _dvec3& rhs)
+	{
+		x = rhs.x;
+		y = rhs.y;
+		z = rhs.z;
 		return *this;
 	}
 };
@@ -108,7 +112,7 @@ dvec3& operator*=(dvec3& lhs, const dvec3& rhs)
 
 dvec3& operator/=(dvec3& lhs, const dvec3& rhs)
 {
-	assert(rhs.x != 0.0f && rhs.y != 0.0f && rhs.z != 0.0f);
+	assert(rhs.x != 0.0 && rhs.y != 0.0 && rhs.z != 0.0);
 	lhs.x /= rhs.x;
 	lhs.y /= rhs.y;
 	lhs.z /= rhs.z;
@@ -144,7 +148,7 @@ dvec3& operator*=(dvec3& lhs, r64 rhs)
 
 dvec3& operator/=(dvec3& lhs, r64 rhs)
 {
-	assert(rhs != 0.0f);
+	assert(rhs != 0.0);
 	lhs.x /= rhs;
 	lhs.y /= rhs;
 	lhs.z /= rhs;
@@ -182,7 +186,7 @@ dvec3 operator*(const dvec3& lhs, const dvec3& rhs)
 
 dvec3 operator/(const dvec3& lhs, const dvec3& rhs)
 {
-	assert(rhs.x != 0.0f && rhs.y != 0.0f && rhs.z != 0.0f);
+	assert(rhs.x != 0.0 && rhs.y != 0.0 && rhs.z != 0.0);
 	return dvec3{
 		lhs.x / rhs.x,
 		lhs.y / rhs.y,
@@ -219,9 +223,18 @@ dvec3 operator*(const dvec3& lhs, r64 rhs)
 	};
 }
 
+dvec3 operator*(r64 lhs, const dvec3& rhs)
+{
+	return dvec3{
+		lhs * rhs.x,
+		lhs * rhs.y,
+		lhs * rhs.z
+	};
+}
+
 dvec3 operator/(const dvec3& lhs, r64 rhs)
 {
-	assert(rhs != 0.0f);
+	assert(rhs != 0.0);
 	return dvec3{
 		lhs.x / rhs,
 		lhs.y / rhs,
@@ -267,6 +280,111 @@ bool operator<(const dvec3& lhs, r64 rhs)
 bool operator>(const dvec3& lhs, r64 rhs)
 {
 	return (lhs.x > rhs && lhs.y > rhs && lhs.z > rhs);
+}
+
+
+// vector operations
+
+r64 dot(const dvec3& v1, const dvec3& v2)
+{
+	return (
+		v1.x * v2.x +
+		v1.y * v2.y +
+		v1.z * v2.z);
+}
+
+r64 length(const dvec3& v)
+{
+	return sqrt(dot(v, v));
+}
+
+r64 distance(const dvec3& p0, const dvec3& p1)
+{
+	return length(p1 - p0);
+}
+
+dvec3 normalize(const dvec3& v)
+{
+	assert(dot(v, v) != 0.0);
+	return v * (1.0 / sqrt(dot(v, v)));
+}
+
+dvec3 cross(const dvec3& v1, const dvec3& v2)
+{
+	return dvec3{
+		v1.y * v2.z - v2.y * v1.z,
+		v1.z * v2.x - v2.z * v1.x,
+		v1.x * v2.y - v2.x * v1.y};
+}
+
+/**
+ * Projection of a vector onto another vector
+ */
+dvec3 projection(
+	const dvec3& x,
+	const dvec3& normal)
+{
+	return dot(x, normal) / dot(normal, normal) * normal;
+}
+
+/**
+ * Perpendicular of a vector from another vector
+ */
+dvec3 perpendicular(
+	const dvec3& x, 
+	const dvec3& normal)
+{
+	return x - projection(x, normal);
+}
+
+/**
+ * Find the point on vector ab which is the closest to a point. The vector from point to the
+ * resulting intersection is perpendicular to the line ab.
+ */
+dvec3 closestPointOnLine(
+	const dvec3& point,
+	const dvec3& a,
+	const dvec3& b)
+{
+	r64 lineLength = distance(a, b);
+	dvec3 vector = point - a;
+	dvec3 lineDirection = (b - a) / lineLength;
+
+	// Project vector to lineDirection to get the distance of point from a
+	r64 distance = dot(vector, lineDirection);
+
+	if (distance <= 0.0) {
+		return a;
+	}
+	else if (distance >= lineLength) {
+		return b;
+	}
+	return a + lineDirection * distance;
+}
+
+dvec3 faceForward(
+	const dvec3& n,
+	const dvec3& i,
+	const dvec3& nRef)
+{
+	return (dot(nRef, i) < 0.0 ? n : -n);
+}
+
+dvec3 reflect(
+	const dvec3& i,
+	const dvec3& n)
+{
+	return i - n * dot(n, i) * 2.0;
+}
+
+dvec3 refract(
+	const dvec3& i,
+	const dvec3& n,
+	r64 eta)
+{
+	r64 dotValue = dot(n, i);
+	r64 k = (1.0 - eta * eta * (1.0 - dotValue * dotValue));
+	return (eta * i - (eta * dotValue + sqrt(k)) * n) * (r64)(k >= 0.0);
 }
 
 

@@ -171,7 +171,7 @@ static_assert_aligned_size(SparseHandleMap32,8);
 
 size_t SparseHandleMap32::getTotalBufferSize(u16 elementSizeB, u32 capacity)
 {
-	return align(((size_t)elementSizeB + sizeof(Header)) * capacity, 8);
+	return _align(((size_t)elementSizeB + sizeof(Header)) * capacity, 8);
 }
 
 

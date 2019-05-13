@@ -12,6 +12,7 @@
 #include "utility/fixed_timestep.h"
 #include "input/game_input.h"
 #include "math/qmath.h"
+#include "scene/camera.h"
 
 //#define MAX_GAME_COMPONENTS		32
 

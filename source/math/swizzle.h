@@ -267,6 +267,7 @@
 	SWIZZLE_4_4_RO(x, y, y, w, vec4)\
 	SWIZZLE_4_4_RO(z, y, y, w, vec4)\
 	\
+	SWIZZLE_4_3_RW(x, y, z, vec4, vec3)\
 	SWIZZLE_4_3_RW(x, y, w, vec4, vec3)\
 	SWIZZLE_4_3_RW(x, z, w, vec4, vec3)\
 	SWIZZLE_4_3_RW(y, x, w, vec4, vec3)\

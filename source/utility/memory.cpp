@@ -99,7 +99,7 @@ BlockFitResult getBlockToFit(
 
 	do {
 		uintptr_t currentAddr = (uintptr_t)block->base + block->used;
-		uintptr_t alignmentOffset = align(currentAddr, (uintptr_t)align) - currentAddr;
+		uintptr_t alignmentOffset = _align(currentAddr, (uintptr_t)align) - currentAddr;
 		requiredSize = size + alignmentOffset;
 
 		if (block->used + requiredSize <= block->size) {

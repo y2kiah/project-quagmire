@@ -183,8 +183,8 @@ size_t DenseHandleMap32::getTotalBufferSize(u16 elementSizeB, u32 capacity)
 {
 	// handle aligned storage, which may increase total size due to padding between buffers
 	// add an extra item to the items array for scratch memory used by defragment sort
-	size_t size = align((size_t)elementSizeB * (capacity+1), 8);
-	size = align(size + (sizeof(h64) * capacity), 4);
+	size_t size = _align((size_t)elementSizeB * (capacity+1), 8);
+	size = _align(size + (sizeof(h64) * capacity), 4);
 	size += (sizeof(u32) * capacity);
 	return size;
 }
@@ -426,8 +426,8 @@ void DenseHandleMap32::init(
 	items = buffer;
 	// round up to aligned storage
 	// add an extra item to the items array for scratch memory used by defragment sort
-	sparseIds = (h64*)align((uintptr_t)items + (elementSizeB * (capacity+1)), 8);
-	denseToSparse = (u32*)align((uintptr_t)sparseIds + (sizeof(h64) * capacity), 4);
+	sparseIds = (h64*)_align((uintptr_t)items + (elementSizeB * (capacity+1)), 8);
+	denseToSparse = (u32*)_align((uintptr_t)sparseIds + (sizeof(h64) * capacity), 4);
 
 	// check resulting alignment in case element storage plus padding doesn't leave us 8-byte aligned
 	assert(is_aligned(sparseIds, 8) && "sparseIds not properly aligned");

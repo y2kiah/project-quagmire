@@ -29,6 +29,7 @@ static Game* _game = nullptr;
 #include "utility/memory.cpp"
 #include "utility/logger.cpp"
 #include "input/game_input.cpp"
+#include "scene/camera.cpp"
 
 
 /**

@@ -33,7 +33,7 @@
 #define is_aligned(addr, bytes)     (((uintptr_t)(const void *)(addr)) % (bytes) == 0)
 
 #define _align_mask(addr, mask)     (((uintptr_t)(addr)+(mask))&~(mask))
-#define align(addr, bytes)          _align_mask(addr,(bytes)-1)
+#define _align(addr, bytes)          _align_mask(addr,(bytes)-1)
 
 // static assert macro for checking struct size to a base alignment when packed in an array
 #define static_assert_aligned_size(Type,bytes)	static_assert(sizeof(Type) % (bytes) == 0,\
@@ -76,6 +76,8 @@ inline u32 min(u32 a, u32 b) { return (a < b ? a : b); }
 inline i32 min(i32 a, i32 b) { return (a < b ? a : b); }
 inline u64 min(u64 a, u64 b) { return (a < b ? a : b); }
 inline i64 min(i64 a, i64 b) { return (a < b ? a : b); }
+inline r32 min(r32 a, r32 b) { return (a < b ? a : b); }
+inline r64 min(r64 a, r64 b) { return (a < b ? a : b); }
 
 inline u8  max(u8 a, u8 b)   { return (a > b ? a : b); }
 inline i8  max(i8 a, i8 b)   { return (a > b ? a : b); }
@@ -85,6 +87,8 @@ inline u32 max(u32 a, u32 b) { return (a > b ? a : b); }
 inline i32 max(i32 a, i32 b) { return (a > b ? a : b); }
 inline u64 max(u64 a, u64 b) { return (a > b ? a : b); }
 inline i64 max(i64 a, i64 b) { return (a > b ? a : b); }
+inline r32 max(r32 a, r32 b) { return (a > b ? a : b); }
+inline r64 max(r64 a, r64 b) { return (a > b ? a : b); }
 
 // c std lib macros for msvc-only *_s functions
 #ifdef _MSC_VER
