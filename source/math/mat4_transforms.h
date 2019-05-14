@@ -484,53 +484,204 @@ mat4 pickMatrix(
 
 mat4 lookAtRH(
 	const vec3& eye,
-	const vec3& center,
+	const vec3& target,
 	const vec3& up)
 {
-	vec3 f(normalize(center - eye));
-	vec3 s(normalize(cross(f, up)));
-	vec3 u(cross(s, f));
+	vec3 F(normalize(target - eye));
+	vec3 S(normalize(cross(F, up)));
+	vec3 U(cross(S, F));
 
-	mat4 result;
-	result[0][0] = s.x;
-	result[1][0] = s.y;
-	result[2][0] = s.z;
-	result[0][1] = u.x;
-	result[1][1] = u.y;
-	result[2][1] = u.z;
-	result[0][2] = -f.x;
-	result[1][2] = -f.y;
-	result[2][2] = -f.z;
-	result[3][0] = -dot(s, eye);
-	result[3][1] = -dot(u, eye);
-	result[3][2] = dot(f, eye);
-	return result;
+	return mat4(
+		S.x, U.x, -F.x, 0.0f,
+		S.y, U.y, -F.y, 0.0f,
+		S.z, U.z, -F.z, 0.0f,
+		-dot(S, eye), -dot(U, eye), +dot(F, eye), 1.0f);
 }
 
 
 mat4 lookAtLH(
 	const vec3& eye,
-	const vec3& center,
+	const vec3& target,
 	const vec3& up)
 {
-	vec3 f(normalize(center - eye));
-	vec3 s(normalize(cross(up, f)));
-	vec3 u(cross(f, s));
+	vec3 F(normalize(target - eye));
+	vec3 S(normalize(cross(up, F)));
+	vec3 U(cross(F, S));
 
-	mat4 result;
-	result[0][0] = s.x;
-	result[1][0] = s.y;
-	result[2][0] = s.z;
-	result[0][1] = u.x;
-	result[1][1] = u.y;
-	result[2][1] = u.z;
-	result[0][2] = f.x;
-	result[1][2] = f.y;
-	result[2][2] = f.z;
-	result[3][0] = -dot(s, eye);
-	result[3][1] = -dot(u, eye);
-	result[3][2] = -dot(f, eye);
-	return result;
+	return mat4(
+		S.x, U.x, F.x, 0.0f,
+		S.y, U.y, F.y, 0.0f,
+		S.z, U.z, F.z, 0.0f,
+		-dot(S, eye), -dot(U, eye), -dot(F, eye), 1.0f);
+}
+
+
+/**
+ * Get a transform matrix to align to an vector. This is the inverse/transpose of lookAtRH.
+ * lookAt returns a viewing matrix (transforms coordinates into viewspace) whereas this function
+ * returns a transform into world space (from a local model space into world space). The transform
+ * will both translate and rotate the model space to face a target from the eye point.
+ */
+mat4 alignToRH(
+	const vec3& eye,
+	const vec3& target,
+	const vec3& up)
+{
+	vec3 F(normalize(target - eye));
+	vec3 S(normalize(cross(F, up)));
+	vec3 U(cross(S, F));
+
+	// ensure that the target direction is non-zero.
+	if (F.x == 0.0f && F.y == 0.0f && F.z == 0.0f)
+	{
+		F.x = 0.0f;
+		F.y = 0.0f;
+		F.z = -1.0f;
+	}
+
+	// Ensure that the up direction is non-zero.
+	if (U.x == 0.0f && U.y == 0.0f && U.z == 0.0f)
+	{
+		U.x = 0.0f;
+		U.y = 1.0f;
+		U.z = 0.0f;
+	}
+
+	// if view dir and up are parallel or opposite, then compute a new,
+	// arbitrary up that is not parallel or opposite to view dir
+	if (dot(F, U) == 0.0f) {
+		const vec3 xAxis = { 1.0f, 0.0f, 0.0f };
+		const vec3 zAxis = { 0.0f, 0.0f, 1.0f };
+		U = (F != xAxis) ? cross(F, xAxis) : cross(F, zAxis);
+	}
+
+	return mat4(
+		 S.x,  S.y,  S.z, -dot(S, eye),
+		 U.x,  U.y,  U.z, -dot(U, eye),
+		-F.x, -F.y, -F.z, +dot(F, eye),
+		0.0f, 0.0f, 0.0f, 1.0f);
+}
+
+
+mat4 alignToLH(
+	const vec3& eye,
+	const vec3& target,
+	const vec3& up)
+{
+	vec3 F(normalize(target - eye));
+	vec3 S(normalize(cross(up, F)));
+	vec3 U(cross(F, S));
+
+	if (F.x == 0.0f && F.y == 0.0f && F.z == 0.0f)
+	{
+		F.x = 0.0f;
+		F.y = 0.0f;
+		F.z = 1.0f;
+	}
+
+	if (U.x == 0.0f && U.y == 0.0f && U.z == 0.0f)
+	{
+		U.x = 0.0f;
+		U.y = 1.0f;
+		U.z = 0.0f;
+	}
+
+	if (dot(F, U) == 0.0f) {
+		const vec3 xAxis = { 1.0f, 0.0f, 0.0f };
+		const vec3 zAxis = { 0.0f, 0.0f, 1.0f };
+		U = (F != xAxis) ? cross(F, xAxis) : cross(F, zAxis);
+	}
+
+	return mat4(
+		S.x, S.y, S.z, -dot(S, eye),
+		U.x, U.y, U.z, -dot(U, eye),
+		F.x, F.y, F.z, -dot(F, eye),
+		0.0f, 0.0f, 0.0f, 1.0f);
+}
+
+
+/**
+ * Get a rotation matrix to align to an vector. This is the inverse/transpose of the upper 3x3
+ * portion of the lookAtRH matrix. lookAt returns a viewing matrix (transforms coordinates into
+ * viewspace) whereas this function returns a rotation into world space (from a local model space
+ * into world space). Unlike alignToRH, this matrix is rotation only and will not set any
+ * translation to an eye point, just a direction.
+ */
+mat4 alignAlongRH(
+	const vec3& viewDir,
+	const vec3& up)
+{
+	assert(length2(viewDir) != 0.0f && "viewDir must be normalized");
+	vec3 B(-viewDir);
+	vec3 S(normalize(cross(up, B)));
+	vec3 U(cross(B, S));
+
+	// ensure that the target direction is non-zero.
+	if (B.x == 0.0f && B.y == 0.0f && B.z == 0.0f)
+	{
+		B.x = 0.0f;
+		B.y = 0.0f;
+		B.z = -1.0f;
+	}
+
+	// Ensure that the up direction is non-zero.
+	if (U.x == 0.0f && U.y == 0.0f && U.z == 0.0f)
+	{
+		U.x = 0.0f;
+		U.y = 1.0f;
+		U.z = 0.0f;
+	}
+
+	// if view dir and up are parallel or opposite, then compute a new,
+	// arbitrary up that is not parallel or opposite to view dir
+	if (dot(B, U) == 0.0f) {
+		const vec3 xAxis = { 1.0f, 0.0f, 0.0f };
+		const vec3 zAxis = { 0.0f, 0.0f, 1.0f };
+		U = (B != xAxis) ? cross(B, xAxis) : cross(B, zAxis);
+	}
+
+	return mat4(
+		S.x,  S.y,  S.z,  0.0f,
+		U.x,  U.y,  U.z,  0.0f,
+		B.x,  B.y,  B.z,  0.0f,
+		0.0f, 0.0f, 0.0f, 1.0f);
+}
+
+
+mat4 alignAlongLH(
+	const vec3& eye,
+	const vec3& target,
+	const vec3& up)
+{
+	vec3 F(normalize(target - eye));
+	vec3 S(normalize(cross(up, F)));
+	vec3 U(cross(F, S));
+
+	if (F.x == 0.0f && F.y == 0.0f && F.z == 0.0f)
+	{
+		F.x = 0.0f;
+		F.y = 0.0f;
+		F.z = 1.0f;
+	}
+
+	if (U.x == 0.0f && U.y == 0.0f && U.z == 0.0f)
+	{
+		U.x = 0.0f;
+		U.y = 1.0f;
+		U.z = 0.0f;
+	}
+
+	if (dot(F, U) == 0.0f) {
+		const vec3 xAxis = { 1.0f, 0.0f, 0.0f };
+		const vec3 zAxis = { 0.0f, 0.0f, 1.0f };
+		U = (F != xAxis) ? cross(F, xAxis) : cross(F, zAxis);
+	}
+
+	return mat4(
+		S.x,  S.y,  S.z,  0.0f,
+		U.x,  U.y,  U.z,  0.0f,
+		F.x,  F.y,  F.z,  0.0f,
+		0.0f, 0.0f, 0.0f, 1.0f);
 }
 
 

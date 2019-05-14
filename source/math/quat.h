@@ -2,6 +2,8 @@
 #define _QUAT_H
 
 #include "vec4.h"
+#include "mat3.h"
+#include "mat4.h"
 
 
 struct quat
@@ -355,29 +357,13 @@ quat normalize(const quat& q)
 	return quat{ q.w*invLen, q.x*invLen, q.y*invLen, q.z*invLen };
 }
 
-quat mix(const quat& x, const quat& y, r32 a)
+quat mix(const quat& q1, const quat& q2, r32 a)
 {
-	r32 cosTheta = dot(x, y);
-
-	// Perform a linear interpolation when cosTheta is close to 1 to avoid side effect of sin(angle) becoming a zero denominator
-	if (cosTheta > 1.0f - FLT_EPSILON) {
-		// Linear interpolation
-		return quat{
-			mix(x.w, y.w, a),
-			mix(x.x, y.x, a),
-			mix(x.y, y.y, a),
-			mix(x.z, y.z, a)};
-	}
-	else {
-		// Essential Mathematics, page 467
-		r32 angle = acosf(cosTheta);
-		return (sinf((1.0f - a) * angle) * x + sinf(a * angle) * y) / sinf(angle);
-	}
+	return q1 * (1.0f - a) + (q2 * a);
 }
 
 quat lerp(const quat& q1, const quat& q2, r32 a)
 {
-	assert(a >= 0.0f && a <= 1.0f && "lerp is only defined in [0, 1]");
 	return q1 * (1.0f - a) + (q2 * a);
 }
 
@@ -505,106 +491,6 @@ vec3 eulerAngles(const quat& x)
 	return vec3{ pitch(x), yaw(x), roll(x) };
 }
 
-/*
-mat3 mat3_cast(const quat& q)
-{
-	mat3 result;
-	r32 qxx(q.x * q.x);
-	r32 qyy(q.y * q.y);
-	r32 qzz(q.z * q.z);
-	r32 qxz(q.x * q.z);
-	r32 qxy(q.x * q.y);
-	r32 qyz(q.y * q.z);
-	r32 qwx(q.w * q.x);
-	r32 qwy(q.w * q.y);
-	r32 qwz(q.w * q.z);
-
-	result[0][0] = 1.0f - 2.0f * (qyy +  qzz);
-	result[0][1] = 2.0f * (qxy + qwz);
-	result[0][2] = 2.0f * (qxz - qwy);
-
-	result[1][0] = 2.0f * (qxy - qwz);
-	result[1][1] = 1.0f - 2.0f * (qxx +  qzz);
-	result[1][2] = 2.0f * (qyz + qwx);
-
-	result[2][0] = 2.0f * (qxz + qwy);
-	result[2][1] = 2.0f * (qyz - qwx);
-	result[2][2] = 1.0f - 2.0f * (qxx +  qyy);
-	return result;
-}
-
-mat4 mat4_cast(const quat& q)
-{
-	return mat4(mat3_cast(q));
-}
-
-quat quat_cast(const mat3& m)
-{
-	r32 fourXSquaredMinus1 = m[0][0] - m[1][1] - m[2][2];
-	r32 fourYSquaredMinus1 = m[1][1] - m[0][0] - m[2][2];
-	r32 fourZSquaredMinus1 = m[2][2] - m[0][0] - m[1][1];
-	r32 fourWSquaredMinus1 = m[0][0] + m[1][1] + m[2][2];
-
-	int biggestIndex = 0;
-	r32 fourBiggestSquaredMinus1 = fourWSquaredMinus1;
-	if(fourXSquaredMinus1 > fourBiggestSquaredMinus1)
-	{
-		fourBiggestSquaredMinus1 = fourXSquaredMinus1;
-		biggestIndex = 1;
-	}
-	if(fourYSquaredMinus1 > fourBiggestSquaredMinus1)
-	{
-		fourBiggestSquaredMinus1 = fourYSquaredMinus1;
-		biggestIndex = 2;
-	}
-	if(fourZSquaredMinus1 > fourBiggestSquaredMinus1)
-	{
-		fourBiggestSquaredMinus1 = fourZSquaredMinus1;
-		biggestIndex = 3;
-	}
-
-	r32 biggestVal = sqrt(fourBiggestSquaredMinus1 + 1.0f) * 0.5f;
-	r32 mult = 0.25f / biggestVal;
-
-	quat result;
-	switch(biggestIndex) {
-		case 0:
-			result.w = biggestVal;
-			result.x = (m[1][2] - m[2][1]) * mult;
-			result.y = (m[2][0] - m[0][2]) * mult;
-			result.z = (m[0][1] - m[1][0]) * mult;
-			break;
-		case 1:
-			result.w = (m[1][2] - m[2][1]) * mult;
-			result.x = biggestVal;
-			result.y = (m[0][1] + m[1][0]) * mult;
-			result.z = (m[2][0] + m[0][2]) * mult;
-			break;
-		case 2:
-			result.w = (m[2][0] - m[0][2]) * mult;
-			result.x = (m[0][1] + m[1][0]) * mult;
-			result.y = biggestVal;
-			result.z = (m[1][2] + m[2][1]) * mult;
-			break;
-		case 3:
-			result.w = (m[0][1] - m[1][0]) * mult;
-			result.x = (m[2][0] + m[0][2]) * mult;
-			result.y = (m[1][2] + m[2][1]) * mult;
-			result.z = biggestVal;
-			break;
-		default: // Silence a -Wswitch-default warning in GCC. Should never actually get here. Assert is just for sanity.
-			assert(false);
-			break;
-	}
-	return result;
-}
-
-quat quat_cast(const mat4& m4)
-{
-	return quat_cast(mat3(m4));
-}
-*/
-
 r32 angle(const quat& x)
 {
 	return acosf(x.w) * 2.0f;
@@ -703,6 +589,130 @@ quat quatFromVectors(
 	float m = sqrt(2.0f + 2.0f * dot(u, v));
 	vec3 w = (1.0f / m) * cross(u, v);
 	return quat{ 0.5f * m, w.x, w.y, w.z };
+}
+
+quat quat_alignAlongLH(
+	const vec3& viewDir,
+	const vec3& worldUp)
+{
+	assert(fabs(length2(viewDir) - 1.0f) <= FLT_EPSILON && "viewDir must be normalized");
+
+	const vec3& F = viewDir;
+	vec3 S(normalize(cross(F, worldUp)));	// side axis
+	vec3 U(cross(S, F));					// rotation up axis
+
+	r32 trace = S.x + U.y + F.z;
+	if (trace > 0.0f)
+	{
+		r32 s = 0.5f / sqrtf(trace + 1.0f);
+		return quat{
+			0.25f / s,
+			(U.z - F.y) * s,
+			(F.x - S.z) * s,
+			(S.y - U.x) * s};
+	}
+	else {
+		if (S.x > U.y && S.x > F.z)
+		{
+			r32 s = 2.0f * sqrtf(1.0f + S.x - U.y - F.z);
+			r32 invS = 1.0f / s;
+			return quat{
+				(U.z - F.y) * invS,
+				0.25f * s,
+				(U.x + S.y) * invS,
+				(F.x + S.z) * invS};
+		}
+		else if (U.y > F.z)
+		{
+			r32 s = 2.0f * sqrtf(1.0f + U.y - S.x - F.z);
+			r32 invS = 1.0f / s;
+			return quat{
+				(F.x - S.z) * invS,
+				(U.x + S.y) * invS,
+				0.25f * s,
+				(F.y + U.z) * invS};
+		}
+		else {
+			r32 s = 2.0f * sqrtf(1.0f + F.z - S.x - U.y);
+			r32 invS = 1.0f / s;
+			return quat{
+				(S.y - U.x) * invS,
+				(F.x + S.z) * invS,
+				(F.y + U.z) * invS,
+				0.25f * s};
+		}
+	}
+}
+
+quat quat_alignToLH(
+	const vec3& eye,
+	const vec3& target,
+	const vec3& worldUp)
+{
+	vec3 F(normalize(target - eye)); // parallel view direction
+	return quat_alignAlongLH(F, worldUp);
+}
+
+quat quat_alignAlongRH(
+	const vec3& viewDir,
+	const vec3& worldUp)
+{
+	assert(fabs(length2(viewDir) - 1.0f) <= FLT_EPSILON && "viewDir must be normalized");
+
+	vec3 B(-viewDir);						// back axis (reverse viewDir)
+	vec3 S(normalize(cross(worldUp, B)));	// side axis
+	vec3 U(cross(B, S));					// rotation up axis
+
+	r32 trace = S.x + U.y + B.z;
+	if (trace > 0.0f)
+	{
+		r32 s = 0.5f / sqrtf(trace + 1.0f);
+		return quat{
+			0.25f / s,
+			(U.z - B.y) * s,
+			(B.x - S.z) * s,
+			(S.y - U.x) * s};
+	}
+	else {
+		if (S.x > U.y && S.x > B.z)
+		{
+			r32 s = 2.0f * sqrtf(1.0f + S.x - U.y - B.z);
+			r32 invS = 1.0f / s;
+			return quat{
+				(U.z - B.y) * invS,
+				0.25f * s,
+				(U.x + S.y) * invS,
+				(B.x + S.z) * invS};
+		}
+		else if (U.y > B.z)
+		{
+			r32 s = 2.0f * sqrtf(1.0f + U.y - S.x - B.z);
+			r32 invS = 1.0f / s;
+			return quat{
+				(B.x - S.z) * invS,
+				(U.x + S.y) * invS,
+				0.25f * s,
+				(B.y + U.z) * invS};
+		}
+		else {
+			r32 s = 2.0f * sqrtf(1.0f + B.z - S.x - U.y);
+			r32 invS = 1.0f / s;
+			return quat{
+				(S.y - U.x) * invS,
+				(B.x + S.z) * invS,
+				(B.y + U.z) * invS,
+				0.25f * s};
+		}
+	}
+}
+
+quat quat_alignToRH(
+	const vec3& eye,
+	const vec3& target,
+	const vec3& worldUp)
+{
+	vec3 F(normalize(target - eye)); // parallel view direction
+	return quat_alignAlongRH(F, worldUp);
 }
 
 

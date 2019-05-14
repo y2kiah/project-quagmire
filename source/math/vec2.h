@@ -258,6 +258,11 @@ r32 dot(const vec2& v1, const vec2& v2)
 		v1.y * v2.y);
 }
 
+r32 length2(const vec2& v)
+{
+	return dot(v, v);
+}
+
 r32 length(const vec2& v)
 {
 	return sqrtf(dot(v, v));

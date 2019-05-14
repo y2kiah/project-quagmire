@@ -240,6 +240,16 @@ vec3 operator/(const vec3& lhs, r32 rhs)
 	};
 }
 
+vec3 operator/(r32 lhs, const vec3& rhs)
+{
+	assert(rhs.x != 0.0f && rhs.y != 0.0f && rhs.z != 0.0f);
+	return vec3{
+		lhs / rhs.x,
+		lhs / rhs.y,
+		lhs / rhs.z
+	};
+}
+
 // Comparison operators
 
 bool operator==(const vec3& lhs, const vec3& rhs)
@@ -288,6 +298,11 @@ r32 dot(const vec3& v1, const vec3& v2)
 		v1.x * v2.x +
 		v1.y * v2.y +
 		v1.z * v2.z);
+}
+
+r32 length2(const vec3& v)
+{
+	return dot(v, v);
 }
 
 r32 length(const vec3& v)

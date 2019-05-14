@@ -242,6 +242,16 @@ dvec3 operator/(const dvec3& lhs, r64 rhs)
 	};
 }
 
+dvec3 operator/(r64 lhs, const dvec3& rhs)
+{
+	assert(rhs.x != 0.0 && rhs.y != 0.0 && rhs.z != 0.0);
+	return dvec3{
+		lhs / rhs.x,
+		lhs / rhs.y,
+		lhs / rhs.z
+	};
+}
+
 // Comparison operators
 
 bool operator==(const dvec3& lhs, const dvec3& rhs)
@@ -291,6 +301,11 @@ r64 dot(const dvec3& v1, const dvec3& v2)
 		v1.x * v2.x +
 		v1.y * v2.y +
 		v1.z * v2.z);
+}
+
+r64 length2(const dvec3& v)
+{
+	return dot(v, v);
 }
 
 r64 length(const dvec3& v)

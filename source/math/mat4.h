@@ -30,6 +30,9 @@ struct mat4
 		col{ m.col[0], m.col[1], m.col[2], m.col[3] }
 	{}
 
+	/**
+	 * Note: this is still column major order, so x0-w0 is column 0, x1-w1 column 1, etc.
+	 */
 	mat4(
 		r32 x0,  r32 y0,  r32 z0,  r32 w0,
 		r32 x1,  r32 y1,  r32 z1,  r32 w1,
@@ -285,7 +288,7 @@ r32 determinant(const mat4& m)
 	r32 subFactor05 = m[2][0] * m[3][1] - m[3][0] * m[2][1];
 
 	vec4 detCof{
-		  (m[1][1] * subFactor00 - m[1][2] * subFactor01 + m[1][3] * subFactor02),
+		+ (m[1][1] * subFactor00 - m[1][2] * subFactor01 + m[1][3] * subFactor02),
 		- (m[1][0] * subFactor00 - m[1][2] * subFactor03 + m[1][3] * subFactor04),
 		+ (m[1][0] * subFactor01 - m[1][1] * subFactor03 + m[1][3] * subFactor05),
 		- (m[1][0] * subFactor02 - m[1][1] * subFactor04 + m[1][2] * subFactor05)};

@@ -3,6 +3,7 @@
 
 #include "../utility/common.h"
 #include "dvec4.h"
+#include "dmat3.h"
 
 
 struct dmat4
@@ -285,7 +286,7 @@ r64 determinant(const dmat4& m)
 	r64 subFactor05 = m[2][0] * m[3][1] - m[3][0] * m[2][1];
 
 	dvec4 detCof{
-		  (m[1][1] * subFactor00 - m[1][2] * subFactor01 + m[1][3] * subFactor02),
+		+ (m[1][1] * subFactor00 - m[1][2] * subFactor01 + m[1][3] * subFactor02),
 		- (m[1][0] * subFactor00 - m[1][2] * subFactor03 + m[1][3] * subFactor04),
 		+ (m[1][0] * subFactor01 - m[1][1] * subFactor03 + m[1][3] * subFactor05),
 		- (m[1][0] * subFactor02 - m[1][1] * subFactor04 + m[1][2] * subFactor05)};

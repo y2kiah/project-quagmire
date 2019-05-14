@@ -482,55 +482,219 @@ dmat4 pickMatrix(
 }
 
 
+
 dmat4 lookAtRH(
 	const dvec3& eye,
-	const dvec3& center,
+	const dvec3& target,
 	const dvec3& up)
 {
-	dvec3 f(normalize(center - eye));
-	dvec3 s(normalize(cross(f, up)));
-	dvec3 u(cross(s, f));
+	dvec3 F(normalize(target - eye));
+	dvec3 S(normalize(cross(F, up)));
+	dvec3 U(cross(S, F));
 
-	dmat4 result;
-	result[0][0] = s.x;
-	result[1][0] = s.y;
-	result[2][0] = s.z;
-	result[0][1] = u.x;
-	result[1][1] = u.y;
-	result[2][1] = u.z;
-	result[0][2] = -f.x;
-	result[1][2] = -f.y;
-	result[2][2] = -f.z;
-	result[3][0] = -dot(s, eye);
-	result[3][1] = -dot(u, eye);
-	result[3][2] = dot(f, eye);
-	return result;
+	return dmat4(
+		S.x, U.x, -F.x, 0.0,
+		S.y, U.y, -F.y, 0.0,
+		S.z, U.z, -F.z, 0.0,
+		-dot(S, eye), -dot(U, eye), +dot(F, eye), 1.0);
 }
 
 
 dmat4 lookAtLH(
 	const dvec3& eye,
-	const dvec3& center,
+	const dvec3& target,
 	const dvec3& up)
 {
-	dvec3 f(normalize(center - eye));
-	dvec3 s(normalize(cross(up, f)));
-	dvec3 u(cross(f, s));
+	dvec3 F(normalize(target - eye));
+	dvec3 S(normalize(cross(up, F)));
+	dvec3 U(cross(F, S));
 
-	dmat4 result;
-	result[0][0] = s.x;
-	result[1][0] = s.y;
-	result[2][0] = s.z;
-	result[0][1] = u.x;
-	result[1][1] = u.y;
-	result[2][1] = u.z;
-	result[0][2] = f.x;
-	result[1][2] = f.y;
-	result[2][2] = f.z;
-	result[3][0] = -dot(s, eye);
-	result[3][1] = -dot(u, eye);
-	result[3][2] = -dot(f, eye);
-	return result;
+	return dmat4(
+		S.x, U.x, F.x, 0.0,
+		S.y, U.y, F.y, 0.0,
+		S.z, U.z, F.z, 0.0,
+		-dot(S, eye), -dot(U, eye), -dot(F, eye), 1.0);
+}
+
+
+/**
+ * Get a transform matrix to align to an vector. This is the inverse/transpose of lookAtRH.
+ * lookAt returns a viewing matrix (transforms coordinates into viewspace) whereas this function
+ * returns a transform into world space (from a local model space into world space). The transform
+ * will both translate and rotate the model space to face a target from the eye point.
+ */
+dmat4 alignToRH(
+	const dvec3& eye,
+	const dvec3& target,
+	const dvec3& up)
+{
+	dvec3 F(normalize(target - eye));
+	dvec3 S(normalize(cross(F, up)));
+	dvec3 U(cross(S, F));
+
+	// ensure that the target direction is non-zero.
+	if (F.x == 0.0 && F.y == 0.0 && F.z == 0.0)
+	{
+		F.x = 0.0;
+		F.y = 0.0;
+		F.z = -1.0;
+	}
+
+	// Ensure that the up direction is non-zero.
+	if (U.x == 0.0 && U.y == 0.0 && U.z == 0.0)
+	{
+		U.x = 0.0;
+		U.y = 1.0;
+		U.z = 0.0;
+	}
+
+	// if view dir and up are parallel or opposite, then compute a new,
+	// arbitrary up that is not parallel or opposite to view dir
+	if (dot(F, U) == 0.0) {
+		const dvec3 xAxis = { 1.0, 0.0, 0.0 };
+		const dvec3 zAxis = { 0.0, 0.0, 1.0 };
+		U = (F != xAxis) ? cross(F, xAxis) : cross(F, zAxis);
+	}
+
+	return dmat4(
+		 S.x,  S.y,  S.z, -dot(S, eye),
+		 U.x,  U.y,  U.z, -dot(U, eye),
+		-F.x, -F.y, -F.z, +dot(F, eye),
+		0.0, 0.0, 0.0, 1.0);
+}
+
+
+dmat4 alignToLH(
+	const dvec3& eye,
+	const dvec3& target,
+	const dvec3& up)
+{
+	dvec3 F(normalize(target - eye));
+	dvec3 S(normalize(cross(up, F)));
+	dvec3 U(cross(F, S));
+
+	if (F.x == 0.0 && F.y == 0.0 && F.z == 0.0)
+	{
+		F.x = 0.0;
+		F.y = 0.0;
+		F.z = 1.0;
+	}
+
+	if (U.x == 0.0 && U.y == 0.0 && U.z == 0.0)
+	{
+		U.x = 0.0;
+		U.y = 1.0;
+		U.z = 0.0;
+	}
+
+	if (dot(F, U) == 0.0) {
+		const dvec3 xAxis = { 1.0, 0.0, 0.0 };
+		const dvec3 zAxis = { 0.0, 0.0, 1.0 };
+		U = (F != xAxis) ? cross(F, xAxis) : cross(F, zAxis);
+	}
+
+	return dmat4(
+		S.x, S.y, S.z, -dot(S, eye),
+		U.x, U.y, U.z, -dot(U, eye),
+		F.x, F.y, F.z, -dot(F, eye),
+		0.0, 0.0, 0.0, 1.0);
+}
+
+
+/**
+ * Get a rotation matrix to align to an vector. This is the inverse/transpose of the upper 3x3
+ * portion of the lookAtRH matrix. lookAt returns a viewing matrix (transforms coordinates into
+ * viewspace) whereas this function returns a rotation into world space (from a local model space
+ * into world space). Unlike alignToRH, this matrix is rotation only and will not set any
+ * translation to an eye point, just a direction.
+ */
+dmat4 alignAlongRH(
+	const dvec3& viewDir,
+	const dvec3& up)
+{
+	assert(length2(viewDir) != 0.0 && "viewDir must be normalized");
+	dvec3 B(-viewDir);
+	dvec3 S(normalize(cross(up, B)));
+	dvec3 U(cross(B, S));
+
+	// ensure that the target direction is non-zero.
+	if (B.x == 0.0 && B.y == 0.0 && B.z == 0.0)
+	{
+		B.x = 0.0;
+		B.y = 0.0;
+		B.z = -1.0;
+	}
+
+	// Ensure that the up direction is non-zero.
+	if (U.x == 0.0 && U.y == 0.0 && U.z == 0.0)
+	{
+		U.x = 0.0;
+		U.y = 1.0;
+		U.z = 0.0;
+	}
+
+	// if view dir and up are parallel or opposite, then compute a new,
+	// arbitrary up that is not parallel or opposite to view dir
+	if (dot(B, U) == 0.0) {
+		const dvec3 xAxis = { 1.0, 0.0, 0.0 };
+		const dvec3 zAxis = { 0.0, 0.0, 1.0 };
+		U = (B != xAxis) ? cross(B, xAxis) : cross(B, zAxis);
+	}
+
+	return dmat4(
+		S.x,  S.y,  S.z,  0.0,
+		U.x,  U.y,  U.z,  0.0,
+		B.x,  B.y,  B.z,  0.0,
+		0.0, 0.0, 0.0, 1.0);
+}
+
+
+dmat4 alignAlongLH(
+	const dvec3& eye,
+	const dvec3& target,
+	const dvec3& up)
+{
+	dvec3 F(normalize(target - eye));
+	dvec3 S(normalize(cross(up, F)));
+	dvec3 U(cross(F, S));
+
+	if (F.x == 0.0 && F.y == 0.0 && F.z == 0.0)
+	{
+		F.x = 0.0;
+		F.y = 0.0;
+		F.z = 1.0;
+	}
+
+	if (U.x == 0.0 && U.y == 0.0 && U.z == 0.0)
+	{
+		U.x = 0.0;
+		U.y = 1.0;
+		U.z = 0.0;
+	}
+
+	if (dot(F, U) == 0.0) {
+		const dvec3 xAxis = { 1.0, 0.0, 0.0 };
+		const dvec3 zAxis = { 0.0, 0.0, 1.0 };
+		U = (F != xAxis) ? cross(F, xAxis) : cross(F, zAxis);
+	}
+
+	return dmat4(
+		S.x,  S.y,  S.z,  0.0,
+		U.x,  U.y,  U.z,  0.0,
+		F.x,  F.y,  F.z,  0.0,
+		0.0, 0.0, 0.0, 1.0);
+}
+
+
+dmat4 affineInverse(const dmat4& m)
+{
+	dmat3 inv(inverse(make_dmat3(m)));
+	
+	return dmat4(
+		make_dvec4(inv[0], 0.0),
+		make_dvec4(inv[1], 0.0),
+		make_dvec4(inv[2], 0.0),
+		make_dvec4(-inv * make_dvec3(m[3]), 1.0));
 }
 
 

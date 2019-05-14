@@ -28,6 +28,7 @@ typedef void GameOnExitFunc(
 
 #include "Windows.h"
 
+
 struct GameCode
 {
 	HMODULE		gameDLL;

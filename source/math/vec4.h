@@ -397,6 +397,11 @@ vec4 dot4_simd(
 	return vec;
 }
 
+r32 length2(const vec4& v)
+{
+	return dot(v, v);
+}
+
 r32 length(const vec4& v)
 {
 	return sqrtf(dot(v, v));
