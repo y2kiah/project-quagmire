@@ -84,6 +84,11 @@ struct _dvec4 {
 };
 
 
+i32 clamp(i32 x, i32 minVal, i32 maxVal)
+{
+	return min(max(x, minVal), maxVal);
+}
+
 r32 clamp(r32 x, r32 minVal, r32 maxVal)
 {
 	return min(max(x, minVal), maxVal);

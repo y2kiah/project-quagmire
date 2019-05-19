@@ -29,6 +29,9 @@ struct SparseHandleMap32 {
 		u16 free       : 1;
 	};
 
+	/**
+	 * Item is used to return data from the container, it is not the stored type itself.
+	 */
 	struct Item {
 		Header* header;
 		void*   data;

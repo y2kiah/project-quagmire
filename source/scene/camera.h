@@ -3,6 +3,7 @@
 
 #include "../math/qmath.h"
 
+
 struct CameraFrame
 {
 	mat4	projectionMatrix;
@@ -136,8 +137,16 @@ struct CameraPersp : public Camera
 {
 	vec3 getEulerAngles() const;
 
-	void setTranslationYawPitchRoll(const dvec3& position, r64 yaw, r64 pitch, r64 roll);
-	void lookAt(const dvec3 &position, const dvec3 &target);
+	void setTranslationYawPitchRoll(
+		const dvec3& position,
+		r64 yaw,
+		r64 pitch,
+		r64 roll);
+
+	void lookAt(
+		const dvec3 &position,
+		const dvec3 &target);
+
 	void extractFrustumPlanes();
 
 	void setPerspective(

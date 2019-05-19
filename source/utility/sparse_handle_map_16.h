@@ -29,6 +29,9 @@ struct SparseHandleMap16 {
 		u8  _padding[4];
 	};
 
+	/**
+	 * Item is used to return data from the container, it is not the stored type itself.
+	 */
 	struct Item {
 		Header* header;
 		void*   data;
