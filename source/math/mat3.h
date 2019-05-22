@@ -114,6 +114,14 @@ mat3& operator/=(mat3& m, r32 s)
 	return m;
 }
 
+mat3 operator-(const mat3& m)
+{
+	return mat3(
+		-m[0], 
+		-m[1],
+		-m[2]);
+}
+
 mat3 operator*(const mat3& m1, const mat3& m2)
 {
 	return mat3(

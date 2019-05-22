@@ -1,103 +1,133 @@
 #include "camera.h"
 
 
-static const vec3 c_xAxis{ 1.0f, 0.0f, 0.0f };
-static const vec3 c_yAxis{ 0.0f, 1.0f, 0.0f };
-static const vec3 c_zAxis{ 0.0f, 0.0f, 1.0f };
-
-
-///////////////////////////////////////////////////////////////////////////////////////////
-// CameraPersp2
-/*
-vec3 CameraPersp::getEulerAngles() const
+void calcPerspProjection(
+	Camera& cam,
+	r32 fovDegreesVertical,
+	r32 aspectRatio,
+	r32 nearClip,
+	r32 farClip)
 {
-	return eulerAngles(viewRotationQuat);
-}
-
-void CameraPersp::setTranslationYawPitchRoll(const dvec3& position, double yaw, double pitch, double roll)
-{
-	setEyePoint(position);
-	dmat4 rotation = eulerAngleZ(roll);
-	rotation *= eulerAngleXY(pitch, yaw);
-	viewRotationQuat = quat_cast(rotation);
+	cam.fovDegreesVertical = fovDegreesVertical;
+	cam.aspectRatio = aspectRatio;
+	cam.nearClip = nearClip;
+	cam.farClip = farClip;
 	
-	// could be delayed?
-	viewMatrix = make_mat4(translate(rotation, -eyePoint));
-	viewProjectionMatrix = projectionMatrix * viewMatrix;
-}
-*/
-void CameraPersp::lookAt(const dvec3 &position, const dvec3 &target)
-{
-	setEyePoint(position);
-	viewMatrix = make_mat4(lookAtRH(eyePoint, target, make_dvec3(worldUp)));
-	viewRotationQuat = quat_cast(viewMatrix);
+	/*frustumTop = nearClip * tanf(PIf / 180.0f * fov * 0.5f);
+	frustumBottom = -frustumTop;
+	frustumRight = frustumTop * aspectRatio;
+	frustumLeft = -frustumRight;
+
+	// perform lens shift
+	if (lensShift.y != 0.0f) {
+		frustumTop = mix(0.0f, 2.0f * frustumTop, 0.5f + 0.5f * lensShift.y);
+		frustumBottom = mix(2.0f * frustumBottom, 0.0f, 0.5f + 0.5f * lensShift.y);
+	}
+
+	if (lensShift.x != 0.0f) {
+		frustumRight = mix(2.0f * frustumRight, 0.0f, 0.5f - 0.5f * lensShift.x);
+		frustumLeft = mix(0.0f, 2.0f * frustumLeft, 0.5f - 0.5f * lensShift.x);
+	}*/
+
+	cam.frame.projection =
+		perspectiveRH(
+			fovDegreesVertical * DEG_TO_RADf,
+			aspectRatio,
+			nearClip,
+			farClip);
 	
-	// could be delayed?
-	viewProjectionMatrix = projectionMatrix * viewMatrix;
+	cam.frame.inverseProjection = inverse(cam.frame.projection);
 }
 
-
-///////////////////////////////////////////////////////////////////////////////////////////
-// Camera
-
-void Camera::setEyePoint(const dvec3 &aEyePoint)
+void setViewDirection(
+	Camera& cam,
+	const vec3 &viewDirection)
 {
-	eyePoint = aEyePoint;
-	modelViewCached = false;
+	cam.viewDirection = normalize(viewDirection);
+	cam.orientation = quatFromNormalizedVectors(
+		vec3{ 0.0f, 0.0f, -1.0f },
+		viewDirection);
 }
 
-void Camera::setCenterOfInterestPoint(const dvec3 &centerOfInterestPoint)
+void setOrientation(
+	Camera& cam,
+	const quat &orientation)
 {
-	centerOfInterest = distance(eyePoint, centerOfInterestPoint);
-	lookAt(centerOfInterestPoint);
+	cam.orientation = normalize(orientation);
+	cam.viewDirection = orientation * vec3{ 0.0f, 0.0f, -1.0f };
 }
 
-void Camera::setViewDirection(const vec3 &aViewDirection)
+void lookAt(
+	Camera& cam,
+	const dvec3 &eyePoint,
+	const dvec3 &target,
+	const dvec3 &worldUp)
 {
-	viewDirection = normalize(aViewDirection);
-	orientation = quatFromNormalizedVectors(vec3{ 0.0f, 0.0f, -1.0f }, viewDirection);
-	modelViewCached = false;
+	cam.eyePoint = eyePoint;
+	cam.worldUp = make_vec3(normalize(worldUp));
+	cam.viewDirection = make_vec3(normalize(target - eyePoint));
+	cam.orientation = quat_alignAlongRH(cam.viewDirection, cam.worldUp);
 }
 
-void Camera::setOrientation(const quat &aOrientation)
+/**
+ * Calculates matrices related to viewspace (camera centered at origin).
+ */
+void calcView(
+	Camera& cam)
 {
-	orientation = normalize(aOrientation);
-	viewDirection = orientation * vec3{ 0.0f, 0.0f, -1.0f };
-	modelViewCached = false;
+	cam.frame.view = lookAlongRH(
+		cam.eyePoint,
+		make_dvec3(cam.viewDirection),
+		make_dvec3(cam.worldUp));
+	
+	cam.frame.inverseView = affineInverse(cam.frame.view);
+	
+	mat4 mat4_view = make_mat4(cam.frame.view);
+	cam.frame.viewProjection = cam.frame.projection * mat4_view;
+	cam.frame.viewRotationQuat = quat_cast(mat4_view);
 }
 
-void Camera::setWorldUp(const vec3 &aWorldUp)
+CameraFrame& calcCameraFrame(
+	Camera& cam,
+	const dvec3& eyePoint,
+	const quat& orientation)
 {
-	worldUp = normalize(aWorldUp);
-	orientation = quat_alignAlongRH(viewDirection, worldUp);
-	modelViewCached = false;
+	cam.eyePoint = eyePoint;
+	setOrientation(cam, orientation);
+	calcView(cam);
+	
+	return cam.frame;
 }
 
-void Camera::lookAt(const dvec3 &target)
+Camera makePerspectiveCamera(
+	r32 aspectRatio,
+	r32 fovDegreesVertical,
+	r32 nearClip,
+	r32 farClip,
+	const dvec3& eyePoint,
+	const quat& orientation)
 {
-	viewDirection = make_vec3(normalize(target - eyePoint));
-	orientation = quat_alignAlongRH(viewDirection, worldUp);
-	modelViewCached = false;
+	Camera cam;
+	
+	calcPerspProjection(cam, fovDegreesVertical, aspectRatio, nearClip, farClip);
+	cam.eyePoint = eyePoint;
+	setOrientation(cam, orientation);
+	calcView(cam);
+	
+	return cam;
 }
 
-void Camera::lookAt(const dvec3 &aEyePoint, const dvec3 &target)
+r32 getFovDegreesHorizontal(
+	r32 fovDegreesVertical,
+	r32 aspectRatio)
 {
-	eyePoint = aEyePoint;
-	viewDirection = make_vec3(normalize(target - eyePoint));
-	orientation = quat_alignAlongRH(viewDirection, worldUp);
-	modelViewCached = false;
+	return RAD_TO_DEGf * (2.0f * atanf(tanf(fovDegreesVertical * DEG_TO_RADf * 0.5f) * aspectRatio));
 }
 
-void Camera::lookAt(const dvec3 &aEyePoint, const dvec3 &target, const dvec3 &aWorldUp)
-{
-	eyePoint = aEyePoint;
-	worldUp = make_vec3(normalize(aWorldUp));
-	viewDirection = make_vec3(normalize(target - eyePoint));
-	orientation = quat_alignAlongRH(viewDirection, worldUp);
-	modelViewCached = false;
-}
 
-void Camera::getNearClipCoordinates(dvec3 *topLeft, dvec3 *topRight, dvec3 *bottomLeft, dvec3 *bottomRight)
+
+
+/*void Camera::getNearClipCoordinates(dvec3 *topLeft, dvec3 *topRight, dvec3 *bottomLeft, dvec3 *bottomRight)
 {
 	calcMatrices();
 
@@ -141,15 +171,15 @@ void Camera::getFrustum(
 	*farPlane = farClip;
 }
 
-//Ray Camera::generateRay(r32 uPos, r32 vPos, r32 imagePlaneApectRatio) const
-//{
-//	calcMatrices();
+Ray Camera::generateRay(r32 uPos, r32 vPos, r32 imagePlaneApectRatio) const
+{
+	calcMatrices();
 
-//	r32 s = (uPos - 0.5f) * imagePlaneApectRatio;
-//	r32 t = (vPos - 0.5f);
-//	r32 viewDistance = imagePlaneApectRatio / math<r32>::abs(frustumRight - frustumLeft) * nearClip;
-//	return Ray(eyePoint, (right * s + up * t - (back * viewDistance)).normalized());
-//}
+	r32 s = (uPos - 0.5f) * imagePlaneApectRatio;
+	r32 t = (vPos - 0.5f);
+	r32 viewDistance = imagePlaneApectRatio / math<r32>::abs(frustumRight - frustumLeft) * nearClip;
+	return Ray(eyePoint, (right * s + up * t - (back * viewDistance)).normalized());
+}
 
 void Camera::getBillboardVectors(dvec3 *billboardRight, dvec3 *billboardUp) const
 {
@@ -190,99 +220,26 @@ vec3 Camera::worldToNdc(const dvec3 &worldCoord)
 	return make_vec3(eye * projectionMatrix);
 }
 
-//* This only mostly works
-/*r32 Camera::getScreenRadius(const Sphere &sphere, r32 screenWidth, r32 screenHeight) const
+void setTranslationYawPitchRoll(
+	Camera& cam,
+	const dvec3& eyePoint,
+	r64 yaw,
+	r64 pitch,
+	r64 roll)
 {
-	vec2 screenCenter(worldToScreen(sphere.getCenter(), screenWidth, screenHeight));
-	vec3 orthog = viewDirection.getOrthogonal().normalized();
-	vec2 screenPerimeter = worldToScreen(sphere.getCenter() + sphere.getRadius() * orthog, screenWidth, screenHeight);
-	return distance(screenPerimeter, screenCenter);
-}*/
-
-void Camera::calcModelView()
-{
-	back = normalize(-viewDirection);
-	right = orientation * c_xAxis;
-	up = orientation * c_yAxis;
-
-	dvec3 d{
-		dot(-eyePoint, make_dvec3(right)),
-		dot(-eyePoint, make_dvec3(up)),
-		dot(-eyePoint, make_dvec3(back))};
-
-	auto& m = modelViewMatrix;
-	m[0][0] = right.x; m[1][0] = right.y; m[2][0] = right.z; m[3][0] = d.x;
-	m[0][1] = up.x;    m[1][1] = up.y;    m[2][1] = up.z;    m[3][1] = d.y;
-	m[0][2] = back.x;  m[1][2] = back.y;  m[2][2] = back.z;  m[3][2] = d.z;
-	m[0][3] = 0.0;     m[1][3] = 0.0;     m[2][3] = 0.0;     m[3][3] = 1.0;
-
-	modelViewCached = true;
-	inverseModelViewCached = false;
+	cam.eyePoint = eyePoint;
+	dmat4 rotation = eulerAngleZ(roll);
+	rotation *= eulerAngleXY(pitch, yaw);
+	viewRotationQuat = quat_cast(rotation);
+	
+	viewMatrix = make_mat4(translate(rotation, -eyePoint));
+	viewProjectionMatrix = projectionMatrix * viewMatrix;
 }
 
-void Camera::calcInverseModelView()
+void Camera::setCenterOfInterestPoint(const dvec3 &centerOfInterestPoint)
 {
-	if (!modelViewCached) {
-		calcModelView();
-	}
-
-	inverseModelViewMatrix = affineInverse(modelViewMatrix);
-	inverseModelViewCached = true;
-}
-
-////////////////////////////////////////////////////////////////////////////////////////
-// CameraPersp
-
-void makePerspectiveCamera(r32 aspect, r32 fovDegrees)
-{
-//	lensShift(0.0f)
-//	r32 eyeX = pixelWidth / 2.0f;
-//	r32 eyeY = pixelHeight / 2.0f;
-//	r32 halfFov = 3.14159f * fovDegrees / 360.0f;
-//	r32 theTan = tanf(halfFov);
-//	r32 dist = eyeY / theTan;
-//	r32 nearDist = dist / 10.0f;	// near / far clip plane
-//	r32 farDist = dist * 10.0f;
-//	r32 aspect = pixelWidth / (r32)pixelHeight;
-//
-//	setPerspective(fovDegrees, aspect, nearPlane, farPlane);
-//	lookAt(vec3(eyeX, eyeY, dist), vec3(eyeX, eyeY, 0.0f));
-}
-
-void CameraPersp::setPerspective(
-	r32 verticalFovDegrees,
-	r32 aspect,
-	r32 nearPlane,
-	r32 farPlane)
-{
-	fov = verticalFovDegrees;
-	aspectRatio = aspect;
-	nearClip = nearPlane;
-	farClip = farPlane;
-
-	projectionCached = false;
-}
-
-void Camera::calcPerspProjection()
-{
-	frustumTop = nearClip * tanf(PIf / 180.0f * fov * 0.5f);
-	frustumBottom = -frustumTop;
-	frustumRight = frustumTop * aspectRatio;
-	frustumLeft = -frustumRight;
-
-	// perform lens shift
-	if (lensShift.y != 0.0f) {
-		frustumTop = mix(0.0f, 2.0f * frustumTop, 0.5f + 0.5f * lensShift.y);
-		frustumBottom = mix(2.0f * frustumBottom, 0.0f, 0.5f + 0.5f * lensShift.y);
-	}
-
-	if (lensShift.x != 0.0f) {
-		frustumRight = mix(2.0f * frustumRight, 0.0f, 0.5f - 0.5f * lensShift.x);
-		frustumLeft = mix(0.0f, 2.0f * frustumLeft, 0.5f - 0.5f * lensShift.x);
-	}
-
-	projectionMatrix = perspectiveRH(fov * DEG_TO_RADf, aspectRatio, nearClip, farClip);
-	projectionCached = true;
+	centerOfInterest = distance(eyePoint, centerOfInterestPoint);
+	lookAt(centerOfInterestPoint);
 }
 
 void CameraPersp::setLensShift(r32 horizontal, r32 vertical)
@@ -293,7 +250,7 @@ void CameraPersp::setLensShift(r32 horizontal, r32 vertical)
 	projectionCached = false;
 }
 
-/*CameraPersp	CameraPersp::getFrameSphere(const Sphere &worldSpaceSphere, int maxIterations) const
+CameraPersp	CameraPersp::getFrameSphere(const Sphere &worldSpaceSphere, int maxIterations) const
 {
 	CameraPersp result = *this;
 	result.setEyePoint(worldSpaceSphere.getCenter() - result.viewDirection * getCenterOfInterest());

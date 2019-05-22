@@ -482,21 +482,85 @@ dmat4 pickMatrix(
 }
 
 
-
 dmat4 lookAtRH(
 	const dvec3& eye,
 	const dvec3& target,
 	const dvec3& up)
 {
-	dvec3 F(normalize(target - eye));
-	dvec3 S(normalize(cross(F, up)));
-	dvec3 U(cross(S, F));
+	static const dvec3 xAxis = { 1.0, 0.0,  0.0 };
+	static const dvec3 yAxis = { 0.0, 1.0,  0.0 };
+	static const dvec3 zAxis = { 0.0, 0.0, -1.0 };
+
+	dvec3 B(normalize(eye - target));
+	dvec3 S(normalize(cross(up, B)));
+	dvec3 U(cross(B, S));
+
+	// ensure that the target direction is non-zero.
+	if (B.x == 0.0 && B.y == 0.0 && B.z == 0.0)
+	{
+		B = zAxis;
+	}
+
+	// Ensure that the up direction is non-zero.
+	if (U.x == 0.0 && U.y == 0.0 && U.z == 0.0)
+	{
+		U = yAxis;
+	}
+
+	// if view dir and up are parallel or opposite, then compute a new,
+	// arbitrary up that is not parallel or opposite to view dir
+	if (dot(B, U) == 0.0) {
+		U = (B != xAxis) ? cross(B, xAxis) : cross(B, zAxis);
+	}
 
 	return dmat4(
-		S.x, U.x, -F.x, 0.0,
-		S.y, U.y, -F.y, 0.0,
-		S.z, U.z, -F.z, 0.0,
-		-dot(S, eye), -dot(U, eye), +dot(F, eye), 1.0);
+		S.x, U.x, B.x, 0.0,
+		S.y, U.y, B.y, 0.0,
+		S.z, U.z, B.z, 0.0,
+		-dot(S, eye), -dot(U, eye), -dot(B, eye), 1.0);
+}
+
+
+/**
+ * This can be used to create the ModelView matrix for a camera.
+ */
+dmat4 lookAlongRH(
+	const dvec3& eye,
+	const dvec3& viewDir,
+	const dvec3& up)
+{
+	static const dvec3 xAxis = { 1.0, 0.0,  0.0 };
+	static const dvec3 yAxis = { 0.0, 1.0,  0.0 };
+	static const dvec3 zAxis = { 0.0, 0.0, -1.0 };
+
+	assert(length2(viewDir) != 0.0 && "viewDir must be normalized");
+	dvec3 B(-viewDir);
+	dvec3 S(normalize(cross(up, B)));
+	dvec3 U(cross(B, S));
+
+	// ensure that the target direction is non-zero.
+	if (B.x == 0.0 && B.y == 0.0 && B.z == 0.0)
+	{
+		B = zAxis;
+	}
+
+	// Ensure that the up direction is non-zero.
+	if (U.x == 0.0 && U.y == 0.0 && U.z == 0.0)
+	{
+		U = yAxis;
+	}
+
+	// if view dir and up are parallel or opposite, then compute a new,
+	// arbitrary up that is not parallel or opposite to view dir
+	if (dot(B, U) == 0.0) {
+		U = (B != xAxis) ? cross(B, xAxis) : cross(B, zAxis);
+	}
+
+	return dmat4(
+		S.x, U.x, B.x, 0.0,
+		S.y, U.y, B.y, 0.0,
+		S.z, U.z, B.z, 0.0,
+		-dot(S, eye), -dot(U, eye), -dot(B, eye), 1.0);
 }
 
 
@@ -505,9 +569,27 @@ dmat4 lookAtLH(
 	const dvec3& target,
 	const dvec3& up)
 {
+	static const dvec3 xAxis = { 1.0, 0.0, 0.0 };
+	static const dvec3 yAxis = { 0.0, 1.0, 0.0 };
+	static const dvec3 zAxis = { 0.0, 0.0, 1.0 };
+
 	dvec3 F(normalize(target - eye));
 	dvec3 S(normalize(cross(up, F)));
 	dvec3 U(cross(F, S));
+
+	if (F.x == 0.0 && F.y == 0.0 && F.z == 0.0)
+	{
+		F = zAxis;
+	}
+
+	if (U.x == 0.0 && U.y == 0.0 && U.z == 0.0)
+	{
+		U = yAxis;
+	}
+
+	if (dot(F, U) == 0.0) {
+		U = (F != xAxis) ? cross(F, xAxis) : cross(F, zAxis);
+	}
 
 	return dmat4(
 		S.x, U.x, F.x, 0.0,
@@ -528,38 +610,36 @@ dmat4 alignToRH(
 	const dvec3& target,
 	const dvec3& up)
 {
-	dvec3 F(normalize(target - eye));
-	dvec3 S(normalize(cross(F, up)));
-	dvec3 U(cross(S, F));
+	static const dvec3 xAxis = { 1.0, 0.0,  0.0 };
+	static const dvec3 yAxis = { 0.0, 1.0,  0.0 };
+	static const dvec3 zAxis = { 0.0, 0.0, -1.0 };
+	
+	dvec3 B(normalize(eye - target));
+	dvec3 S(normalize(cross(up, B)));
+	dvec3 U(cross(B, S));
 
 	// ensure that the target direction is non-zero.
-	if (F.x == 0.0 && F.y == 0.0 && F.z == 0.0)
+	if (B.x == 0.0 && B.y == 0.0 && B.z == 0.0)
 	{
-		F.x = 0.0;
-		F.y = 0.0;
-		F.z = -1.0;
+		B = zAxis;
 	}
 
 	// Ensure that the up direction is non-zero.
 	if (U.x == 0.0 && U.y == 0.0 && U.z == 0.0)
 	{
-		U.x = 0.0;
-		U.y = 1.0;
-		U.z = 0.0;
+		U = yAxis;
 	}
 
 	// if view dir and up are parallel or opposite, then compute a new,
 	// arbitrary up that is not parallel or opposite to view dir
-	if (dot(F, U) == 0.0) {
-		const dvec3 xAxis = { 1.0, 0.0, 0.0 };
-		const dvec3 zAxis = { 0.0, 0.0, 1.0 };
-		U = (F != xAxis) ? cross(F, xAxis) : cross(F, zAxis);
+	if (dot(B, U) == 0.0) {
+		U = (B != xAxis) ? cross(B, xAxis) : cross(B, zAxis);
 	}
 
 	return dmat4(
-		 S.x,  S.y,  S.z, -dot(S, eye),
-		 U.x,  U.y,  U.z, -dot(U, eye),
-		-F.x, -F.y, -F.z, +dot(F, eye),
+		S.x, S.y, S.z, -dot(S, eye),
+		U.x, U.y, U.z, -dot(U, eye),
+		B.x, B.y, B.z, -dot(B, eye),
 		0.0, 0.0, 0.0, 1.0);
 }
 
@@ -569,27 +649,25 @@ dmat4 alignToLH(
 	const dvec3& target,
 	const dvec3& up)
 {
+	static const dvec3 xAxis = { 1.0, 0.0, 0.0 };
+	static const dvec3 yAxis = { 0.0, 1.0, 0.0 };
+	static const dvec3 zAxis = { 0.0, 0.0, 1.0 };
+
 	dvec3 F(normalize(target - eye));
 	dvec3 S(normalize(cross(up, F)));
 	dvec3 U(cross(F, S));
 
 	if (F.x == 0.0 && F.y == 0.0 && F.z == 0.0)
 	{
-		F.x = 0.0;
-		F.y = 0.0;
-		F.z = 1.0;
+		F = zAxis;
 	}
 
 	if (U.x == 0.0 && U.y == 0.0 && U.z == 0.0)
 	{
-		U.x = 0.0;
-		U.y = 1.0;
-		U.z = 0.0;
+		U = yAxis;
 	}
 
 	if (dot(F, U) == 0.0) {
-		const dvec3 xAxis = { 1.0, 0.0, 0.0 };
-		const dvec3 zAxis = { 0.0, 0.0, 1.0 };
 		U = (F != xAxis) ? cross(F, xAxis) : cross(F, zAxis);
 	}
 
@@ -612,6 +690,10 @@ dmat4 alignAlongRH(
 	const dvec3& viewDir,
 	const dvec3& up)
 {
+	static const dvec3 xAxis = { 1.0, 0.0,  0.0 };
+	static const dvec3 yAxis = { 0.0, 1.0,  0.0 };
+	static const dvec3 zAxis = { 0.0, 0.0, -1.0 };
+
 	assert(length2(viewDir) != 0.0 && "viewDir must be normalized");
 	dvec3 B(-viewDir);
 	dvec3 S(normalize(cross(up, B)));
@@ -620,24 +702,18 @@ dmat4 alignAlongRH(
 	// ensure that the target direction is non-zero.
 	if (B.x == 0.0 && B.y == 0.0 && B.z == 0.0)
 	{
-		B.x = 0.0;
-		B.y = 0.0;
-		B.z = -1.0;
+		B = zAxis;
 	}
 
 	// Ensure that the up direction is non-zero.
 	if (U.x == 0.0 && U.y == 0.0 && U.z == 0.0)
 	{
-		U.x = 0.0;
-		U.y = 1.0;
-		U.z = 0.0;
+		U = yAxis;
 	}
 
 	// if view dir and up are parallel or opposite, then compute a new,
 	// arbitrary up that is not parallel or opposite to view dir
 	if (dot(B, U) == 0.0) {
-		const dvec3 xAxis = { 1.0, 0.0, 0.0 };
-		const dvec3 zAxis = { 0.0, 0.0, 1.0 };
 		U = (B != xAxis) ? cross(B, xAxis) : cross(B, zAxis);
 	}
 
@@ -654,27 +730,25 @@ dmat4 alignAlongLH(
 	const dvec3& target,
 	const dvec3& up)
 {
+	static const dvec3 xAxis = { 1.0, 0.0, 0.0 };
+	static const dvec3 yAxis = { 0.0, 1.0, 0.0 };
+	static const dvec3 zAxis = { 0.0, 0.0, 1.0 };
+	
 	dvec3 F(normalize(target - eye));
 	dvec3 S(normalize(cross(up, F)));
 	dvec3 U(cross(F, S));
 
 	if (F.x == 0.0 && F.y == 0.0 && F.z == 0.0)
 	{
-		F.x = 0.0;
-		F.y = 0.0;
-		F.z = 1.0;
+		F = zAxis;
 	}
 
 	if (U.x == 0.0 && U.y == 0.0 && U.z == 0.0)
 	{
-		U.x = 0.0;
-		U.y = 1.0;
-		U.z = 0.0;
+		U = yAxis;
 	}
 
 	if (dot(F, U) == 0.0) {
-		const dvec3 xAxis = { 1.0, 0.0, 0.0 };
-		const dvec3 zAxis = { 0.0, 0.0, 1.0 };
 		U = (F != xAxis) ? cross(F, xAxis) : cross(F, zAxis);
 	}
 

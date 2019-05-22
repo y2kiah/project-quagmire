@@ -487,15 +487,80 @@ mat4 lookAtRH(
 	const vec3& target,
 	const vec3& up)
 {
-	vec3 F(normalize(target - eye));
-	vec3 S(normalize(cross(F, up)));
-	vec3 U(cross(S, F));
+	static const vec3 xAxis = { 1.0f, 0.0f,  0.0f };
+	static const vec3 yAxis = { 0.0f, 1.0f,  0.0f };
+	static const vec3 zAxis = { 0.0f, 0.0f, -1.0f };
+
+	vec3 B(normalize(eye - target));
+	vec3 S(normalize(cross(up, B)));
+	vec3 U(cross(B, S));
+
+	// ensure that the target direction is non-zero.
+	if (B.x == 0.0f && B.y == 0.0f && B.z == 0.0f)
+	{
+		B = zAxis;
+	}
+
+	// Ensure that the up direction is non-zero.
+	if (U.x == 0.0f && U.y == 0.0f && U.z == 0.0f)
+	{
+		U = yAxis;
+	}
+
+	// if view dir and up are parallel or opposite, then compute a new,
+	// arbitrary up that is not parallel or opposite to view dir
+	if (dot(B, U) == 0.0f) {
+		U = (B != xAxis) ? cross(B, xAxis) : cross(B, zAxis);
+	}
 
 	return mat4(
-		S.x, U.x, -F.x, 0.0f,
-		S.y, U.y, -F.y, 0.0f,
-		S.z, U.z, -F.z, 0.0f,
-		-dot(S, eye), -dot(U, eye), +dot(F, eye), 1.0f);
+		S.x, U.x, B.x, 0.0f,
+		S.y, U.y, B.y, 0.0f,
+		S.z, U.z, B.z, 0.0f,
+		-dot(S, eye), -dot(U, eye), -dot(B, eye), 1.0f);
+}
+
+
+/**
+ * This can be used to create the ModelView matrix for a camera.
+ */
+mat4 lookAlongRH(
+	const vec3& eye,
+	const vec3& viewDir,
+	const vec3& up)
+{
+	static const vec3 xAxis = { 1.0f, 0.0f,  0.0f };
+	static const vec3 yAxis = { 0.0f, 1.0f,  0.0f };
+	static const vec3 zAxis = { 0.0f, 0.0f, -1.0f };
+
+	assert(length2(viewDir) != 0.0f && "viewDir must be normalized");
+	vec3 B(-viewDir);
+	vec3 S(normalize(cross(up, B)));
+	vec3 U(cross(B, S));
+
+	// ensure that the target direction is non-zero.
+	if (B.x == 0.0f && B.y == 0.0f && B.z == 0.0f)
+	{
+		B = zAxis;
+	}
+
+	// Ensure that the up direction is non-zero.
+	if (U.x == 0.0f && U.y == 0.0f && U.z == 0.0f)
+	{
+		U = yAxis;
+	}
+
+	// if view dir and up are parallel or opposite, then compute a new,
+	// arbitrary up that is not parallel or opposite to view dir
+	if (dot(B, U) == 0.0f) {
+		U = (B != xAxis) ? cross(B, xAxis) : cross(B, zAxis);
+	}
+
+	return mat4(
+		S.x, U.x, B.x, 0.0f,
+		S.y, U.y, B.y, 0.0f,
+		S.z, U.z, B.z, 0.0f,
+		-dot(S, eye), -dot(U, eye), -dot(B, eye), 1.0f);
 }
 
 
@@ -504,9 +569,27 @@ mat4 lookAtLH(
 	const vec3& target,
 	const vec3& up)
 {
+	static const vec3 xAxis = { 1.0f, 0.0f, 0.0f };
+	static const vec3 yAxis = { 0.0f, 1.0f, 0.0f };
+	static const vec3 zAxis = { 0.0f, 0.0f, 1.0f };
+
 	vec3 F(normalize(target - eye));
 	vec3 S(normalize(cross(up, F)));
 	vec3 U(cross(F, S));
+
+	if (F.x == 0.0f && F.y == 0.0f && F.z == 0.0f)
+	{
+		F = zAxis;
+	}
+
+	if (U.x == 0.0f && U.y == 0.0f && U.z == 0.0f)
+	{
+		U = yAxis;
+	}
+
+	if (dot(F, U) == 0.0f) {
+		U = (F != xAxis) ? cross(F, xAxis) : cross(F, zAxis);
+	}
 
 	return mat4(
 		S.x, U.x, F.x, 0.0f,
@@ -527,38 +610,36 @@ mat4 alignToRH(
 	const vec3& target,
 	const vec3& up)
 {
-	vec3 F(normalize(target - eye));
-	vec3 S(normalize(cross(F, up)));
-	vec3 U(cross(S, F));
+	static const vec3 xAxis = { 1.0f, 0.0f,  0.0f };
+	static const vec3 yAxis = { 0.0f, 1.0f,  0.0f };
+	static const vec3 zAxis = { 0.0f, 0.0f, -1.0f };
+	
+	vec3 B(normalize(eye - target));
+	vec3 S(normalize(cross(up, B)));
+	vec3 U(cross(B, S));
 
 	// ensure that the target direction is non-zero.
-	if (F.x == 0.0f && F.y == 0.0f && F.z == 0.0f)
+	if (B.x == 0.0f && B.y == 0.0f && B.z == 0.0f)
 	{
-		F.x = 0.0f;
-		F.y = 0.0f;
-		F.z = -1.0f;
+		B = zAxis;
 	}
 
 	// Ensure that the up direction is non-zero.
 	if (U.x == 0.0f && U.y == 0.0f && U.z == 0.0f)
 	{
-		U.x = 0.0f;
-		U.y = 1.0f;
-		U.z = 0.0f;
+		U = yAxis;
 	}
 
 	// if view dir and up are parallel or opposite, then compute a new,
 	// arbitrary up that is not parallel or opposite to view dir
-	if (dot(F, U) == 0.0f) {
-		const vec3 xAxis = { 1.0f, 0.0f, 0.0f };
-		const vec3 zAxis = { 0.0f, 0.0f, 1.0f };
-		U = (F != xAxis) ? cross(F, xAxis) : cross(F, zAxis);
+	if (dot(B, U) == 0.0f) {
+		U = (B != xAxis) ? cross(B, xAxis) : cross(B, zAxis);
 	}
 
 	return mat4(
-		 S.x,  S.y,  S.z, -dot(S, eye),
-		 U.x,  U.y,  U.z, -dot(U, eye),
-		-F.x, -F.y, -F.z, +dot(F, eye),
+		S.x, S.y, S.z, -dot(S, eye),
+		U.x, U.y, U.z, -dot(U, eye),
+		B.x, B.y, B.z, -dot(B, eye),
 		0.0f, 0.0f, 0.0f, 1.0f);
 }
 
@@ -568,27 +649,25 @@ mat4 alignToLH(
 	const vec3& target,
 	const vec3& up)
 {
+	static const vec3 xAxis = { 1.0f, 0.0f, 0.0f };
+	static const vec3 yAxis = { 0.0f, 1.0f, 0.0f };
+	static const vec3 zAxis = { 0.0f, 0.0f, 1.0f };
+
 	vec3 F(normalize(target - eye));
 	vec3 S(normalize(cross(up, F)));
 	vec3 U(cross(F, S));
 
 	if (F.x == 0.0f && F.y == 0.0f && F.z == 0.0f)
 	{
-		F.x = 0.0f;
-		F.y = 0.0f;
-		F.z = 1.0f;
+		F = zAxis;
 	}
 
 	if (U.x == 0.0f && U.y == 0.0f && U.z == 0.0f)
 	{
-		U.x = 0.0f;
-		U.y = 1.0f;
-		U.z = 0.0f;
+		U = yAxis;
 	}
 
 	if (dot(F, U) == 0.0f) {
-		const vec3 xAxis = { 1.0f, 0.0f, 0.0f };
-		const vec3 zAxis = { 0.0f, 0.0f, 1.0f };
 		U = (F != xAxis) ? cross(F, xAxis) : cross(F, zAxis);
 	}
 
@@ -611,6 +690,10 @@ mat4 alignAlongRH(
 	const vec3& viewDir,
 	const vec3& up)
 {
+	static const vec3 xAxis = { 1.0f, 0.0f,  0.0f };
+	static const vec3 yAxis = { 0.0f, 1.0f,  0.0f };
+	static const vec3 zAxis = { 0.0f, 0.0f, -1.0f };
+
 	assert(length2(viewDir) != 0.0f && "viewDir must be normalized");
 	vec3 B(-viewDir);
 	vec3 S(normalize(cross(up, B)));
@@ -619,24 +702,18 @@ mat4 alignAlongRH(
 	// ensure that the target direction is non-zero.
 	if (B.x == 0.0f && B.y == 0.0f && B.z == 0.0f)
 	{
-		B.x = 0.0f;
-		B.y = 0.0f;
-		B.z = -1.0f;
+		B = zAxis;
 	}
 
 	// Ensure that the up direction is non-zero.
 	if (U.x == 0.0f && U.y == 0.0f && U.z == 0.0f)
 	{
-		U.x = 0.0f;
-		U.y = 1.0f;
-		U.z = 0.0f;
+		U = yAxis;
 	}
 
 	// if view dir and up are parallel or opposite, then compute a new,
 	// arbitrary up that is not parallel or opposite to view dir
 	if (dot(B, U) == 0.0f) {
-		const vec3 xAxis = { 1.0f, 0.0f, 0.0f };
-		const vec3 zAxis = { 0.0f, 0.0f, 1.0f };
 		U = (B != xAxis) ? cross(B, xAxis) : cross(B, zAxis);
 	}
 
@@ -653,27 +730,25 @@ mat4 alignAlongLH(
 	const vec3& target,
 	const vec3& up)
 {
+	static const vec3 xAxis = { 1.0f, 0.0f, 0.0f };
+	static const vec3 yAxis = { 0.0f, 1.0f, 0.0f };
+	static const vec3 zAxis = { 0.0f, 0.0f, 1.0f };
+	
 	vec3 F(normalize(target - eye));
 	vec3 S(normalize(cross(up, F)));
 	vec3 U(cross(F, S));
 
 	if (F.x == 0.0f && F.y == 0.0f && F.z == 0.0f)
 	{
-		F.x = 0.0f;
-		F.y = 0.0f;
-		F.z = 1.0f;
+		F = zAxis;
 	}
 
 	if (U.x == 0.0f && U.y == 0.0f && U.z == 0.0f)
 	{
-		U.x = 0.0f;
-		U.y = 1.0f;
-		U.z = 0.0f;
+		U = yAxis;
 	}
 
 	if (dot(F, U) == 0.0f) {
-		const vec3 xAxis = { 1.0f, 0.0f, 0.0f };
-		const vec3 zAxis = { 0.0f, 0.0f, 1.0f };
 		U = (F != xAxis) ? cross(F, xAxis) : cross(F, zAxis);
 	}
 
@@ -682,6 +757,18 @@ mat4 alignAlongLH(
 		U.x,  U.y,  U.z,  0.0f,
 		F.x,  F.y,  F.z,  0.0f,
 		0.0f, 0.0f, 0.0f, 1.0f);
+}
+
+
+mat4 affineInverse(const mat4& m)
+{
+	mat3 inv(inverse(make_mat3(m)));
+	
+	return mat4(
+		make_vec4(inv[0], 0.0f),
+		make_vec4(inv[1], 0.0f),
+		make_vec4(inv[2], 0.0f),
+		make_vec4(-inv * make_vec3(m[3]), 1.0f));
 }
 
 
