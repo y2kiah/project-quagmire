@@ -437,42 +437,56 @@ void DenseQueue::deinit()
 // Helper Macros
 
 // Macro for defining a type-safe DenseQueue wrapper that avoids void* and elementSizeB in the api
-#define DenseQueueTyped(Type, name) \
-	struct name {\
+#define DenseQueueTyped(Type, Name) \
+	struct Name {\
 		enum { TypeSize = sizeof(Type) };\
 		DenseQueue _q;\
-		name() {}\
-		explicit name(u32 capacity, void* buffer = nullptr, u8 assertOnFull = 1)\
-			: _q(TypeSize, capacity, buffer, assertOnFull) {}\
+		Name() {}\
+		explicit Name(u32 capacity, Type* buffer = nullptr, u8 assertOnFull = 1)\
+			: _q(TypeSize, capacity, (void*)buffer, assertOnFull) {}\
 		inline bool empty()								{ return _q.empty(); }\
 		inline bool full()								{ return _q.full(); }\
 		inline Type* front()							{ return (Type*)_q.front(); }\
 		inline Type* back()								{ return (Type*)_q.back(); }\
 		inline Type* nextBack()							{ return (Type*)_q.nextBack(); }\
 		inline u32 maxContiguous()						{ return _q.maxContiguous(); }\
-		Type* push_back(Type* val = nullptr, bool zero = true)\
-														{ return (Type*)_q.push_back((void*)val, zero); }\
-		Type* push_back_n(u32 n, Type* vals = nullptr, bool zero = true)\
-														{ return (Type*)_q.push_back_n(n, (void*)vals, zero); }\
-		Type* push_front(Type* val = nullptr, bool zero = true)\
+		Type* push_back(const Type* val = nullptr, bool zero = true) {\
+			return (Type*)_q.push_back((void*)val, zero);\
+		}\
+		Type* push_back(Type val) {\
+			Type* item = (Type*)_q.push_back(nullptr, false);\
+			*item = val;\
+			return item;\
+		}\
+		Type* push_back_n(u32 n, const Type* vals = nullptr, bool zero = true) {\
+			return (Type*)_q.push_back_n(n, (void*)vals, zero);\
+		}\
+		Type* push_front(const Type* val = nullptr, bool zero = true)\
 														{ return (Type*)_q.push_front((void*)val, zero); }\
 		Type* pop_back(Type* dst = nullptr)				{ return (Type*)_q.pop_back((void*)dst); }\
 		Type* pop_front(Type* dst = nullptr)			{ return (Type*)_q.pop_front((void*)dst); }\
 		u32 pop_front_n(u32 n, Type* dst)				{ return _q.pop_front_n(n, (void*)dst); }\
-		inline Type* push(Type* val = nullptr, bool zero = true)\
-														{ return push_back(val,zero); }\
-		inline Type* push_n(u32 n, Type* val = nullptr, bool zero = true)\
-														{ return push_back_n(n,val,zero); }\
+		inline Type* push(const Type* val = nullptr, bool zero = true) {\
+			return push_back(val,zero);\
+		}\
+		inline Type& push(const Type& val) {\
+			return *push_back(&val,false);\
+		}\
+		inline Type* push_n(u32 n, const Type* val = nullptr, bool zero = true) {\
+			return push_back_n(n,val,zero);\
+		}\
 		inline Type* pop_fifo(Type* dst = nullptr)		{ return pop_front(dst); }\
 		inline Type* pop_lifo(Type* dst = nullptr)		{ return pop_back(dst); }\
-		inline u32   pop_fifo_n(u32 n, Type* dst = nullptr)\
-														{ return pop_front_n(n,dst); }\
+		inline u32   pop_fifo_n(u32 n, Type* dst = nullptr) {\
+			return pop_front_n(n,dst);\
+		}\
 		Type* at(u32 i)									{ return (Type*)_q.at(i); }\
 		Type* operator[](u32 i)							{ return at(i); }\
 		void clear()									{ _q.clear(); }\
-		inline Type* item(u32 i)						{ return (Type*)_q.item(i); }\
-		void init(u32 capacity, void* buffer = nullptr, u8 assertOnFull = 1)\
-														{ _q.init(TypeSize, capacity, buffer, assertOnFull); }\
+		inline Type& item(u32 i)						{ return *(Type*)_q.item(i); }\
+		void init(u32 capacity, void* buffer = nullptr, u8 assertOnFull = 1) {\
+			_q.init(TypeSize, capacity, buffer, assertOnFull);\
+		}\
 		void deinit()									{ _q.deinit(); }\
 	};
 

@@ -342,22 +342,22 @@ void SparseHandleMap16::deinit()
 // Helper Macros
 
 // Macro for defining a SparseHandleMap16 storage buffer
-#define SparseHandleMap16Buffer(Type, name, capacity) \
-	u8 name[(sizeof(Type) + sizeof(SparseHandleMap16::Header)) * capacity];\
-	static_assert(is_aligned(sizeof(name),8),"sizeof items array must be a multiple of 8");
+#define SparseHandleMap16Buffer(Type, Name, capacity) \
+	u8 Name[(sizeof(Type) + sizeof(SparseHandleMap16::Header)) * capacity];\
+	static_assert(is_aligned(sizeof(Name),8),"sizeof items array must be a multiple of 8");
 
 
 // Macro for defining a type-safe SparseHandleMap16 wrapper that avoids void* and elementSizeB in the api
-#define SparseHandleMap16Typed(Type, name, TypeId) \
-	struct name {\
+#define SparseHandleMap16Typed(Type, Name, TypeId) \
+	struct Name {\
 		enum { TypeSize = sizeof(Type) };\
 		struct Item { SparseHandleMap16::Header* header; Type* data; };\
 		SparseHandleMap16 _map;\
 		static size_t getTotalBufferSize(u16 capacity)\
 											{ return SparseHandleMap16::getTotalBufferSize(TypeSize, capacity); }\
-		explicit name(u16 _capacity, void* buffer = nullptr)\
+		explicit Name(u16 _capacity, void* buffer = nullptr)\
 											{ _map.init(TypeSize, _capacity, TypeId, buffer); }\
-		explicit name() {}\
+		explicit Name() {}\
 		Type* at(h32 handle)				{ return (Type*)_map.at(handle); }\
 		Type* operator[](h32 handle)		{ return at(handle); }\
 		bool erase(h32 handle)				{ return _map.erase(handle); }\

@@ -138,10 +138,20 @@ struct TemporaryMemory {
 			// clear all memory forward of the start block/position, this works because temporary
 			// memory is always taken from the lastBlock of an arena
 			blockStart->used = usedStart;
-			while (blockStart->next)
+			memset(
+				(void*)((uintptr_t)blockStart->base + usedStart),
+				0,
+				blockStart->size - usedStart);
+
+			// clear block(s) forward of temp memory start until the end or an unused block is reached
+			for (;;)
 			{
 				blockStart = blockStart->next;
+				if (!blockStart || blockStart->used == 0) {
+					break;
+				}
 				blockStart->used = 0;
+				memset(blockStart->base, 0, blockStart->size);
 			}
 			blockStart = nullptr;
 			usedStart = 0;

@@ -6,6 +6,7 @@
 #include "mat4.h"
 #include "dmat4.h"
 #include "quat.h"
+#include "dquat.h"
 #include "conversions.h"
 #include "mat4_transforms.h"
 #include "dmat4_transforms.h"

@@ -454,7 +454,7 @@ quat rotate(const quat& q, r32 angle, const vec3& v)
 
 	// Axis of rotation must be normalised
 	r32 len = length(tmp);
-	if (abs(len - 1.0f) > 0.001f) {
+	if (fabs(len - 1.0f) > 0.001f) {
 		r32 oneOverLen = 1.0f / len;
 		tmp.x *= oneOverLen;
 		tmp.y *= oneOverLen;
@@ -586,7 +586,7 @@ quat quatFromVectors(
 	const vec3& u,
 	const vec3& v)
 {
-	float m = sqrt(2.0f + 2.0f * dot(u, v));
+	r32 m = sqrt(2.0f + 2.0f * dot(u, v));
 	vec3 w = (1.0f / m) * cross(u, v);
 	return quat{ 0.5f * m, w.x, w.y, w.z };
 }

@@ -20,7 +20,7 @@ struct alignas(64) ConcurrentQueue
 	// padding added for 64 byte total size, to avoid potential false sharing of the ConcurrentQueue's cache line
 	u8			_padding[24] = {};
 
-	// Functions 
+	// Functions
 
 	explicit ConcurrentQueue() {}
 	
@@ -358,12 +358,12 @@ void ConcurrentQueue::deinit()
 // Helper Macros
 
 // Macro for defining a type-safe ConcurrentQueue wrapper that avoids void* and elementSizeB in the api
-#define ConcurrentQueueTyped(Type, name) \
-	struct name {\
+#define ConcurrentQueueTyped(Type, Name) \
+	struct Name {\
 		enum { TypeSize = sizeof(Type) };\
 		ConcurrentQueue _q;\
-		name() {}\
-		explicit name(u32 capacity, void* buffer = nullptr, u8 assertOnFull = 1)\
+		Name() {}\
+		explicit Name(u32 capacity, void* buffer = nullptr, u8 assertOnFull = 1)\
 			: _q(TypeSize, capacity, buffer, assertOnFull) {}\
 		Type* push(Type* inData)					{ return (Type*)_q.push((void*)inData); }\
 		Type* push_n(Type* inData, u32 count) 		{ return (Type*)_q.push_n((void*)inData, count); }\

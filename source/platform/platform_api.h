@@ -60,7 +60,7 @@ struct SystemInfo {
 };
 
 struct JoystickInfo {
-	SDL_Joystick*	joysticks[GAMEINPUT_JOYSTICKS_CAPACITY];
+	SDL_Joystick*	joysticks[GAMEINPUT_MAX_JOYSTICKS];
 	u32				numJoysticks;
 	u32				totalAxes;
 };

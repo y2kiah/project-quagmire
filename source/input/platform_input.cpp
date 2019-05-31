@@ -157,7 +157,7 @@ namespace input {
 		app.cursors[Cursor_Crosshair] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_CROSSHAIR);
 		
 		// Get number of input devices
-		int numJoysticks = min(SDL_NumJoysticks(), GAMEINPUT_JOYSTICKS_CAPACITY);
+		int numJoysticks = min(SDL_NumJoysticks(), GAMEINPUT_MAX_JOYSTICKS);
 		app.joystickInfo.numJoysticks = numJoysticks;
 		
 		// Initialize mouse motion
@@ -190,7 +190,7 @@ namespace input {
 					m.axis = (u8)axis;
 					
 					++motionAxis;
-					if (motionAxis == GAMEINPUT_AXIS_CAPACITY) {
+					if (motionAxis == GAMEINPUT_MAX_AXES) {
 						break;
 					}
 				}*/

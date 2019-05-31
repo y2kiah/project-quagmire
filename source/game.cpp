@@ -30,6 +30,8 @@ static Game* _game = nullptr;
 #include "utility/logger.cpp"
 #include "input/game_input.cpp"
 #include "scene/camera.cpp"
+#include "scene/scene.cpp"
+#include "scene/scene_api.cpp"
 
 
 /**
@@ -101,10 +103,12 @@ void gameUpdateFrameTick(
  */
 void gameRenderFrameTick(
 	GameMemory* gameMemory,
-	float interpolation,
-	int64_t realTime,
-	int64_t countsPassed)
+	r32 interpolation,
+	i64 realTime,
+	i64 countsPassed)
 {
+	Game& game = *_game;
+
 	//	logger::verbose("Render realTime=%lu: interpolation=%0.3f\n", realTime, interpolation);
 
 	//	engine.resourceLoader->executeCallbacks();
@@ -113,7 +117,19 @@ void gameRenderFrameTick(
 
 	//	game.devConsole.renderFrameTick(game, engine, interpolation, realTime, countsPassed);
 
-	//	engine.sceneManager->renderActiveScenes(interpolation, engine);
+	// run the movement system to interpolate all moving nodes in the scene
+	interpolateSceneNodes(
+		game.gameScene,
+		interpolation);
+	
+	// traverse scene graph, update world positions and orientations
+	updateNodeTransforms(
+		game.gameScene,
+		gameMemory->transient);
+
+	renderScene(
+		game.gameScene,
+		interpolation);
 
 	//	engine.renderSystem->renderFrame(interpolation, engine);
 }
@@ -380,15 +396,15 @@ extern "C" {
 		Game& game = *_game;
 		SimulationUpdateContext ctx = { *input, gameMemory, app };
 		
-		float interpolation = game.simulationUpdate.tick(
-				1000.0f / 60.0f,	// deltaMS, run at 60fps
-				realTime,
-				countsPassed,
-				countsPerMs,
-				frame,
-				1.0f,				// game speed, 1.0=normal
-				gameUpdateFrameTick,
-				&ctx);
+		r32 interpolation = game.simulationUpdate.tick(
+			1000.0f / 60.0f,	// deltaMS, run at 60fps
+			realTime,
+			countsPassed,
+			countsPerMs,
+			frame,
+			1.0f,				// game speed, 1.0=normal
+			gameUpdateFrameTick,
+			&ctx);
 
 		//SDL_Delay(1000);
 

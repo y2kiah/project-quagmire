@@ -402,5 +402,10 @@ dvec3 refract(
 	return (eta * i - (eta * dotValue + sqrt(k)) * n) * (r64)(k >= 0.0);
 }
 
+dvec3 mix(const dvec3& v1, const dvec3& v2, r64 a)
+{
+	return v1 * (1.0 - a) + (v2 * a);
+}
+
 
 #endif

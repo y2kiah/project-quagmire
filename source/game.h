@@ -12,6 +12,7 @@
 #include "utility/fixed_timestep.h"
 #include "input/game_input.h"
 #include "math/qmath.h"
+#include "scene/scene_api.h"
 #include "scene/camera.h"
 
 //#define MAX_GAME_COMPONENTS		32
@@ -38,6 +39,10 @@ struct Game {
 	//render::ShaderManagerPtr		shaderManager	= nullptr;
 	//render::ModelManagerPtr			modelManager	= nullptr;
 	//scene::SceneManagerPtr			sceneManager	= nullptr;
+	// TODO: SparseHandleMap16WithBuffer for scenes
+	
+	Scene				gameScene;
+
 
 	//Id_t							engineLuaState	= NullId_t;
 

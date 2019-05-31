@@ -34,6 +34,8 @@
 #define RAD_TO_DEG					57.295779513082320876798154814105
 #define RAD_TO_DEGf					57.295779513082320876798154814105f
 
+#define SQRT_2						1.4142135623730950488016887242097f
+
 
 struct _vec2 {
 	union {
@@ -113,6 +115,38 @@ r32 smoothstep(r32 edge0, r32 edge1, r32 x)
 {
 	r32 tmp = clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
 	return tmp * tmp * (3.0f - 2.0f * tmp);
+}
+
+
+i64 clamp(i64 x, i64 minVal, i64 maxVal)
+{
+	return min(max(x, minVal), maxVal);
+}
+
+r64 clamp(r64 x, r64 minVal, r64 maxVal)
+{
+	return min(max(x, minVal), maxVal);
+}
+
+r64 mix(r64 x, r64 y, r64 a)
+{
+	return x + a * (y - x);
+}
+
+r64 lerp(r64 x, r64 y, r64 a)
+{
+	return x + a * (y - x);
+}
+
+r64 step(r64 edge, r64 x)
+{
+	return mix(1.0, 0.0, (x < edge));
+}
+
+r64 smoothstep(r64 edge0, r64 edge1, r64 x)
+{
+	r64 tmp = clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
+	return tmp * tmp * (3.0 - 2.0 * tmp);
 }
 
 

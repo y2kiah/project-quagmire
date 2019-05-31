@@ -8,6 +8,38 @@
 #include "quat.h"
 
 
+/**
+ * MatrixColumnMajor and MatrixRowMajor allow casting directly from a float[16] to interpret a
+ * matrix as it is stored on disk using a common indexing scheme of _[row][col]. This is useful
+ * for some operations like extracting frustum planes from a view-projection matrix.
+ */
+struct MatrixColumnMajor {
+	union {
+		struct {
+			r32 _11, _21, _31, _41;
+			r32 _12, _22, _32, _42;
+			r32 _13, _23, _33, _43;
+			r32 _14, _24, _34, _44;
+		};
+		vec4	col[4];
+		r32		E[16];
+	};
+};
+
+struct MatrixRowMajor {
+	union {
+		struct {
+			r32 _11, _12, _13, _14;
+			r32 _21, _22, _23, _24;
+			r32 _31, _32, _33, _34;
+			r32 _41, _42, _43, _44;
+		};
+		vec4	row[4];
+		r32		E[16];
+	};
+};
+
+
 vec3 make_vec3(const dvec3& v)
 {
 	return vec3{ (r32)v.x, (r32)v.y, (r32)v.z };

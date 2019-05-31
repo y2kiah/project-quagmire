@@ -3,6 +3,24 @@
 
 #include "../math/qmath.h"
 
+// TODO: used?
+enum CameraType : u8 {
+	Camera_Perspective = 0,
+	Camera_Ortho,
+	Camera_Stereo
+};
+
+// TODO: used?
+struct CameraParams {
+	r32		    nearClipPlane;
+	r32		    farClipPlane;
+	u32 	    viewportWidth;
+	u32 	    viewportHeight;
+	r32		    verticalFieldOfViewDegrees;
+	CameraType	cameraType;
+	u8		    _padding_end[3];
+};
+
 
 struct CameraFrame
 {

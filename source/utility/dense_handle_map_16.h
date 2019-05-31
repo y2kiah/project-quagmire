@@ -69,6 +69,9 @@ struct DenseHandleMap16 {
 	 */
 	void* at(h32 handle);
 	
+	/**
+	 * Same as "at", does not insert new values
+	 */
 	void* operator[](h32 handle) {
 		return at(handle);
 	}
@@ -451,38 +454,83 @@ void DenseHandleMap16::deinit()
 // Helper Macros
 
 // Macro for defining a DenseHandleMap16 storage buffer
-#define DenseHandleMap16Buffer(Type, name, capacity) \
-	u8 name[(sizeof(Type)*(capacity+1)) + (sizeof(h32)*capacity) + (sizeof(u16)*capacity)];\
-	static_assert(is_aligned(sizeof(Type)*(capacity+1),4),"sizeof items array must be a multiple of 4");
+#define DenseHandleMap16Buffer(Type, Name, capacity) \
+	u8 Name[(sizeof(Type)*(capacity+1)) + (sizeof(h32)*capacity) + (sizeof(u16)*capacity)];\
+	static_assert(is_aligned(sizeof(Type)*(capacity+1),4), "sizeof items array must be a multiple of 4");\
+	static_assert(capacity <= USHRT_MAX-1, "capacity must be <= USHRT_MAX-1");
 
 
 // Macro for defining a type-safe DenseHandleMap16 wrapper that avoids void* and elementSizeB in the api
-#define DenseHandleMap16Typed(Type, name, TypeId) \
-	struct name {\
+#define DenseHandleMap16Typed(Type, Name, HndType, TypeId) \
+	struct Name {\
 		enum { TypeSize = sizeof(Type) };\
 		DenseHandleMap16 _map;\
-		static size_t getTotalBufferSize(u16 capacity)\
-											{ return DenseHandleMap16::getTotalBufferSize(TypeSize, capacity); }\
-		explicit name(u16 _capacity, void* buffer = nullptr)\
-											{ _map.init(TypeSize, _capacity, TypeId, buffer); }\
-		explicit name() {}\
-		Type* at(h32 handle)				{ return (Type*)_map.at(handle); }\
-		Type* operator[](h32 handle)		{ return at(handle); }\
-		bool erase(h32 handle)				{ return _map.erase(handle); }\
-		h32 insert(Type* src = nullptr, Type** out = nullptr)\
-											{ return _map.insert((void*)src, (void**)out); }\
+		static size_t getTotalBufferSize(u16 capacity) {\
+			return DenseHandleMap16::getTotalBufferSize(TypeSize, capacity);\
+		}\
+		explicit Name(u16 _capacity, Type* buffer = nullptr) {\
+			_map.init(TypeSize, _capacity, TypeId, (void*)buffer);\
+		}\
+		explicit Name() {}\
+		Type* at(HndType handle)			{ return (Type*)_map.at(handle); }\
+		Type* operator[](HndType handle)	{ return at(handle); }\
+		bool erase(HndType handle)			{ return _map.erase(handle); }\
+		HndType insert(Type* src = nullptr, Type** out = nullptr) {\
+			return _map.insert((void*)src, (void**)out);\
+		}\
 		void clear()						{ _map.clear(); }\
 		void reset()						{ _map.reset(); }\
-		bool has(h32 handle)				{ return _map.has(handle); }\
-		size_t defragment(DenseHandleMap16::Compare* comp, size_t maxSwaps = 0)\
-											{ return _map.defragment(comp, maxSwaps); }\
-		u16 getInnerIndex(h32 handle)		{ return _map.getInnerIndex(handle); }\
-		h32 getHandleForInnerIndex(size_t innerIndex)\
-											{ return _map.getHandleForInnerIndex(innerIndex); }\
-		inline Type* item(u16 innerIndex)	{ return (Type*)_map.item(innerIndex); }\
-		void init(u16 capacity, void* buffer = nullptr)\
-											{ _map.init(TypeSize, capacity, TypeId, buffer); }\
+		bool has(HndType handle)			{ return _map.has(handle); }\
+		size_t defragment(DenseHandleMap16::Compare* comp, size_t maxSwaps = 0) {\
+			return _map.defragment(comp, maxSwaps);\
+		}\
+		u16 getInnerIndex(HndType handle)	{ return _map.getInnerIndex(handle); }\
+		HndType getHandleForInnerIndex(size_t innerIndex) {\
+			return _map.getHandleForInnerIndex(innerIndex);\
+		}\
+		inline Type& item(u16 innerIndex)	{ return *(Type*)_map.item(innerIndex); }\
+		inline Type* items() 				{ return (Type*)_map.items; }\
+		inline u16 length()					{ return _map.length; }\
+		void init(u16 capacity, void* buffer = nullptr) {\
+			_map.init(TypeSize, capacity, TypeId, buffer);\
+		}\
 		void deinit()						{ _map.deinit(); }\
-	};
+	};\
+	static_assert(std::is_same<h32,HndType>::value, #HndType " must be typedef h32");
+
+
+// Macro like DenseHandleMap16Typed but also internally includes the storage buffer, so there is no
+// need to call init or create the buffer externally
+#define DenseHandleMap16TypedWithBuffer(Type, Name, HndType, TypeId, _capacity) \
+	struct Name {\
+		enum { TypeSize = sizeof(Type) };\
+		DenseHandleMap16 _map;\
+		DenseHandleMap16Buffer(Type, _buffer, _capacity)\
+		static size_t getTotalBufferSize(u16 capacity) {\
+			return sizeof(_buffer);\
+		}\
+		explicit Name()	: _buffer{}			{ _map.init(TypeSize, _capacity, TypeId, &_buffer); }\
+		Type* at(HndType handle)			{ return (Type*)_map.at(handle); }\
+		Type* operator[](HndType handle)	{ return at(handle); }\
+		bool erase(HndType handle)			{ return _map.erase(handle); }\
+		HndType insert(Type* src = nullptr, Type** out = nullptr) {\
+			return _map.insert((void*)src, (void**)out);\
+		}\
+		void clear()						{ _map.clear(); }\
+		void reset()						{ _map.reset(); }\
+		bool has(HndType handle)			{ return _map.has(handle); }\
+		size_t defragment(DenseHandleMap16::Compare* comp, size_t maxSwaps = 0) {\
+			return _map.defragment(comp, maxSwaps);\
+		}\
+		u16 getInnerIndex(HndType handle)	{ return _map.getInnerIndex(handle); }\
+		HndType getHandleForInnerIndex(size_t innerIndex) {\
+			return _map.getHandleForInnerIndex(innerIndex);\
+		}\
+		inline Type& item(u16 innerIndex)	{ return *(Type*)_map.item(innerIndex); }\
+		inline Type* items() 				{ return (Type*)_map.items; }\
+		inline u16 length()					{ return _map.length; }\
+	};\
+	static_assert(std::is_same<h32,HndType>::value, #HndType " must be typedef h32");
+
 
 #endif

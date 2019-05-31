@@ -399,5 +399,10 @@ vec3 refract(
 	return (eta * i - (eta * dotValue + sqrtf(k)) * n) * (r32)(k >= 0.0f);
 }
 
+vec3 mix(const vec3& v1, const vec3& v2, r32 a)
+{
+	return v1 * (1.0f - a) + (v2 * a);
+}
+
 
 #endif

@@ -343,22 +343,22 @@ void SparseHandleMap32::deinit()
 // Helper Macros
 
 // Macro for defining a SparseHandleMap32 storage buffer
-#define SparseHandleMap32Buffer(Type, name, capacity) \
-	u8 name[(sizeof(Type) + sizeof(SparseHandleMap32::Header)) * capacity];\
-	static_assert(is_aligned(sizeof(name),8),"sizeof items array must be a multiple of 8");
+#define SparseHandleMap32Buffer(Type, Name, capacity) \
+	u8 Name[(sizeof(Type) + sizeof(SparseHandleMap32::Header)) * capacity];\
+	static_assert(is_aligned(sizeof(Name),8),"sizeof items array must be a multiple of 8");
 
 
 // Macro for defining a type-safe SparseHandleMap32 wrapper that avoids void* and elementSizeB in the api
-#define SparseHandleMap32Typed(Type, name, TypeId) \
-	struct name {\
+#define SparseHandleMap32Typed(Type, Name, TypeId) \
+	struct Name {\
 		enum { TypeSize = sizeof(Type) };\
 		struct Item { SparseHandleMap32::Header* header; Type* data; };\
 		SparseHandleMap32 _map;\
 		static size_t getTotalBufferSize(u32 capacity)\
 											{ return SparseHandleMap32::getTotalBufferSize(TypeSize, capacity); }\
-		explicit name(u32 _capacity, void* buffer = nullptr)\
+		explicit Name(u32 _capacity, void* buffer = nullptr)\
 											{ _map.init(TypeSize, _capacity, TypeId, buffer); }\
-		explicit name() {}\
+		explicit Name() {}\
 		Type* at(h64 handle)				{ return (Type*)_map.at(handle); }\
 		Type* operator[](h64 handle)		{ return at(handle); }\
 		bool erase(h64 handle)				{ return _map.erase(handle); }\

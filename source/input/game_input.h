@@ -476,9 +476,9 @@ namespace input {
 			struct {
 				AxisMotion	mouseXMotion;
 				AxisMotion	mouseYMotion;
-				AxisMotion	axisMotion[GAMEINPUT_AXIS_CAPACITY];
+				AxisMotion	axisMotion[GAMEINPUT_MAX_AXES];
 			};
-			AxisMotion		mouseAndAxisMotion[2 + GAMEINPUT_AXIS_CAPACITY];
+			AxisMotion		mouseAndAxisMotion[2 + GAMEINPUT_MAX_AXES];
 		};
 
 		char				textInput[SDL_TEXTINPUTEVENT_TEXT_SIZE];		// text input buffer
