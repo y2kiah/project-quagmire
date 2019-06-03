@@ -522,7 +522,7 @@ quat angleAxis(r32 angle, const vec3& v)
 
 /*
 template <typename T, precision P>
-GLM_FUNC_QUALIFIER quat rotation(const vec3& orig, const vec3& dest)
+quat rotation(const vec3& orig, const vec3& dest)
 {
 	T cosTheta = dot(orig, dest);
 	vec3 rotationAxis;

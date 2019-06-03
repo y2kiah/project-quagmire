@@ -446,6 +446,7 @@ void DenseQueue::deinit()
 			: _q(TypeSize, capacity, (void*)buffer, assertOnFull) {}\
 		inline bool empty()								{ return _q.empty(); }\
 		inline bool full()								{ return _q.full(); }\
+		inline u32 length()								{ return _q.length; }\
 		inline Type* front()							{ return (Type*)_q.front(); }\
 		inline Type* back()								{ return (Type*)_q.back(); }\
 		inline Type* nextBack()							{ return (Type*)_q.nextBack(); }\

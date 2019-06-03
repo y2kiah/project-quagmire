@@ -12,21 +12,22 @@ typedef h32 ComponentId;
 typedef size_t ComponentType;
 
 DenseQueueTyped(EntityId, EntityIdQueue);
+DenseQueueTyped(SceneNodeId, SceneNodeIdQueue);
 
 
 /**
- * Macro to create a ComponentType value for use with component masks, a *ComponentRecord and
+ * Macro to create a ComponentType value for use with component masks, a *Component and
  * DenseMap to store the component along with its parent EntityId.
- * TypeId should be unique and sequential, starting at 0. This is converted into a power of 2
+ * TypeId should be unique and sequential, starting at 0. This is converted into a pwr-2
  * ComponentType value for use with component masks.
  */
 #define ComponentStore(Type, StoreTypeName, HndType, TypeId, StoreName, _capacity) \
 	static const ComponentType Type##ComponentType = 1UL << TypeId;\
-	struct Type##ComponentRecord {\
-		Type		component;\
+	struct Type##Component {\
+		Type		data;\
 		EntityId	entityId;\
 	};\
-	DenseHandleMap16TypedWithBuffer(Type##ComponentRecord, StoreTypeName, HndType, TypeId, _capacity);\
+	DenseHandleMap16TypedWithBuffer(Type##Component, StoreTypeName, HndType, TypeId, _capacity);\
 	StoreTypeName StoreName;
 
 

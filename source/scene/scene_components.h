@@ -3,6 +3,7 @@
 
 #include "../math/qmath.h"
 #include "../utility/dense_queue.h"
+#include "camera.h"
 
 
 typedef h32 SceneNodeId;
@@ -44,7 +45,7 @@ struct SceneNode {
  */
 struct ModelInstance {
 	SceneNodeId	sceneNodeId;		// scene node containing the root of the model instance
-	h32			modelId;			// resource handle to the model resource
+	ComponentId	modelId;			// resource handle to the model resource
 };
 
 /**
@@ -57,11 +58,11 @@ struct ModelInstance {
  */
 struct CameraInstance {
 	SceneNodeId	sceneNodeId;		// scene node containing the camera instance
-	h32			movementId;			// movement component controlling the camera
-	u32			cameraId;			// id of the referenced camera
-	u8			_padding[4];
+	ComponentId	movementId;			// movement component controlling the camera
+	Camera		camera;				// camera parameters
 	char		name[32];			// name of the camera
 };
+
 
 /**
  * The LightInstance component that goes along with the SceneNode to make a light in the

@@ -182,6 +182,32 @@ void clearArena(
 }
 
 
+void clearForwardOf(
+	MemoryBlock* blockStart,
+	uintptr_t usedStart)
+{
+	assert(blockStart && usedStart <= blockStart->used);
+
+	// clear all memory forward of the start block/position
+	blockStart->used = usedStart;
+	memset(
+		(void*)((uintptr_t)blockStart->base + usedStart),
+		0,
+		blockStart->size - blockStart->used);
+	
+	// clear block(s) forward of a start index until the end or an unused block is reached
+	for (;;)
+	{
+		blockStart = blockStart->next;
+		if (!blockStart || blockStart->used == 0) {
+			break;
+		}
+		memset(blockStart->base, 0, blockStart->used);
+		blockStart->used = 0;
+	}
+}
+
+
 void shrinkArena(
 	MemoryArena* arena)
 {

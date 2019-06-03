@@ -136,7 +136,7 @@ dmat4 orthoLH(
 	result[3][0] = - (right + left) / (right - left);
 	result[3][1] = - (top + bottom) / (top - bottom);
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
 	result[2][2] = 1.0 / (zFar - zNear);
 	result[3][2] = - zNear / (zFar - zNear);
 #	else
@@ -159,7 +159,7 @@ dmat4 orthoRH(
 	result[3][0] = - (right + left) / (right - left);
 	result[3][1] = - (top + bottom) / (top - bottom);
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
 	result[2][2] = - 1.0 / (zFar - zNear);
 	result[3][2] = - zNear / (zFar - zNear);
 #	else
@@ -183,7 +183,7 @@ dmat4 frustumLH(
 	result[2][1] = (top + bottom) / (top - bottom);
 	result[2][3] = 1.0;
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
 	result[2][2] = farVal / (farVal - nearVal);
 	result[3][2] = -(farVal * nearVal) / (farVal - nearVal);
 #	else
@@ -207,7 +207,7 @@ dmat4 frustumRH(
 	result[2][1] = (top + bottom) / (top - bottom);
 	result[2][3] = -1.0;
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
 	result[2][2] = farVal / (nearVal - farVal);
 	result[3][2] = -(farVal * nearVal) / (farVal - nearVal);
 #	else
@@ -234,7 +234,7 @@ dmat4 perspectiveRH(
 	result[1][1] = 1.0 / (tanHalfFovy);
 	result[2][3] = - 1.0;
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
 	result[2][2] = zFar / (zNear - zFar);
 	result[3][2] = -(zFar * zNear) / (zFar - zNear);
 #	else
@@ -261,7 +261,7 @@ dmat4 perspectiveLH(
 	result[1][1] = 1.0 / (tanHalfFovy);
 	result[2][3] = 1.0;
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
 	result[2][2] = zFar / (zFar - zNear);
 	result[3][2] = -(zFar * zNear) / (zFar - zNear);
 #	else
@@ -291,7 +291,7 @@ dmat4 perspectiveFovRH(
 	result[1][1] = h;
 	result[2][3] = - 1.0;
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
 	result[2][2] = zFar / (zNear - zFar);
 	result[3][2] = -(zFar * zNear) / (zFar - zNear);
 #	else
@@ -321,7 +321,7 @@ dmat4 perspectiveFovLH(
 	result[1][1] = h;
 	result[2][3] = 1.0;
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
 	result[2][2] = zFar / (zFar - zNear);
 	result[3][2] = -(zFar * zNear) / (zFar - zNear);
 #	else
@@ -419,7 +419,7 @@ dvec3 project(
 
 	tmp /= tmp.w;
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
 	tmp.x = tmp.x * 0.5 + 0.5;
 	tmp.y = tmp.y * 0.5 + 0.5;
 #	else
@@ -445,7 +445,7 @@ dvec3 unProject(
 	tmp.x = (tmp.x - viewport[0]) / viewport[2];
 	tmp.y = (tmp.y - viewport[1]) / viewport[3];
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
 	tmp.x = tmp.x * 2.0 - 1.0;
 	tmp.y = tmp.y * 2.0 - 1.0;
 #	else

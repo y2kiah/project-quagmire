@@ -3,24 +3,22 @@
 
 #include "../math/qmath.h"
 
-// TODO: used?
+
 enum CameraType : u8 {
 	Camera_Perspective = 0,
 	Camera_Ortho,
 	Camera_Stereo
 };
 
-// TODO: used?
-struct CameraParams {
-	r32		    nearClipPlane;
-	r32		    farClipPlane;
-	u32 	    viewportWidth;
-	u32 	    viewportHeight;
-	r32		    verticalFieldOfViewDegrees;
+struct CameraParameters {
+	r32			nearClip;
+	r32			farClip;
+	r32			viewportWidth;
+	r32			viewportHeight;
+	r32			fovDegreesVertical;
 	CameraType	cameraType;
-	u8		    _padding_end[3];
+	u8			_padding[3];
 };
-
 
 struct CameraFrame
 {
@@ -47,6 +45,8 @@ struct Camera
 
 	CameraFrame	frame;
 };
+static_assert(sizeof(Camera) == 544, "");
+static_assert_aligned_size(Camera, 8);
 
 
 void calcPerspProjection(

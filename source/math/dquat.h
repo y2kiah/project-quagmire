@@ -520,9 +520,10 @@ dquat angleAxis(r64 angle, const dvec3& v)
 	return result;
 }
 
+
 /*
 template <typename T, precision P>
-GLM_FUNC_QUALIFIER dquat rotation(const dvec3& orig, const dvec3& dest)
+dquat rotation(const dvec3& orig, const dvec3& dest)
 {
 	T cosTheta = dot(orig, dest);
 	dvec3 rotationAxis;
@@ -569,7 +570,7 @@ r64 extractRealComponent(const dquat& q)
  * Create a dquaternion representing the rotation between two normalized vectors
  * http://lolengine.net/blog/2013/09/18/beautiful-maths-dquaternion-from-vectors
  */
-dquat dquatFromNormalizedVectors(
+dquat dquat_fromNormalizedVectors(
 	const dvec3& nu,
 	const dvec3& nv)
 {
@@ -582,7 +583,7 @@ dquat dquatFromNormalizedVectors(
  * Create a dquaternion representing the rotation between two vectors that are not unit length
  * http://lolengine.net/blog/2013/09/18/beautiful-maths-dquaternion-from-vectors
  */
-dquat dquatFromVectors(
+dquat dquat_fromVectors(
 	const dvec3& u,
 	const dvec3& v)
 {
@@ -713,6 +714,22 @@ dquat dquat_alignToRH(
 {
 	dvec3 F(normalize(target - eye)); // parallel view direction
 	return dquat_alignAlongRH(F, worldUp);
+}
+
+/**
+ * @param eulerAngles  in radians
+ */
+dquat dquat_fromEulerAngles(dvec3 eulerAngles)
+{
+	dquat q;
+	eulerAngles *= 0.5;
+	dvec3 c = { cos(eulerAngles.x), cos(eulerAngles.y), cos(eulerAngles.z) };
+	dvec3 s = { sin(eulerAngles.x), sin(eulerAngles.y), sin(eulerAngles.z) };
+	
+	q.w = c.x * c.y * c.z + s.x * s.y * s.z;
+	q.x = s.x * c.y * c.z - c.x * s.y * s.z;
+	q.y = c.x * s.y * c.z + s.x * c.y * s.z;
+	q.z = c.x * c.y * s.z - s.x * s.y * c.z;
 }
 
 

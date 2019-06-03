@@ -12,8 +12,10 @@
 #include "utility/fixed_timestep.h"
 #include "input/game_input.h"
 #include "math/qmath.h"
+#include "math/noise.h"
 #include "scene/scene_api.h"
 #include "scene/camera.h"
+#include "game/screen_shake/screen_shake_system.h"
 
 //#define MAX_GAME_COMPONENTS		32
 
@@ -59,9 +61,16 @@ struct Game {
 	// game::TerrainSystem			terrain;
 	// game::DevCameraSystem		devCamera;
 	// game::DevConsoleSystem		devConsole;
-	// game::ScreenShakeSystem		screenShaker;
+	game::ScreenShakeSystem		screenShaker;
 
 	//uint16_t					gameComponentStoreIds[MAX_GAME_COMPONENTS] = {};
+
+	struct Components
+	{
+		ComponentStore(ScreenShakeNode,     ScreenShakeNodeMap,     ComponentId, 0, shakeNodes,     SCENE_MAX_CAMERAS)
+		ComponentStore(ScreenShakeProducer, ScreenShakeProducerMap, ComponentId, 1, shakeProducers, SCENE_MAX_SCREEN_SHAKE_PRODUCERS)
+	}
+	components;
 };
 
 #endif

@@ -28,6 +28,7 @@ static Game* _game = nullptr;
 
 #include "utility/memory.cpp"
 #include "utility/logger.cpp"
+#include "math/noise.cpp"
 #include "input/game_input.cpp"
 #include "scene/camera.cpp"
 #include "scene/scene.cpp"
@@ -79,7 +80,7 @@ void gameUpdateFrameTick(
 	//	don't run every frame by offsetting the frame that it runs on
 //	game.sky.updateFrameTick(game, engine, ui);
 
-//	game.screenShaker.updateFrameTick(game, engine, ui);
+	game.screenShaker.updateFrameTick(game, game.gameScene, ui);
 	
 //	engine.sceneManager->updateActiveScenes();
 
@@ -125,7 +126,7 @@ void gameRenderFrameTick(
 	// traverse scene graph, update world positions and orientations
 	updateNodeTransforms(
 		game.gameScene,
-		gameMemory->transient);
+		gameMemory->frameScoped);
 
 	renderScene(
 		game.gameScene,
@@ -139,8 +140,9 @@ void gameRenderFrameTick(
  * Create and init the systems of the griffin engine, and do dependency injection
  */
 void makeCoreSystems(
-	GameMemory* gameMemory,
-	Game& game)
+	GameMemory& gameMemory,
+	Game& game,
+	SDLApplication& app)
 {
 	/**
 	 * Create thread pool, one worker thread per logical core
@@ -285,10 +287,11 @@ void makeCoreSystems(
  * Create and init the initial game state and game systems
  */
 Game* makeGame(
-	GameMemory* gameMemory)
+	GameMemory& gameMemory,
+	SDLApplication& app)
 {
-	Game* newGame = allocType(gameMemory->gameState, Game);
-	gameMemory->game = newGame;
+	Game* newGame = allocType(gameMemory.gameState, Game);
+	gameMemory.game = newGame;
 	Game& game = *newGame;
 	assert(is_aligned(newGame,64) && "game is not cache aligned");
 
@@ -299,7 +302,7 @@ Game* makeGame(
 	// invoke Lua function to init the game
 //	engine.scriptManager->callLuaGlobalFunction(engine.engineLuaState, "initGame");
 
-	makeCoreSystems(gameMemory, game);
+	makeCoreSystems(gameMemory, game, app);
 
 	// set up game scene
 	{
@@ -327,7 +330,7 @@ Game* makeGame(
 //		game.devConsole.init(game, engine, app);
 		
 		// set up positionalEffect systems
-//		game.screenShaker.init(game, engine, app);
+		game.screenShaker.init(game);
 
 		// ...
 	}
@@ -425,6 +428,8 @@ extern "C" {
 		PlatformApi* platformApi,
 		SDLApplication* app)
 	{
+		assert(gameMemory && platformApi && app);
+
 		platform = platformApi;
 		logger::_log = platform->log;
 
@@ -433,7 +438,7 @@ extern "C" {
 			gameMemory->transient = makeMemoryArena();
 			gameMemory->frameScoped = makeMemoryArena();
 
-			_game = makeGame(gameMemory);
+			_game = makeGame(*gameMemory, *app);
 			
 			gameMemory->initialized = true;
 		}

@@ -1,4 +1,5 @@
 #include "scene_api.h"
+#include "../math/qmath.h"
 
 
 /**
@@ -16,11 +17,11 @@ SceneNodeId getLastImmediateChild(
 		return null_h32;
 	}
 
-	SceneNode& node = scene.components.sceneNodes[sceneNodeId]->component;
+	SceneNode& node = scene.components.sceneNodes[sceneNodeId]->data;
 	SceneNodeId childId = node.firstChild;
 	if (childId != null_h32) {
 		for (;;) {
-			SceneNode& child = scene.components.sceneNodes[sceneNodeId]->component;
+			SceneNode& child = scene.components.sceneNodes[sceneNodeId]->data;
 			if (child.nextSibling == null_h32) {
 				break;
 			}
@@ -43,49 +44,51 @@ SceneNodeId getLastImmediateChild(
 void collectDescendants(
 	Scene& scene,
 	SceneNodeId sceneNodeId,
-	std::vector<SceneNodeId>& outDescendants)
+	SceneNodeIdQueue& outDescendants,
+	MemoryArena& frameScoped)
 {
-	DenseQueueTyped(SceneNodeId, SceneNodeIdQueue);
+	// get some temporary storage for the traversal queue
+	ScopedTemporaryMemory temp = scopedTemporaryMemory(frameScoped);
+
 	const size_t bfsQueueSize = scene.components.sceneNodes.length();
+	SceneNodeId* bfsQueueBuffer = allocArrayOfType(frameScoped, SceneNodeId, bfsQueueSize);
 	SceneNodeIdQueue bfsQueue(bfsQueueSize, bfsQueueBuffer);
 	
-	SceneNode& node = scene.components.sceneNodes[sceneNodeId]->component;
+	SceneNode& node = scene.components.sceneNodes[sceneNodeId]->data;
 	
 	bfsQueue.push(sceneNodeId);
 
 	while (!bfsQueue.empty()) {
-		SceneNodeId thisId = bfsQueue.front();
+		SceneNodeId thisId = *bfsQueue.front();
 
-		SceneNode& node = scene.components.sceneNodes[thisId]->component;
+		SceneNode& node = scene.components.sceneNodes[thisId]->data;
 		SceneNodeId childId = node.firstChild;
 		for (u32 c = 0; c < node.numChildren; ++c) {
-			SceneNode& child = scene.components.sceneNodes[childId]->component;
-			outDescendants.push_back(childId);
+			SceneNode& child = scene.components.sceneNodes[childId]->data;
+			outDescendants.push(childId);
 			bfsQueue.push(childId);
 			childId = child.nextSibling;
 		}
 
-		bfsQueue.pop();
+		bfsQueue.pop_fifo();
 	}
 }
 
 
-SceneNodeId scene_addEntity(
+SceneNodeId scene_addSceneNodeToEntity(
 	Scene& scene,
 	EntityId entityId,
 	const dvec3& translationLocal,
 	const dquat& rotationLocal,
 	SceneNodeId parentNodeId)
 {
-	// TODO: make sure entity isn't already in a scene (has a scenenode)
-
 	// get the parent node where we're inserting this component
-	auto& parentNode = (parentNodeId == null_h32)
+	SceneNode& parentNode = (parentNodeId == null_h32)
 		? scene.root
-		: scene.components.sceneNodes[parentNodeId]->component;
+		: scene.components.sceneNodes[parentNodeId]->data;
 
 	// add a SceneNode component to the entity
-	Scene::Components::SceneNodeComponentRecord cr{
+	Scene::Components::SceneNodeComponent snc{
 		SceneNode{
 			0,															// numChildren
 			0,															// positionDirty
@@ -103,7 +106,7 @@ SceneNodeId scene_addEntity(
 		entityId
 	};
 
-	SceneNodeId nodeId = scene.components.sceneNodes.insert(&cr);
+	SceneNodeId nodeId = scene.components.sceneNodes.insert(&snc);
 	entity_addComponent(
 		scene.entities[entityId]->sceneComponents,
 		nodeId);
@@ -112,7 +115,7 @@ SceneNodeId scene_addEntity(
 		// push new node to the front of parent't list
 		// set the prevSibling of the former first child
 		if (parentNode.firstChild != null_h32) {
-			scene.components.sceneNodes[parentNode.firstChild]->component.prevSibling = nodeId;
+			scene.components.sceneNodes[parentNode.firstChild]->data.prevSibling = nodeId;
 		}
 
 		// make the new node the first child of its parent
@@ -124,33 +127,67 @@ SceneNodeId scene_addEntity(
 }
 
 
+NewEntityResult scene_createNewEntity(
+	Scene& scene,
+	bool inScene,
+	bool movable,
+	SceneNodeId parentNode)
+{
+	NewEntityResult result{};
+
+	Entity* entity = nullptr;
+	result.entityId = scene.entities.insert(nullptr, &entity);
+
+	if (inScene) {
+		result.sceneNodeId = scene_addSceneNodeToEntity(
+			scene,
+			result.entityId,
+			dvec3{},
+			dquat{},
+			parentNode);
+	
+		if (movable) {
+			Scene::Components::MovementComponent mc{};
+			mc.entityId = result.entityId;
+			mc.data.sceneNodeId = result.sceneNodeId;
+
+			result.movementId = scene.components.movement.insert(&mc);
+			entity_addComponent(entity->sceneComponents, result.movementId);
+		}
+	}
+
+	return result;
+}
+
+
 bool scene_removeNode(
 	Scene& scene,
 	SceneNodeId sceneNodeId,
 	bool cascade,
-	EntityIdQueue* outRemovedEntities)
+	EntityIdQueue* outRemovedEntities,
+	MemoryArena& frameScoped)
 {
 	if (!scene.components.sceneNodes.has(sceneNodeId)) {
 		return false;
 	}
 
-	Scene::Components::SceneNodeComponentRecord& thisNodeCR =
+	Scene::Components::SceneNodeComponent& thisCmp =
 		*scene.components.sceneNodes[sceneNodeId];
-	Entity& entity = *scene.entities[thisNodeCR.entityId];
-	SceneNode& node = thisNodeCR.component;
+	Entity& entity = *scene.entities[thisCmp.entityId];
+	SceneNode& node = thisCmp.data;
 	SceneNode& parentNode = (node.parent == null_h32)
 		? scene.root
-		: scene.components.sceneNodes[node.parent]->component;
+		: scene.components.sceneNodes[node.parent]->data;
 
 	// remove from scene graph
 	// if this was the firstChild, set the new one
 	if (node.prevSibling == null_h32) {
 		parentNode.firstChild = node.nextSibling;
-		scene.components.sceneNodes[parentNode.firstChild]->component.prevSibling = null_h32;
+		scene.components.sceneNodes[parentNode.firstChild]->data.prevSibling = null_h32;
 	}
 	// fix the node's sibling linked list
 	else {
-		scene.components.sceneNodes[node.prevSibling]->component.nextSibling = node.nextSibling;
+		scene.components.sceneNodes[node.prevSibling]->data.nextSibling = node.nextSibling;
 	}
 
 	--parentNode.numChildren;
@@ -158,20 +195,30 @@ bool scene_removeNode(
 	if (node.numChildren > 0) {
 		// remove all descendants
 		if (cascade) {
-			handleBuffer.clear();
-			collectDescendants(scene, sceneNodeId, handleBuffer);
+			ScopedTemporaryMemory temp = scopedTemporaryMemory(frameScoped);
+			
+			const size_t bufferSize = scene.components.sceneNodes.length();
+			SceneNodeId* handleQueueBuffer = allocArrayOfType(frameScoped, SceneNodeId, bufferSize);
+			SceneNodeIdQueue handleQueue(bufferSize, handleQueueBuffer);
+			
+			collectDescendants(scene, sceneNodeId, handleQueue, frameScoped);
+			
 			if (outRemovedEntities != nullptr) {
 				EntityIdQueue& rmvEnt = *outRemovedEntities;
-				for (auto descSceneNodeId : handleBuffer) {
-					EntityId entityIdOfRemoved = scene.components.sceneNodes[descSceneNodeId].entityId;
-					if (entityIdOfRemoved != thisNodeCR.entityId) {
-						rmvEnt.push_back(entityIdOfRemoved);
+				while (!handleQueue.empty())
+				{
+					SceneNodeId descSceneNodeId = *handleQueue.pop_fifo();
+					EntityId entityIdOfRemoved = scene.components.sceneNodes[descSceneNodeId]->entityId;
+					if (entityIdOfRemoved != thisCmp.entityId) {
+						rmvEnt.push(entityIdOfRemoved);
 					}
 					scene_removeNode(scene, descSceneNodeId, true, outRemovedEntities);
 				}
 			}
 			else {
-				for (auto descSceneNodeId : handleBuffer) {
+				while (!handleQueue.empty())
+				{
+					SceneNodeId descSceneNodeId = *handleQueue.pop_fifo();
 					scene_removeNode(scene, descSceneNodeId, true, nullptr);
 				}
 			}
@@ -183,7 +230,7 @@ bool scene_removeNode(
 				scene,
 				node.firstChild,
 				node.parent,
-				thisNodeCR.entityId);
+				thisCmp.entityId);
 		}
 	}
 
@@ -237,7 +284,7 @@ bool scene_moveNode(
 		return false;
 	}
 
-	SceneNode& node = scene.components.sceneNodes[sceneNodeId]->component;
+	SceneNode& node = scene.components.sceneNodes[sceneNodeId]->data;
 	// check to make sure we're not trying to move into the current parent
 	if (node.parent == moveToParent) {
 		return false;
@@ -245,21 +292,21 @@ bool scene_moveNode(
 
 	SceneNode& currentParent = (node.parent == null_h32)
 		? scene.root
-		: scene.components.sceneNodes[node.parent]->component;
+		: scene.components.sceneNodes[node.parent]->data;
 	
 	SceneNode& newParent = (moveToParent == null_h32)
 		? scene.root
-		: scene.components.sceneNodes[node.parent]->component;
+		: scene.components.sceneNodes[node.parent]->data;
 
 	// remove from current parrent
 	// if this was the firstChild, set the new one
 	if (node.prevSibling == null_h32) {
 		currentParent.firstChild = node.nextSibling;
-		scene.components.sceneNodes[currentParent.firstChild]->component.prevSibling = null_h32;
+		scene.components.sceneNodes[currentParent.firstChild]->data.prevSibling = null_h32;
 	}
 	// fix the node's sibling linked list
 	else {
-		scene.components.sceneNodes[node.prevSibling]->component.nextSibling = node.nextSibling;
+		scene.components.sceneNodes[node.prevSibling]->data.nextSibling = node.nextSibling;
 	}
 
 	--currentParent.numChildren;
@@ -269,7 +316,7 @@ bool scene_moveNode(
 	node.nextSibling = newParent.firstChild;
 	node.prevSibling = null_h32;
 	if (newParent.firstChild != null_h32) {
-		scene.components.sceneNodes[newParent.firstChild]->component.prevSibling = sceneNodeId;
+		scene.components.sceneNodes[newParent.firstChild]->data.prevSibling = sceneNodeId;
 	}
 	newParent.firstChild = sceneNodeId;
 			
@@ -291,7 +338,7 @@ bool scene_moveAllSiblings(
 		return false;
 	}
 
-	SceneNode& node = scene.components.sceneNodes[siblingToMove]->component;
+	SceneNode& node = scene.components.sceneNodes[siblingToMove]->data;
 	// check to make sure we're not trying to move into the current parent
 	if (node.parent == moveToParent) {
 		return false;
@@ -299,7 +346,7 @@ bool scene_moveAllSiblings(
 
 	SceneNode& currentParent = (node.parent == null_h32)
 		? scene.root
-		: scene.components.sceneNodes[node.parent]->component;
+		: scene.components.sceneNodes[node.parent]->data;
 
 	bool allMoved = true;
 
@@ -307,14 +354,15 @@ bool scene_moveAllSiblings(
 	SceneNodeId childId = currentParent.firstChild;
 	
 	while (childId != null_h32) {
-		auto& childCR = *scene.components.sceneNodes[childId];
+		Scene::Components::SceneNodeComponent& childCmp =
+			*scene.components.sceneNodes[childId];
 		
 		// move the child as long as it isn't owned by the excluded entity
 		// also make sure we're not trying to move a node into itself
-		if ((excludeEntityId == null_h32 || childCR.entityId != excludeEntityId)
+		if ((excludeEntityId == null_h32 || childCmp.entityId != excludeEntityId)
 			&& childId != moveToParent)
 		{
-			auto& child = childCR.component;
+			SceneNode& child = childCmp.data;
 			allMoved = allMoved && scene_moveNode(scene, childId, moveToParent);
 			childId = child.nextSibling;
 		}
@@ -326,39 +374,54 @@ bool scene_moveAllSiblings(
 }
 
 
-u32 scene_createCamera(
+EntityId scene_createCamera(
 	Scene& scene,
-	const CameraParameters& cameraParams,
-	bool makeActive)
+	const CameraParameters& params,
+	const char *name,
+	bool shakable,
+	SceneNodeId parentNode)
 {
-	CameraPtr camPtr = nullptr;
+	NewEntityResult newIds = scene_createNewEntity(scene, true, true, parentNode);
+	
+	Scene::Components::CameraInstanceComponent cam{};
+	cam.entityId = newIds.entityId;
+	cam.data.sceneNodeId = newIds.sceneNodeId;
+	cam.data.movementId = newIds.movementId;
+	strcpy_s(cam.data.name, sizeof(cam.data.name), name);
 
-	if (cameraParams.cameraType == Camera_Perspective) {
-		// add a perspective view camera
-		camPtr = std::make_shared<CameraPersp>(cameraParams.viewportWidth, cameraParams.viewportHeight,
-											   cameraParams.verticalFieldOfViewDegrees,
-											   cameraParams.nearClipPlane, cameraParams.farClipPlane);
+	if (params.cameraType == Camera_Perspective) {
+		cam.data.camera = makePerspectiveCamera(
+			(params.viewportWidth / params.viewportHeight),
+			params.fovDegreesVertical,
+			params.nearClip,
+			params.farClip,
+			dvec3{},
+			quat{});
 	}
-	else if (cameraParams.cameraType == Camera_Ortho) {
-		// add an orthographic view camera
-		camPtr = std::make_shared<CameraOrtho>(0.0f, static_cast<float>(cameraParams.viewportWidth),
-											   static_cast<float>(cameraParams.viewportHeight), 0.0f,
-											   cameraParams.nearClipPlane, cameraParams.farClipPlane);
+	else if (params.cameraType == Camera_Ortho) {
+		assert(false && "not implemented");
+		/*makeOrthoCamera(
+			0.0f,
+			params.viewportWidth,
+			0.0f,
+			params.viewportHeight,
+			params.nearClip,
+			params.farClip);*/
+	}
+	
+	//bool makePrimary = (s.cameras.size() == 0); // if this is the first camera in the scene, make it primary
+	
+	ComponentId camInstId = scene.components.cameraInstances.insert(&cam);
+
+	if (shakable) {
+		game::addScreenShakeNodeToCamera(*_game, scene, camInstId);
 	}
 
-	camPtr->calcMatrices();
-	cameras.push_back(camPtr);
-	u32 newCameraId = static_cast<u32>(cameras.size() - 1);
-
-	if (makeActive) {
-		setActiveCamera(newCameraId);
-	}
-
-	return newCameraId;
+	return cam.entityId;
 }
 
 
-// TODO: take a viewport index
+// TODO: take a viewport param
 void scene_setActiveCamera(
 	Scene& scene,
 	u32 cameraId)

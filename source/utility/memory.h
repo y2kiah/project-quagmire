@@ -82,6 +82,10 @@ MemoryArena makeMemoryArena()
 void clearArena(
 	MemoryArena& arena);
 
+void clearForwardOf(
+	MemoryBlock* blockStart,
+	uintptr_t usedStart);
+
 void shrinkArena(
 	MemoryArena& arena);
 
@@ -137,22 +141,8 @@ struct TemporaryMemory {
 		{
 			// clear all memory forward of the start block/position, this works because temporary
 			// memory is always taken from the lastBlock of an arena
-			blockStart->used = usedStart;
-			memset(
-				(void*)((uintptr_t)blockStart->base + usedStart),
-				0,
-				blockStart->size - usedStart);
-
-			// clear block(s) forward of temp memory start until the end or an unused block is reached
-			for (;;)
-			{
-				blockStart = blockStart->next;
-				if (!blockStart || blockStart->used == 0) {
-					break;
-				}
-				blockStart->used = 0;
-				memset(blockStart->base, 0, blockStart->size);
-			}
+			clearForwardOf(blockStart, usedStart);
+			
 			blockStart = nullptr;
 			usedStart = 0;
 		}
@@ -180,11 +170,47 @@ void endTemporaryMemory(
 	tm.end();
 }
 
-
 void keepTemporaryMemory(
 	TemporaryMemory& tm)
 {
 	tm.keep();
+}
+
+
+struct ScopedTemporaryMemory {
+	MemoryBlock*	blockStart;
+	uintptr_t		usedStart;
+
+	explicit ScopedTemporaryMemory(MemoryBlock* bs, uintptr_t us) :
+		blockStart{ bs },
+		usedStart{ us }
+	{}
+	ScopedTemporaryMemory(const TemporaryMemory& t) = delete;
+	~ScopedTemporaryMemory()
+	{
+		if (blockStart)
+		{
+			// clear all memory forward of the start block/position, this works because temporary
+			// memory is always taken from the lastBlock of an arena
+			clearForwardOf(blockStart, usedStart);
+			
+			blockStart = nullptr;
+			usedStart = 0;
+		}
+	}
+};
+
+/**
+ * ScopedTemporaryMemory is just like temporary memory but it is detroyed only when the memory
+ * handle goes out of scope, so there is no need to call end. Normally the temp memory handle
+ * should be stored on the stack. You cannot call keep on scoped memory.
+ */
+ScopedTemporaryMemory scopedTemporaryMemory(
+	MemoryArena& arena)
+{
+	// Note: temporary memory MUST come from the last block in the list, not necessarily the
+	// currentBlock, because for unwinding to work, all memory ahead of the start must be unused
+	return ScopedTemporaryMemory(arena.lastBlock, arena.lastBlock->used);
 }
 
 

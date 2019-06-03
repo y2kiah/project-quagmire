@@ -582,7 +582,7 @@ void interpolateSceneNodes(
  */
 void updateNodeTransforms(
 	Scene& scene,
-	MemoryArena& transient)
+	MemoryArena& frameScoped)
 {
 	/**
 	 * BFSQueueItem is used for traversal of the scene graph by breadth-first search without recursion.
@@ -597,10 +597,10 @@ void updateNodeTransforms(
 	DenseQueueTyped(BFSQueueItem, BFSQueue);
 
 	// get some temporary storage for the traversal queue
-	TemporaryMemory temp = beginTemporaryMemory(transient);
+	ScopedTemporaryMemory temp = scopedTemporaryMemory(frameScoped);
 
 	const size_t bfsQueueSize = scene.components.sceneNodes.length();
-	BFSQueueItem* bfsQueueBuffer = allocArrayOfType(transient, BFSQueueItem, bfsQueueSize);
+	BFSQueueItem* bfsQueueBuffer = allocArrayOfType(frameScoped, BFSQueueItem, bfsQueueSize);
 	BFSQueue bfsQueue(bfsQueueSize, bfsQueueBuffer);
 
 	// start traversal at the root node
@@ -651,8 +651,6 @@ void updateNodeTransforms(
 
 		bfsQueue.pop_fifo();
 	}
-
-	endTemporaryMemory(temp);
 }
 
 
@@ -669,8 +667,6 @@ void updateNodeTransforms(
 void frustumCullScene(
 	Scene& scene)
 {
-	auto& rciStore = components.renderCullInfo;
-
 	//for (int activeFrustum = 0; activeFrustum < numActiveFrustums; frustumMask <<= 1; ++activeFrustum) {
 		// To do the frustum index, we need an active cameras list, take index into that list for the camera.
 		// Can have > 32 cameras in scene, but only up to 32 active cameras.
@@ -681,9 +677,13 @@ void frustumCullScene(
 		Plane frustumPlanes[6] = {};
 		// TODO: code to get frustum
 
-		for (auto& rci : rciStore.getComponents().getItems()) {
-			auto inside = intersect(frustumPlanes, *reinterpret_cast<Sphere*>(&rci.component.viewspaceBSphere));
-			rci.component.visibleFrustumBits |= frustumMask & (inside != Outside);
+		for (u32 c = 0;
+			c < scene.components.renderCullInfo.length();
+			++c)
+		{
+			RenderCullInfo& rci = scene.components.renderCullInfo.item(c).component;
+			//u8 inside = intersect(frustumPlanes, *reinterpret_cast<Sphere*>(&rci.viewspaceBSphere));
+			//rci.visibleFrustumBits |= frustumMask & (inside != Outside);
 		}
 	//}
 
@@ -698,16 +698,18 @@ void renderScene(
 	Scene& scene,
     r32 interpolation)
 {
-	auto& render = *g_renderPtr.lock();
+/*	auto& render = *g_renderPtr.lock();
 	auto& loader = *g_resourceLoader.lock();
 
 	i8 activeViewport = 0; // TEMP, hard coded to one viewport
 
 	// update position/orientation of active camera from the scene graph
 	//	only supports one active camera now, but the active cameras could be extended into a list to support several views
-	for (auto& camInstance : entityMgr.getComponentStore<CameraInstance>().getComponents().getItems()) {
-		if (camInstance.component.cameraId == s.activeRenderCamera) {
-			auto& node = entityMgr.getComponent<SceneNode>(camInstance.component.sceneNodeId);
+	for (CameraInstance
+		auto& camInstance : entityMgr.getComponentStore<CameraInstance>().getComponents().getItems()) {
+		
+		if (camInstance.component.cameraId == scene.activeRenderCamera) {
+			SceneNode& node = scene.components.sceneNodes[camInstance.component.sceneNodeId];
 			auto& cam = *s.cameras[s.activeRenderCamera];
 
 			cam.setEyePoint(node.positionWorld);
@@ -763,17 +765,17 @@ void renderScene(
 			
 			// call "render" function which should only add render entries to the viewport's queue
 			// the renderer will sort the queue and call the object's "draw" function with a callback function pointer
-			/*
-			RenderQueueKey key;
-			key.value = rci.component.renderQueueKey;
+			
+			//RenderQueueKey key;
+			//key.value = rci.component.renderQueueKey;
 
-			RenderEntry re{};
-			re.entityId = rci.entityId;
-			re.positionWorld = node.positionWorld;
-			re.orientationWorld = node.orientationWorld;
-			*/
+			//RenderEntry re{};
+			//re.entityId = rci.entityId;
+			//re.positionWorld = node.positionWorld;
+			//re.orientationWorld = node.orientationWorld;
+			
 
 			//render.addRenderEntry(activeViewport, key, std::move(re));
 		//}
-	}
+	}*/
 }

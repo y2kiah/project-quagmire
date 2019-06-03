@@ -15,12 +15,28 @@
  * @param parentNodeId	SceneNode component of parent node, NullId_T for the root node
  * @return ComponentId of the SceneNode added to the entity
  */
-SceneNodeId scene_addEntity(
+SceneNodeId scene_addSceneNodeToEntity(
 	Scene& scene,
 	EntityId entityId,
 	const dvec3& translationLocal,
 	const dquat& rotationLocal,
 	SceneNodeId parentNodeId);
+
+
+struct NewEntityResult {
+	EntityId	entityId;
+	SceneNodeId	sceneNodeId;
+	ComponentId	movementId;
+};
+
+/**
+ * Creates a new entity and optionally adds SceneNode and Movement components.
+ */
+NewEntityResult scene_createNewEntity(
+	Scene& scene,
+	bool inScene,
+	bool movable,
+	SceneNodeId parentNode);
 
 
 /**

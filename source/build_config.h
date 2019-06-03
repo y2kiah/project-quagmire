@@ -13,6 +13,11 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 
+// clip space settings for projection matrices
+#define DEPTH_ZERO_TO_ONE		0
+#define DEPTH_NEG_ONE_TO_ONE	1
+#define DEPTH_CLIP_SPACE		DEPTH_NEG_ONE_TO_ONE
+
 // TODO: ??
 #define _VERTEX_
 #define _TESS_CONTROL_

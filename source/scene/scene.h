@@ -121,17 +121,8 @@ struct SpatialTransientStorage {
 };
 
 
-#define SCENE_MAX_CAMERAS		64
-/**
- * TODO: make multiple active cameras supported
- * This is the max number of active cameras for any one frame of a rendered scene. This
- * number includes cameras needed for rendering all viewports and shadow frustums. The
- * frustum culling results are stored in a 4-byte bitset, hence this limitation.
- */
-#define SCENE_MAX_ACTIVE_CAMERAS	32
-#define SCENE_MAX_LIGHTS			1024
-
 DenseHandleMap16TypedWithBuffer(Entity, EntityMap, EntityId, 0, SCENE_MAX_ENTITIES);
+
 
 /**
  * 
@@ -146,11 +137,12 @@ struct Scene {
 
 	struct Components
 	{
-		ComponentStore(SceneNode,      SceneNodeMap,      SceneNodeId,  0, sceneNodes,      SCENE_MAX_ENTITIES);
-		ComponentStore(Movement,       MovementMap,       ComponentId,  1, movement,        SCENE_MAX_ENTITIES);
-		ComponentStore(CameraInstance, CameraInstanceMap, ComponentId,  2, cameraInstances, SCENE_MAX_CAMERAS);
-		ComponentStore(ModelInstance,  ModelInstanceMap,  ComponentId,  3, modelInstances,  SCENE_MAX_ENTITIES);
-		ComponentStore(LightInstance,  LightInstanceMap,  ComponentId,  4, lightInstances,  SCENE_MAX_LIGHTS);
+		ComponentStore(SceneNode,      SceneNodeMap,      SceneNodeId,  0, sceneNodes,      SCENE_MAX_ENTITIES)
+		ComponentStore(Movement,       MovementMap,       ComponentId,  1, movement,        SCENE_MAX_ENTITIES)
+		ComponentStore(CameraInstance, CameraInstanceMap, ComponentId,  2, cameraInstances, SCENE_MAX_CAMERAS)
+		ComponentStore(ModelInstance,  ModelInstanceMap,  ComponentId,  3, modelInstances,  SCENE_MAX_ENTITIES)
+		ComponentStore(LightInstance,  LightInstanceMap,  ComponentId,  4, lightInstances,  SCENE_MAX_LIGHTS)
+		ComponentStore(RenderCullInfo, RenderCullInfoMap, ComponentId,  5, renderCullInfo,  SCENE_MAX_ENTITIES)
 	}
 	components;
 

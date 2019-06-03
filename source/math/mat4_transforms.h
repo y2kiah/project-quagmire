@@ -118,9 +118,9 @@ mat4 ortho(
 	mat4 result;
 	result[0][0] = 2.0f / (right - left);
 	result[1][1] = 2.0f / (top - bottom);
-	result[2][2] = - 1.0f;
-	result[3][0] = - (right + left) / (right - left);
-	result[3][1] = - (top + bottom) / (top - bottom);
+	result[2][2] = -1.0f;
+	result[3][0] = -(right + left) / (right - left);
+	result[3][1] = -(top + bottom) / (top - bottom);
 	return result;
 }
 
@@ -133,15 +133,15 @@ mat4 orthoLH(
 	mat4 result;
 	result[0][0] = 2.0f / (right - left);
 	result[1][1] = 2.0f / (top - bottom);
-	result[3][0] = - (right + left) / (right - left);
-	result[3][1] = - (top + bottom) / (top - bottom);
+	result[3][0] = -(right + left) / (right - left);
+	result[3][1] = -(top + bottom) / (top - bottom);
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
 	result[2][2] = 1.0f / (zFar - zNear);
-	result[3][2] = - zNear / (zFar - zNear);
+	result[3][2] = -zNear / (zFar - zNear);
 #	else
 	result[2][2] = 2.0f / (zFar - zNear);
-	result[3][2] = - (zFar + zNear) / (zFar - zNear);
+	result[3][2] = -(zFar + zNear) / (zFar - zNear);
 #	endif
 
 	return result;
@@ -156,15 +156,15 @@ mat4 orthoRH(
 	mat4 result;
 	result[0][0] = 2.0f / (right - left);
 	result[1][1] = 2.0f / (top - bottom);
-	result[3][0] = - (right + left) / (right - left);
-	result[3][1] = - (top + bottom) / (top - bottom);
+	result[3][0] = -(right + left) / (right - left);
+	result[3][1] = -(top + bottom) / (top - bottom);
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
-	result[2][2] = - 1.0f / (zFar - zNear);
-	result[3][2] = - zNear / (zFar - zNear);
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
+	result[2][2] = -1.0f / (zFar - zNear);
+	result[3][2] = -zNear / (zFar - zNear);
 #	else
-	result[2][2] = - 2.0f / (zFar - zNear);
-	result[3][2] = - (zFar + zNear) / (zFar - zNear);
+	result[2][2] = -2.0f / (zFar - zNear);
+	result[3][2] = -(zFar + zNear) / (zFar - zNear);
 #	endif
 
 	return result;
@@ -183,12 +183,12 @@ mat4 frustumLH(
 	result[2][1] = (top + bottom) / (top - bottom);
 	result[2][3] = 1.0f;
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
 	result[2][2] = farVal / (farVal - nearVal);
 	result[3][2] = -(farVal * nearVal) / (farVal - nearVal);
 #	else
 	result[2][2] = (farVal + nearVal) / (farVal - nearVal);
-	result[3][2] = - (2.0f * farVal * nearVal) / (farVal - nearVal);
+	result[3][2] = -(2.0f * farVal * nearVal) / (farVal - nearVal);
 #	endif
 
 	return result;
@@ -207,12 +207,12 @@ mat4 frustumRH(
 	result[2][1] = (top + bottom) / (top - bottom);
 	result[2][3] = -1.0f;
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
 	result[2][2] = farVal / (nearVal - farVal);
 	result[3][2] = -(farVal * nearVal) / (farVal - nearVal);
 #	else
-	result[2][2] = - (farVal + nearVal) / (farVal - nearVal);
-	result[3][2] = - (2.0f * farVal * nearVal) / (farVal - nearVal);
+	result[2][2] = -(farVal + nearVal) / (farVal - nearVal);
+	result[3][2] = -(2.0f * farVal * nearVal) / (farVal - nearVal);
 #	endif
 
 	return result;
@@ -227,19 +227,20 @@ mat4 perspectiveRH(
 {
 	assert(abs(aspect - FLT_EPSILON) > 0.0f);
 
-	r32 tanHalfFovy = tan(fovy / 2.0f);
+	r32 h = 1.0f / tanf(fovy * 0.5f);
 
 	mat4 result(0.0f);
-	result[0][0] = 1.0f / (aspect * tanHalfFovy);
-	result[1][1] = 1.0f / (tanHalfFovy);
-	result[2][3] = - 1.0f;
+	result[0][0] = h * (1.0f / aspect);
+	result[1][1] = h;
+	result[2][3] = -1.0f;
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
 	result[2][2] = zFar / (zNear - zFar);
 	result[3][2] = -(zFar * zNear) / (zFar - zNear);
 #	else
-	result[2][2] = - (zFar + zNear) / (zFar - zNear);
-	result[3][2] = - (2.0f * zFar * zNear) / (zFar - zNear);
+	r32 invZDist = 1.0f / (zFar - zNear);
+	result[2][2] = -(zFar + zNear) * invZDist;
+	result[3][2] = -(2.0f * zFar * zNear) * invZDist;
 #	endif
 
 	return result;
@@ -254,19 +255,20 @@ mat4 perspectiveLH(
 {
 	assert(abs(aspect - FLT_EPSILON) > 0.0f);
 
-	r32 tanHalfFovy = tan(fovy / 2.0f);
+	r32 tanHalfFovy = tanf(fovy * 0.5f);
 	
 	mat4 result(0.0f);
 	result[0][0] = 1.0f / (aspect * tanHalfFovy);
-	result[1][1] = 1.0f / (tanHalfFovy);
+	result[1][1] = 1.0f / tanHalfFovy;
 	result[2][3] = 1.0f;
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
 	result[2][2] = zFar / (zFar - zNear);
 	result[3][2] = -(zFar * zNear) / (zFar - zNear);
 #	else
-	result[2][2] = (zFar + zNear) / (zFar - zNear);
-	result[3][2] = - (2.0f * zFar * zNear) / (zFar - zNear);
+	r32 invZDist = 1.0f / (zFar - zNear);
+	result[2][2] = (zFar + zNear) * invZDist;
+	result[3][2] = -(2.0f * zFar * zNear) * invZDist;
 #	endif
 
 	return result;
@@ -274,29 +276,28 @@ mat4 perspectiveLH(
 
 
 mat4 perspectiveFovRH(
-	r32 fov,
+	r32 fovy,
 	r32 width, r32 height,
 	r32 zNear, r32 zFar)
 {
 	assert(width > 0.0f);
 	assert(height > 0.0f);
-	assert(fov > 0.0f);
+	assert(fovy > 0.0f);
 
-	r32 rad = fov;
-	r32 h = cosf(0.5f * rad) / sinf(0.5f * rad);
-	r32 w = h * height / width; // TODO: max(width , Height) / min(width , Height)?
+	r32 h = 1.0f / tanf(fovy * 0.5f);
 
 	mat4 result(0.0f);
-	result[0][0] = w;
+	result[0][0] = h * (height / width);
 	result[1][1] = h;
-	result[2][3] = - 1.0f;
+	result[2][3] = -1.0f;
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
 	result[2][2] = zFar / (zNear - zFar);
 	result[3][2] = -(zFar * zNear) / (zFar - zNear);
 #	else
-	result[2][2] = - (zFar + zNear) / (zFar - zNear);
-	result[3][2] = - (2.0f * zFar * zNear) / (zFar - zNear);
+	r32 invZDist = 1.0f / (zFar - zNear);
+	result[2][2] = -(zFar + zNear) * invZDist;
+	result[3][2] = -(2.0f * zFar * zNear) * invZDist;
 #	endif
 
 	return result;
@@ -304,29 +305,29 @@ mat4 perspectiveFovRH(
 
 
 mat4 perspectiveFovLH(
-	r32 fov,
+	r32 fovy,
 	r32 width, r32 height,
 	r32 zNear, r32 zFar)
 {
 	assert(width > 0.0f);
 	assert(height > 0.0f);
-	assert(fov > 0.0f);
+	assert(fovy > 0.0f);
 
-	r32 rad = fov;
-	r32 h = cosf(0.5f * rad) / sinf(0.5f * rad);
-	r32 w = h * height / width; // TODO: max(width , Height) / min(width , Height)?
+	r32 h = cosf(0.5f * fovy) / sinf(0.5f * fovy);
+	r32 w = h * height / width;
 
 	mat4 result(0.0f);
 	result[0][0] = w;
 	result[1][1] = h;
 	result[2][3] = 1.0f;
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
 	result[2][2] = zFar / (zFar - zNear);
 	result[3][2] = -(zFar * zNear) / (zFar - zNear);
 #	else
-	result[2][2] = (zFar + zNear) / (zFar - zNear);
-	result[3][2] = - (2.0f * zFar * zNear) / (zFar - zNear);
+	r32 invZDist = 1.0f / (zFar - zNear);
+	result[2][2] = (zFar + zNear) * invZDist;
+	result[3][2] = -(2.0f * zFar * zNear) * invZDist;
 #	endif
 
 	return result;
@@ -338,7 +339,7 @@ mat4 infinitePerspectiveRH(
 	r32 aspect,
 	r32 zNear)
 {
-	r32 range = tan(fovy / 2.0f) * zNear;
+	r32 range = tanf(fovy * 0.5f) * zNear;
 	r32 left = -range * aspect;
 	r32 right = range * aspect;
 	r32 bottom = -range;
@@ -347,9 +348,9 @@ mat4 infinitePerspectiveRH(
 	mat4 result(0.0f);
 	result[0][0] = (2.0f * zNear) / (right - left);
 	result[1][1] = (2.0f * zNear) / (top - bottom);
-	result[2][2] = - 1.0f;
-	result[2][3] = - 1.0f;
-	result[3][2] = - 2.0f * zNear;
+	result[2][2] = -1.0f;
+	result[2][3] = -1.0f;
+	result[3][2] = -2.0f * zNear;
 	return result;
 }
 
@@ -359,7 +360,7 @@ mat4 infinitePerspectiveLH(
 	r32 aspect,
 	r32 zNear)
 {
-	r32 range = tan(fovy / 2.0f) * zNear;
+	r32 range = tanf(fovy * 0.5f) * zNear;
 	r32 left = -range * aspect;
 	r32 right = range * aspect;
 	r32 bottom = -range;
@@ -370,7 +371,7 @@ mat4 infinitePerspectiveLH(
 	result[1][1] = (2.0f * zNear) / (top - bottom);
 	result[2][2] = 1.0f;
 	result[2][3] = 1.0f;
-	result[3][2] = - 2.0f * zNear;
+	result[3][2] = -2.0f * zNear;
 	return result;
 }
 
@@ -382,7 +383,7 @@ mat4 tweakedInfinitePerspective(
 	r32 zNear,
 	r32 ep)
 {
-	r32 range = tan(fovy / 2.0f) * zNear;	
+	r32 range = tanf(fovy * 0.5f) * zNear;	
 	r32 left = -range * aspect;
 	r32 right = range * aspect;
 	r32 bottom = -range;
@@ -419,7 +420,7 @@ vec3 project(
 
 	tmp /= tmp.w;
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
 	tmp.x = tmp.x * 0.5f + 0.5f;
 	tmp.y = tmp.y * 0.5f + 0.5f;
 #	else
@@ -445,7 +446,7 @@ vec3 unProject(
 	tmp.x = (tmp.x - viewport[0]) / viewport[2];
 	tmp.y = (tmp.y - viewport[1]) / viewport[3];
 
-#	if GLM_DEPTH_CLIP_SPACE == GLM_DEPTH_ZERO_TO_ONE
+#	if DEPTH_CLIP_SPACE == DEPTH_ZERO_TO_ONE
 	tmp.x = tmp.x * 2.0f - 1.0f;
 	tmp.y = tmp.y * 2.0f - 1.0f;
 #	else
