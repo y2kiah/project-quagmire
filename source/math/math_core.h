@@ -29,12 +29,15 @@
 #define PI							3.14159265358979323846264338327950288
 #define PIf							3.14159265358979323846264338327950288f
 
+#define INV_LN_HALFf				-1.44269504088896340736f	// 1 / ln(.5)
+
 #define DEG_TO_RAD					0.01745329251994329576923690768489
 #define DEG_TO_RADf					0.01745329251994329576923690768489f
 #define RAD_TO_DEG					57.295779513082320876798154814105
 #define RAD_TO_DEGf					57.295779513082320876798154814105f
 
-#define SQRT_2						1.4142135623730950488016887242097f
+#define SQRT_2						1.4142135623730950488016887242097
+#define SQRT_2f						1.4142135623730950488016887242097f
 
 
 struct _vec2 {
@@ -96,28 +99,6 @@ r32 clamp(r32 x, r32 minVal, r32 maxVal)
 	return min(max(x, minVal), maxVal);
 }
 
-r32 mix(r32 x, r32 y, r32 a)
-{
-	return x + a * (y - x);
-}
-
-r32 lerp(r32 x, r32 y, r32 a)
-{
-	return x + a * (y - x);
-}
-
-r32 step(r32 edge, r32 x)
-{
-	return mix(1.0f, 0.0f, (x < edge));
-}
-
-r32 smoothstep(r32 edge0, r32 edge1, r32 x)
-{
-	r32 tmp = clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
-	return tmp * tmp * (3.0f - 2.0f * tmp);
-}
-
-
 i64 clamp(i64 x, i64 minVal, i64 maxVal)
 {
 	return min(max(x, minVal), maxVal);
@@ -128,19 +109,42 @@ r64 clamp(r64 x, r64 minVal, r64 maxVal)
 	return min(max(x, minVal), maxVal);
 }
 
-r64 mix(r64 x, r64 y, r64 a)
+// Interpolation Functions
+
+r32 mix(r32 x, r32 y, r32 t)
 {
-	return x + a * (y - x);
+	return x + t * (y - x);
 }
 
-r64 lerp(r64 x, r64 y, r64 a)
+r64 mix(r64 x, r64 y, r64 t)
 {
-	return x + a * (y - x);
+	return x + t * (y - x);
 }
 
-r64 step(r64 edge, r64 x)
+r32 lerp(r32 x, r32 y, r32 t)
 {
-	return mix(1.0, 0.0, (x < edge));
+	return x + t * (y - x);
+}
+
+r64 lerp(r64 x, r64 y, r64 t)
+{
+	return x + t * (y - x);
+}
+
+r32 step(r32 edge, r32 t)
+{
+	return (r32)(t >= edge);
+}
+
+r64 step(r64 edge, r64 t)
+{
+	return (r64)(t >= edge);
+}
+
+r32 smoothstep(r32 edge0, r32 edge1, r32 t)
+{
+	r32 tmp = clamp((t - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+	return tmp * tmp * (3.0f - 2.0f * tmp);
 }
 
 r64 smoothstep(r64 edge0, r64 edge1, r64 x)
@@ -149,5 +153,60 @@ r64 smoothstep(r64 edge0, r64 edge1, r64 x)
 	return tmp * tmp * (3.0 - 2.0 * tmp);
 }
 
+r32 boxStep(r32 a, r32 b, r32 t)
+{
+	assert(b != a);
+	return clamp(0.0f, 1.0f, (t - a) / (b - a));
+}
+
+r32 pulse(r32 a, r32 b, r32 t)
+{
+	return (r32)((t >= a) - (t >= b));
+}
+
+r32 bias(r32 a, r32 b)
+{
+	return powf(a, logf(b) * INV_LN_HALFf);
+}
+
+r32 gamma(r32 a, r32 g)
+{
+	return powf(a, 1.0f / g);
+}
+
+r32 expose(r32 l, r32 k)
+{
+	return (1.0f - expf(-l * k));
+}
+
+// Cubic S-curve = 3t^2 - 2t^3 : 2nd derivative is discontinuous at t=0 and t=1 causing visual artifacts at boundaries
+r32 sCurve(r32 t)
+{
+	return t * t * (3.0f - 2.0f * t);
+}
+
+// Cubic curve 1st derivative = 6t - 6t^2
+r32 sCurveDeriv(r32 t)
+{
+	return 6.0f * t * (1.0f - t);
+}
+
+// Quintic curve = 6t^5 - 15t^4 + 10t^3
+r32 qCurve(r32 t)
+{
+	return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
+}
+
+// Quintic curve 1st derivative = 30t^4 - 60t^3 + 30t^2
+r32 qCurveDeriv(r32 t)
+{
+	return t * t * (t * (t * 30.0f - 60.0f) + 30.0f);
+}
+
+// Cosine curve
+r32 cosCurve(r32 t)
+{
+	return (1.0f - cosf(t * PIf)) * 0.5f;
+}
 
 #endif

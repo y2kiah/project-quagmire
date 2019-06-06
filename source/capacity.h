@@ -1,7 +1,6 @@
-// Transient Storage
-// TODO: temporary, these should be replaced by a linked list of 4K blocks, allowing memory to grow without too much waste
-#define FRAMESCOPED_MEGABYTES		64
-#define TRANSIENT_MEGABYTES			64
+// Storage first block size
+#define INIT_TRANSIENT_BLOCK_MEGABYTES      		64
+#define INIT_FRAMESCOPED_BLOCK_MEGABYTES        	64
 
 // Logger
 #define LOGGER_CAPACITY				50		// maximum number of messages that can build up in concurrent queue before it is flushed (per frame)

@@ -1,11 +1,11 @@
 #ifndef _SCENE_H_
 #define _SCENE_H_
 
-#include "../capacity.h"
-#include "../utility/common.h"
-#include "../math/math_core.h"
-#include "../math/vec3.h"
-#include "../utility/dense_handle_map_16.h"
+#include "capacity.h"
+#include "utility/common.h"
+#include "math/math_core.h"
+#include "math/vec3.h"
+#include "utility/dense_handle_map_16.h"
 #include "geometry.h"
 #include "entity.h"
 #include "scene_components.h"
@@ -15,57 +15,35 @@ const i16 gridSizeX = 256;
 const i16 gridSizeY = 16;
 const i16 gridSizeZ = 256;
 
-const r32 spatialGridSizeY = 10000.0f;
-const r32 spatialGridSizeXZ = 1000.0f;
+const r64 spatialGridSizeY = 10000.0;
+const r64 spatialGridSizeXZ = 1000.0;
 
 // scalar for Y axis into XZ space (used for frustum-sphere culling of spatial grid cells)
-const r32 spatialGridSize_XZ_Y_ratio = spatialGridSizeXZ / spatialGridSizeY;
+const r64 spatialGridSize_XZ_Y_ratio = spatialGridSizeXZ / spatialGridSizeY;
 // radius for the bounding sphere containing a grid cell
-const r32 spatialGridCellRadius = SQRT_2 * spatialGridSizeXZ * 0.5f;
+const r64 spatialGridCellRadius = SQRT_2 * spatialGridSizeXZ * 0.5;
 
-const vec3 invSpatialGridSizeXYZ = vec3{
-	1.0f / spatialGridSizeXZ,
-	1.0f / spatialGridSizeY,
-	1.0f / spatialGridSizeXZ
+const dvec3 invSpatialGridSizeXYZ = dvec3{
+	1.0 / spatialGridSizeXZ,
+	1.0 / spatialGridSizeY,
+	1.0 / spatialGridSizeXZ
 };
 
 const int SpatialGridSize = gridSizeX * gridSizeY * gridSizeZ;
 
 /**
  * SpatialHandle represents an entry into a single cell of the SpatialMap. Each cell of SpatialMap
- * holds an embedded linked list of SpatialValue's. The front of the list is stored in the
+ * holds an embedded linked list of SpatialValue. The front of the list is stored in the
  * spatialCells array.
  */
 typedef h32 SpatialHandle;
 
 
-struct SpatialCell {
-	u8 x, y, z;
-
-	bool operator==(const SpatialCell& c) const { return x == c.x && y == c.y && z == c.z; }
-	bool operator>=(const SpatialCell& c) const { return x >= c.x && y >= c.y && z >= c.z; }
-	bool operator<=(const SpatialCell& c) const { return x <= c.x && y <= c.y && z <= c.z; }
-};
-
-
-/**
- * SpatialKey is used for lookups into the spatial hash map. The key holds two cells, a start and
- * end, which represents a 3D block of cells that fall within the range (inclusive).
- */
-struct SpatialKey {
-	SpatialCell cs, ce;
-};
-
-
 struct SpatialValue {
-	// TODO: determine where this will point, maybe just a u16 index into SpatialHashAABBData SoA data
-	h32				entityOrComponentId;
+	ComponentId		spatialInfoId;
 	SpatialHandle	next;	// handle to next SpatialValue in the grid cell
 	SpatialCell		cell;
 	u8				_padding;
-	// TODO: should we store a copy of position and radius here for an eventual frustum check, we could iterate
-	// the values in a cell adding them to SoA data and then do 4 checks at a time against the frustum using sse
-	// but... dynamic objects will have to update all of the copies for each cell they exist in
 };
 
 
@@ -82,19 +60,6 @@ struct SpatialCellProjections {
 };
 
 
-struct EntityPVS {
-	// TODO: the bSphere is stored for a later occlusion culling step, do we even need this?
-	Sphere	bSphere[SCENE_MAX_ENTITIES];
-	h32		entityOrComponentId[SCENE_MAX_ENTITIES];
-	u32		length;
-	// TODO: a change in culling function might require SoA data layout
-	//r32		x [SCENE_MAX_ENTITIES];
-	//r32		y [SCENE_MAX_ENTITIES];
-	//r32		z [SCENE_MAX_ENTITIES];
-	//r32		radius [SCENE_MAX_ENTITIES];
-};
-
-
 DenseHandleMap16TypedWithBuffer(
 	SpatialValue,
 	SpatialValueMap,
@@ -106,32 +71,33 @@ DenseHandleMap16TypedWithBuffer(
 // TODO: rename SpatialWorldChunk or something?
 struct SpatialPersistentStorage {
 	SpatialHandle	cells[SpatialGridSize];	// each cell stores front of linked list of SpatialValues in the map
-	SpatialValueMap	valueMap;				// map stores SpatialValues representing entities in the world 
+	SpatialValueMap	valueMap;				// map stores SpatialValues representing entities in the world
+	SpatialHandle	outsideGrid;			// front of linked list of SpatialValues that exist outside of the grid cells
 };
 
 
 /**
- * SpatialTransientStorage is used per frame for object frustum culling.
+ * SpatialTransientStorage is used per-frustum for object culling.
  */
 struct SpatialTransientStorage {
 	SpatialCellProjections	cellProj;					// cell projection data used for frustum visibility check
 	SpatialCell				cellPVS[SpatialGridSize];	// resulting dataset from running cell projection algorithm
 	u32						cellPVSLength;
-	EntityPVS				entityPVS;					// resulting dataset from running bsphere checks after cell projection
+	u32						numVisibleEntities;
+	EntityId				visibleEntities[SCENE_MAX_ENTITIES]; // resulting dataset after running bsphere checks on the cellPVS
 };
 
 
 DenseHandleMap16TypedWithBuffer(Entity, EntityMap, EntityId, 0, SCENE_MAX_ENTITIES);
 
 
-/**
- * 
- */
+struct Viewport {
+	ComponentId cameraInstId;
+};
+
+
 struct Scene {
 	SceneNode 	root;	// root of the scene graph, traversal starts from here
-	//CameraList	cameras;
-	i32			activeRenderCamera = -1;
-	// TODO: contains layer id for RenderEntry???
 
 	EntityMap	entities;
 
@@ -142,21 +108,26 @@ struct Scene {
 		ComponentStore(CameraInstance, CameraInstanceMap, ComponentId,  2, cameraInstances, SCENE_MAX_CAMERAS)
 		ComponentStore(ModelInstance,  ModelInstanceMap,  ComponentId,  3, modelInstances,  SCENE_MAX_ENTITIES)
 		ComponentStore(LightInstance,  LightInstanceMap,  ComponentId,  4, lightInstances,  SCENE_MAX_LIGHTS)
-		ComponentStore(RenderCullInfo, RenderCullInfoMap, ComponentId,  5, renderCullInfo,  SCENE_MAX_ENTITIES)
+		ComponentStore(SpatialInfo,    SpatialInfoMap,    ComponentId,  5, spatialInfo,     SCENE_MAX_ENTITIES)
 	}
 	components;
 
 	SpatialPersistentStorage	spatial;
+	
+	// TODO: for now allocate one of these, if culling becomes multi threaded will need one per thread
+	SpatialTransientStorage		*culling;
+
+	ComponentId	activeCameras[32];
+	u8 			numActiveCameras;
 };
 
 
 // Functions
 
 SpatialCell getSpatialCell(
-	r32 x, r32 y, r32 z)
+	r64 x, r64 y, r64 z)
 {
 	return SpatialCell{
-		// TODO: can use simd here
 		// note: trunc behavior for negative numbers here is fine since we are clamping to 0 anyway
 		(u8)clamp((i32)(x / spatialGridSizeXZ), 0, gridSizeX-1),
 		(u8)clamp((i32)(y / spatialGridSizeY),  0, gridSizeY-1),
@@ -166,13 +137,23 @@ SpatialCell getSpatialCell(
 
 
 SpatialKey getSpatialKeyForAABB(
-	vec3& vs,
-	vec3& ve)
+	const vec3& vs,
+	const vec3& ve)
 {
 	return SpatialKey{
 		getSpatialCell(vs.x, vs.y, vs.z),
 		getSpatialCell(ve.x, ve.y, ve.z)
 	};
+}
+
+
+SpatialKey getSpatialKeyForSphere(
+	vec3& center,
+	r32 radius)
+{
+	return getSpatialKeyForAABB(
+		center - radius,
+		center + radius);
 }
 
 
@@ -185,7 +166,7 @@ u32 getSpatialIndex(
 
 void addToSpatialCell(
 	const SpatialCell& cell,
-	h32 entityOrComponentId,
+	ComponentId spatialInfoId,
 	SpatialPersistentStorage& sps);
 
 
@@ -195,13 +176,13 @@ void addToSpatialCell(
  */
 void addToSpatialMap(
 	const SpatialKey& key,
-	h32 entityOrComponentId,
+	ComponentId spatialInfoId,
 	SpatialPersistentStorage& sps);
 
 
 void removeFromSpatialCell(
 	const SpatialCell& cell,
-	h32 entityOrComponentId,
+	ComponentId spatialInfoId,
 	SpatialPersistentStorage& sps);
 
 
@@ -210,7 +191,7 @@ void removeFromSpatialCell(
  */
 void removeFromSpatialMap(
 	const SpatialKey& key,
-	h32 entityOrComponentId,
+	ComponentId spatialInfoId,
 	SpatialPersistentStorage& sps);
 
 
@@ -221,7 +202,7 @@ void removeFromSpatialMap(
 void updateSpatialKey(
 	const SpatialKey& prevKey,
 	const SpatialKey& newKey,
-	h32 entityOrComponentId,
+	ComponentId spatialInfoId,
 	SpatialPersistentStorage& sps);
 
 

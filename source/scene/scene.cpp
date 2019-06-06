@@ -6,11 +6,11 @@
 
 void addToSpatialCell(
 	const SpatialCell& cell,
-	h32 entityOrComponentId,
+	ComponentId spatialInfoId,
 	SpatialPersistentStorage& sps)
 {
 	SpatialValue val;
-	val.entityOrComponentId = entityOrComponentId;
+	val.spatialInfoId = spatialInfoId;
 	val.cell = cell;
 	u32 idx = getSpatialIndex(cell);
 	SpatialHandle front = sps.cells[idx];
@@ -23,11 +23,11 @@ void addToSpatialCell(
 
 void addToSpatialMap(
 	const SpatialKey& key,
-	h32 entityOrComponentId,
+	ComponentId spatialInfoId,
 	SpatialPersistentStorage& sps)
 {
 	if (key.cs == key.ce) {
-		addToSpatialCell(key.cs, entityOrComponentId, sps);
+		addToSpatialCell(key.cs, spatialInfoId, sps);
 	}
 	else {
 		for (u8 y = key.cs.y; y <= key.ce.y; ++y) {
@@ -35,7 +35,7 @@ void addToSpatialMap(
 				for (u8 x = key.cs.x; x <= key.ce.x; ++x) {
 					addToSpatialCell(
 						SpatialCell{ x, y, z },
-						entityOrComponentId,
+						spatialInfoId,
 						sps);
 				}
 			}
@@ -46,7 +46,7 @@ void addToSpatialMap(
 
 void removeFromSpatialCell(
 	const SpatialCell& cell,
-	h32 entityOrComponentId,
+	ComponentId spatialInfoId,
 	SpatialPersistentStorage& sps)
 {
 	u32 idx = getSpatialIndex(cell);
@@ -58,7 +58,7 @@ void removeFromSpatialCell(
 	while (curr != null_h32) {
 		SpatialValue* val = sps.valueMap[curr];
 		
-		if (val->entityOrComponentId == entityOrComponentId)
+		if (val->spatialInfoId == spatialInfoId)
 		{
 			if (prevVal) {
 				prevVal->next = val->next;
@@ -80,11 +80,11 @@ void removeFromSpatialCell(
 
 void removeFromSpatialMap(
 	const SpatialKey& key,
-	h32 entityOrComponentId,
+	ComponentId spatialInfoId,
 	SpatialPersistentStorage& sps)
 {
 	if (key.cs == key.ce) {
-		removeFromSpatialCell(key.cs, entityOrComponentId, sps);
+		removeFromSpatialCell(key.cs, spatialInfoId, sps);
 	}
 	else {
 		for (u8 y = key.cs.y; y <= key.ce.y; ++y) {
@@ -92,7 +92,7 @@ void removeFromSpatialMap(
 				for (u8 x = key.cs.x; x <= key.ce.x; ++x) {
 					removeFromSpatialCell(
 						SpatialCell{ x, y, z },
-						entityOrComponentId,
+						spatialInfoId,
 						sps);
 				}
 			}
@@ -104,13 +104,13 @@ void removeFromSpatialMap(
 void updateSpatialKey(
 	const SpatialKey& prevKey,
 	const SpatialKey& newKey,
-	h32 entityOrComponentId,
+	ComponentId spatialInfoId,
 	SpatialPersistentStorage& sps)
 {
 	if (prevKey.cs == prevKey.ce &&
 		!(prevKey.cs >= newKey.cs && prevKey.cs <= newKey.ce))
 	{
-		removeFromSpatialCell(prevKey.cs, entityOrComponentId, sps);
+		removeFromSpatialCell(prevKey.cs, spatialInfoId, sps);
 	}
 	else {
 		for (u8 y = prevKey.cs.y; y <= prevKey.ce.y; ++y) {
@@ -119,7 +119,7 @@ void updateSpatialKey(
 					SpatialCell cell{ x, y, z };
 					// remove from cell if the cell isn't also in the new key
 					if (!(cell >= newKey.cs && cell <= newKey.ce)) {
-						removeFromSpatialCell(cell, entityOrComponentId, sps);
+						removeFromSpatialCell(cell, spatialInfoId, sps);
 					}
 				}
 			}
@@ -129,7 +129,7 @@ void updateSpatialKey(
 	if (newKey.cs == newKey.ce &&
 		!(newKey.cs >= prevKey.cs && newKey.cs <= prevKey.ce))
 	{
-		addToSpatialCell(newKey.cs, entityOrComponentId, sps);
+		addToSpatialCell(newKey.cs, spatialInfoId, sps);
 	}
 	else {
 		for (u8 y = newKey.cs.y; y <= newKey.ce.y; ++y) {
@@ -138,7 +138,7 @@ void updateSpatialKey(
 					SpatialCell cell{ x, y, z };
 					// add to cell if the cell isn't also in the prev key
 					if (!(cell >= prevKey.cs && cell <= prevKey.ce)) {
-						addToSpatialCell(cell, entityOrComponentId, sps);
+						addToSpatialCell(cell, spatialInfoId, sps);
 					}
 				}
 			}
@@ -306,19 +306,28 @@ void rasterizeTriangle(
  * SpatialCellProjections object.
  */
 void scanConvertFrustum(
-	const Frustum& f,
+	const CameraInstance& camInst,
 	SpatialCellProjections& cp)
 {
 	cp = SpatialCellProjections(); // reset to default (not just zeroing memory)
 
-	// get frustum into grid space
-	// TODO: if grid origin ever moves from world origin, need a translation here as well
-	vec3 fo, tr, tl, br, bl;
-	fo *= invSpatialGridSizeXYZ;
-	tr *= invSpatialGridSizeXYZ;
-	tl *= invSpatialGridSizeXYZ;
-	br *= invSpatialGridSizeXYZ;
-	bl *= invSpatialGridSizeXYZ;
+	// get frustum points from the camera instance
+	FrustumPoints fp;
+	frustum_getPoints(
+		camInst.camera.frame.view,
+		camInst.camera.eyePoint, // TODO: if grid origin ever moves from world origin, translate frustum relative to grid here
+		camInst.camera.nearClip,
+		camInst.camera.farClip,
+		camInst.camera.fovDegreesVertical,
+		camInst.camera.aspectRatio,
+		fp);
+
+	// divide frustum points into grid space
+	vec3 fo = make_vec3(fp.eye *= invSpatialGridSizeXYZ);
+	vec3 tl = make_vec3(fp.ftl *= invSpatialGridSizeXYZ);
+	vec3 tr = make_vec3(fp.ftr *= invSpatialGridSizeXYZ);
+	vec3 bl = make_vec3(fp.fbl *= invSpatialGridSizeXYZ);
+	vec3 br = make_vec3(fp.fbr *= invSpatialGridSizeXYZ);
 	
 	// xz plane
 	rasterizeTriangle( // frustum top
@@ -335,6 +344,8 @@ void scanConvertFrustum(
 		fo.xz, br.xz, tr.xz,
 		cp.xz, gridSizeX, gridSizeZ,
 		cp.lowX, cp.highX, cp.lowZ, cp.highZ);
+
+	// TODO: we should need bottom on all of these too
 
 	// xy plane
 	rasterizeTriangle(
@@ -439,17 +450,32 @@ void getCellPVSFromProjections(
  * entities are individually bsphere tested and added to the entityPVS. If the cell's bsphere does
  * not intersect, assert since that indicates a bug in the projection code.
  */
-void getEntityPVSFromCellPVS(
-	const Frustum& f,
+void cullEntitiesInCellPVS(
+	Scene& scene,
+	const CameraInstance& camInst,
+	u8 cameraIndex,
 	SpatialTransientStorage& sts,
 	SpatialPersistentStorage& sps)
 {
-	EntityPVS& ePVS = sts.entityPVS;
-	ePVS.length = 0;
+	sts.numVisibleEntities = 0;
 
-	// transform the frustum planes into a "homogeneous grid space" which is basically world space
-	// with a squashed Y axis so the grid cell is a cube
-	Frustum f_hgs = f;
+	// get view projection matrix in camera space, which is halfway between world and view space
+	// (world space rotation with camera at origin)
+	mat4 viewProj_camera = camInst.camera.frame.viewProjection;
+	
+	// TODO: temporary, just trying to see if the logic is sound, subtracting eyePoint from translation in viewMatrix should yield 0,0,0
+	assert(length2(vec3{ viewProj_camera[0][3], viewProj_camera[1][3], viewProj_camera[2][3] }
+					- make_vec3(camInst.camera.eyePoint)) < FLT_EPSILON);
+	
+	viewProj_camera[0][3] = 0.0f;
+	viewProj_camera[1][3] = 0.0f;
+	viewProj_camera[2][3] = 0.0f;
+
+	Frustum frustum = frustum_extractFromMatrixGL(viewProj_camera.E);
+
+	// transform the frustum planes into a "homogeneous grid space" which has a scaled Y axis so
+	// the grid cell is a cube
+	Frustum f_hgs = frustum;
 	for (int p = 0; p < 6; ++p) {
 		f_hgs.ny[p] *= spatialGridSize_XZ_Y_ratio;
 	}
@@ -467,53 +493,61 @@ void getEntityPVSFromCellPVS(
 		// fully contained we can skip testing individual objects in the
 		// cell. The y scaling factor is applied to transform the world
 		// space cell into a homogeneous xyz grid space. The volume to test
-		// against is now a sphere instead of an AABB (much faster test).
+		// against is now a sphere containing the cell's AABB.
 							
-		vec3 cellCenter{ (r32)cell.x, (r32)cell.y, (r32)cell.z }; // TODO: worldspace needs to be r64?
+		dvec3 cellCenter{ (r64)cell.x, (r64)cell.y, (r64)cell.z };
 		cellCenter *= spatialGridSizeXZ;
-		cellCenter += (spatialGridSizeXZ * 0.5f);
-		Sphere cellBSphere{ cellCenter, spatialGridCellRadius };
+		cellCenter += (spatialGridSizeXZ * 0.5);
+		cellCenter -= camInst.camera.eyePoint; // translate cell into camera space, same as frustum
+		Sphere cellBSphere{ make_vec3(cellCenter), spatialGridCellRadius };
 
-		u8 result = 0;
-		frustum_intersectSpheres_sse(f_hgs, 1, &cellBSphere, 1, &result);
-		assert(result != Outside);
+		u8 cellResult = 0;
+		frustum_intersectSpheres_sse(f_hgs, 1, &cellBSphere, 1, &cellResult);
+		assert(cellResult != Outside);
 
-		if (result == Inside)
+		if (cellResult == Inside)
 		{
 			// add all objects in cell to the PVS
 			do {
 				SpatialValue* sv = sps.valueMap[hnd];
 				assert(sv);
 
-				// TODO: prevent adding duplicates
+				Scene::Components::SpatialInfoComponent& si =
+					*scene.components.spatialInfo[sv->spatialInfoId];
 				
-				sv->entityOrComponentId; // look up entity/component using the handle
-				ePVS.entityOrComponentId[ePVS.length] = sv->entityOrComponentId;
-				ePVS.bSphere[ePVS.length] = {}; // get bounding sphere
-				++ePVS.length;
+				u32 visibleBit = 1UL << cameraIndex;
+
+				if (!(si.data.visibleFrustumBits & visibleBit)) {
+					si.data.visibleFrustumBits |= visibleBit;
+					sts.visibleEntities[sts.numVisibleEntities++] = si.entityId;
+				}
 
 				hnd = sv->next;
 			}
 			while (hnd != null_h32);
-		}	
+		}
 		else { // Intersecting
 			// for intersecting cells, test bspheres of all objects and add to the PVS if not outside
 			// for these tests we use the real world-space frustum, not the y-scaled one used for the cell
 			do {
 				SpatialValue* sv = sps.valueMap[hnd];
 				assert(sv);
+				
+				Scene::Components::SpatialInfoComponent& si =
+					*scene.components.spatialInfo[sv->spatialInfoId];
 
-				// TODO: prevent adding duplicates
-				
-				sv->entityOrComponentId; // look up entity/component using the handle
-				Sphere objSphere = {}; // get bounding sphere
+				SceneNode& node = scene.components.sceneNodes[si.data.sceneNodeId]->data;
+				Sphere cameraSpaceBSphere = si.data.localBSphere;
+				cameraSpaceBSphere.center += make_vec3(node.positionWorld - camInst.camera.eyePoint);
+
 				u8 objResult = 0;
-				frustum_intersectSpheres_sse(f, 1, &objSphere, 1, &objResult);
+				frustum_intersectSpheres_sse(frustum, 1, &cameraSpaceBSphere, 1, &objResult);
 				
-				if (objResult != Outside) {
-					ePVS.entityOrComponentId[ePVS.length] = sv->entityOrComponentId;
-					ePVS.bSphere[ePVS.length] = {};
-					++ePVS.length;
+				u32 visibleBit = ((objResult != Outside) & 1UL) << cameraIndex;
+				
+				if (!(si.data.visibleFrustumBits & visibleBit)) {
+					si.data.visibleFrustumBits |= visibleBit;
+					sts.visibleEntities[sts.numVisibleEntities++] = si.entityId;
 				}
 
 				hnd = sv->next;
@@ -528,18 +562,18 @@ void interpolateSceneNodes(
 	Scene& scene,
     r32 interpolation)
 {
-	for (u32 m = 0;
+	for (u16 m = 0;
 		m < scene.components.movement.length();
 		++m)
 	{
-		Movement& move = scene.components.movement.item(m).component;
+		Movement& move = scene.components.movement.item(m).data;
 		if (move.rotationDirty == 0 && move.prevRotationDirty == 0 &&
 			move.translationDirty == 0 && move.prevTranslationDirty == 0)
 		{
 			continue;
 		}
 
-		SceneNode& node = scene.components.sceneNodes[move.sceneNodeId]->component;
+		SceneNode& node = scene.components.sceneNodes[move.sceneNodeId]->data;
 
 		// nlerp the rotation
 		if (move.rotationDirty == 1) {
@@ -599,7 +633,7 @@ void updateNodeTransforms(
 	// get some temporary storage for the traversal queue
 	ScopedTemporaryMemory temp = scopedTemporaryMemory(frameScoped);
 
-	const size_t bfsQueueSize = scene.components.sceneNodes.length();
+	const u16 bfsQueueSize = scene.components.sceneNodes.length() + 1; // add 1 for root node
 	BFSQueueItem* bfsQueueBuffer = allocArrayOfType(frameScoped, BFSQueueItem, bfsQueueSize);
 	BFSQueue bfsQueue(bfsQueueSize, bfsQueueBuffer);
 
@@ -636,7 +670,7 @@ void updateNodeTransforms(
 			SceneNodeId childId = node.firstChild;
 			for (uint32_t c = 0; c < node.numChildren; ++c) {
 				assert(childId != null_h32 && "expected scene node is null, broken linked list or numChildren out of sync");
-				SceneNode& child = scene.components.sceneNodes[childId]->component;
+				SceneNode& child = scene.components.sceneNodes[childId]->data;
 
 				bfsQueue.push({
 					&child,
@@ -654,43 +688,33 @@ void updateNodeTransforms(
 }
 
 
-/**
-* 1.	After scene nodes are interpolated, update render entry worldspace AABB/quadtree indices.
-* 2.	Filter objects "per camera/frustum" in wordspace using integer AABB/quadtree index
-*		containing frustum against the integer AABB/quadtree index containing object.
-*		Set frustum bit to 1 for each renderable object in each frustum space.
-* 3.	Update filtered entity list viewspace positions and bounding spheres
-* 4.	Frustum cull against view space bounding spheres, set frustum bits back to 0 if culled
-* 5.	Final list of render entries is submitted to renderer. Double-precision world coordinates
-*		are transformed to single-precision in viewspace.
-*/
 void frustumCullScene(
 	Scene& scene)
 {
-	//for (int activeFrustum = 0; activeFrustum < numActiveFrustums; frustumMask <<= 1; ++activeFrustum) {
-		// To do the frustum index, we need an active cameras list, take index into that list for the camera.
-		// Can have > 32 cameras in scene, but only up to 32 active cameras.
-		// Do not simply take the camera index itself, we want the "active camera" index.
-	u32 activeFrustum = 0;
-	u32 frustumMask = 1;
+	assert(scene.culling);
+	SpatialTransientStorage& sts = *scene.culling;
+
+	for (u8 ac = 0;
+		ac < scene.numActiveCameras;
+		++ac)
+	{
+		CameraInstance& camInst = scene.components.cameraInstances.item(ac).data;
+
+		scanConvertFrustum(
+			camInst,
+			sts.cellProj);
 	
-		Plane frustumPlanes[6] = {};
-		// TODO: code to get frustum
+		getCellPVSFromProjections(
+			sts,
+			scene.spatial);
 
-		for (u32 c = 0;
-			c < scene.components.renderCullInfo.length();
-			++c)
-		{
-			RenderCullInfo& rci = scene.components.renderCullInfo.item(c).component;
-			//u8 inside = intersect(frustumPlanes, *reinterpret_cast<Sphere*>(&rci.viewspaceBSphere));
-			//rci.visibleFrustumBits |= frustumMask & (inside != Outside);
-		}
-	//}
-
-	//for (i = 0; i < gridCell->blockCounts[blockIter]; ++i) {
-		// filter list here (if masks[i] is zero it should be skipped)
-		// ...
-	//}
+		cullEntitiesInCellPVS(
+			scene,
+			camInst,
+			ac,
+			sts,
+			scene.spatial);
+	}
 }
 
 
@@ -743,34 +767,34 @@ void renderScene(
 	frustumCullScene(scene);
 
 	// render all visible mesh instances
-	auto& rciStore = entityMgr.getComponentStore<RenderCullInfo>();
+	auto& siStore = entityMgr.getComponentStore<RenderCullInfo>();
 	
 	// TODO: should we really loop through all components AGAIN? Frustum culling could build a list of entityids instead
 	
-	for (auto& rci : rciStore.getComponents().getItems()) {
+	for (auto& si : siStore.getComponents().getItems()) {
 		// TODO: uncomment this once frustum culling is working
-		//if (rci.component.visibleFrustumBits & frustumMask != 0) {
+		//if (si.component.visibleFrustumBits & frustumMask != 0) {
 		
-		ComponentMask mask = entityMgr.getEntityComponentMask(rci.entityId);
+		ComponentMask mask = entityMgr.getEntityComponentMask(si.entityId);
 		
 		// if it's a Model_GL
 		if (mask[ModelInstance::componentType]) {
-			auto modelCmp = *entityMgr.getEntityComponent<ModelInstance>(rci.entityId);
+			auto modelCmp = *entityMgr.getEntityComponent<ModelInstance>(si.entityId);
 			auto modelPtr = loader.getResource(modelCmp.modelId, resource::Cache_Models);
 			auto& model = modelPtr->getResource<render::Model_GL>();
 
-			model.render(rci.entityId, s, activeViewport, engine);
+			model.render(si.entityId, s, activeViewport, engine);
 		}
-			//auto& node = entityMgr.getComponent<SceneNode>(rci.component.sceneNodeId);
+			//auto& node = entityMgr.getComponent<SceneNode>(si.component.sceneNodeId);
 			
 			// call "render" function which should only add render entries to the viewport's queue
 			// the renderer will sort the queue and call the object's "draw" function with a callback function pointer
 			
 			//RenderQueueKey key;
-			//key.value = rci.component.renderQueueKey;
+			//key.value = si.component.renderQueueKey;
 
 			//RenderEntry re{};
-			//re.entityId = rci.entityId;
+			//re.entityId = si.entityId;
 			//re.positionWorld = node.positionWorld;
 			//re.orientationWorld = node.orientationWorld;
 			

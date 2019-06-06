@@ -730,6 +730,8 @@ dquat dquat_fromEulerAngles(dvec3 eulerAngles)
 	q.x = s.x * c.y * c.z - c.x * s.y * s.z;
 	q.y = c.x * s.y * c.z + s.x * c.y * s.z;
 	q.z = c.x * c.y * s.z - s.x * s.y * c.z;
+	
+	return q;
 }
 
 

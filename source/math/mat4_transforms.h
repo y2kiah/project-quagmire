@@ -601,7 +601,7 @@ mat4 lookAtLH(
 
 
 /**
- * Get a transform matrix to align to an vector. This is the inverse/transpose of lookAtRH.
+ * Get a transform matrix to align to a vector. This is the inverse/transpose of lookAtRH.
  * lookAt returns a viewing matrix (transforms coordinates into viewspace) whereas this function
  * returns a transform into world space (from a local model space into world space). The transform
  * will both translate and rotate the model space to face a target from the eye point.
@@ -681,7 +681,7 @@ mat4 alignToLH(
 
 
 /**
- * Get a rotation matrix to align to an vector. This is the inverse/transpose of the upper 3x3
+ * Get a rotation matrix to align to a vector. This is the inverse/transpose of the upper 3x3
  * portion of the lookAtRH matrix. lookAt returns a viewing matrix (transforms coordinates into
  * viewspace) whereas this function returns a rotation into world space (from a local model space
  * into world space). Unlike alignToRH, this matrix is rotation only and will not set any

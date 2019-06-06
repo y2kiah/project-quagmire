@@ -8,11 +8,9 @@
 #define PERLIN3_MULT		0.936f	// 3d multiplier not used for performance benefit
 #define PERLIN4_MULT		0.87f
 
-#define INV_LN_HALFf		-1.44269504088896340736f	// 1 / ln(.5)
-
 
 // Perlin noise precomputed permutations, also used in simplex noise
-const u8 p[512] = {
+const u8 _pp[512] = {
 	151, 160, 137, 91,  90,  15,  131, 13,  201, 95,  96,  53,  194, 233, 7,   225, 140, 36,  103, 30,
 	69,  142, 8,   99,  37,  240, 21,  10,  23,  190, 6,   148, 247, 120, 234, 75,  0,   26,  197, 62,
 	94,  252, 219, 203, 117, 35,  11,  32,  57,  177, 33,  88,  237, 149, 56,  87,  174, 20,  125, 136,
@@ -74,83 +72,6 @@ void initGrad4()
 }
 */
 // end TEMP
-
-
-// Helper functions
-
-static inline r32 clamp(r32 a, r32 b, r32 x)
-{
-	return (x < a ? a : (x > b ? b : x));
-}
-
-static inline r32 bias(r32 a, r32 b)
-{
-	return powf(a, logf(b) * INV_LN_HALFf);
-}
-
-static inline r32 gamma(r32 a, r32 g)
-{
-	return powf(a, 1.0f / g);
-}
-
-static inline r32 expose(r32 l, r32 k)
-{
-	return (1.0f - expf(-l * k));
-}
-
-
-// Interpolation functions
-
-static inline r32 lerp(r32 a, r32 b, r32 t)
-{
-	return a + t * (b - a);
-}
-
-// Cubic S-curve = 3t^2 - 2t^3 : 2nd derivative is discontinuous at t=0 and t=1 causing visual artifacts at boundaries
-static inline r32 sCurve(r32 t)
-{
-	return t * t * (3.0f - 2.0f * t);
-}
-
-// Cubic curve 1st derivative = 6t - 6t^2
-static inline r32 sCurveDeriv(r32 t)
-{
-	return 6.0f * t * (1.0f - t);
-}
-
-// Quintic curve = 6t^5 - 15t^4 + 10t^3
-static inline r32 qCurve(r32 t)
-{
-	return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
-}
-
-// Quintic curve 1st derivative = 30t^4 - 60t^3 + 30t^2
-static inline r32 qCurveDeriv(r32 t)
-{
-	return t * t * (t * (t * 30.0f - 60.0f) + 30.0f);
-}
-
-// Cosine curve
-static inline r32 cosCurve(r32 t)
-{
-	return (1.0f - cosf(t * PIf)) * 0.5f;
-}
-
-static r32 step(r32 a, r32 x)
-{
-	return (r32)(x >= a);
-}
-
-static r32 boxStep(r32 a, r32 b, r32 x)
-{
-	assert(b != a);
-	return clamp(0.0f, 1.0f, (x - a) / (b - a));
-}
-
-static r32 pulse(r32 a, r32 b, r32 x)
-{
-	return (r32)((x >= a) - (x >= b));
-}
 
 // Noise Functions
 
@@ -563,7 +484,7 @@ r32 perlinNoise1(r32 x)
 	x -= ix;
 	ix &= 255;
 
-	return lerp(grad(p[ix], x), grad(p[ix + 1], x - 1), qCurve(x)) * PERLIN1_MULT;
+	return lerp(grad(_pp[ix], x), grad(_pp[ix + 1], x - 1), qCurve(x)) * PERLIN1_MULT;
 }
 
 r32 perlinNoise2(
@@ -583,13 +504,13 @@ r32 perlinNoise2(
 	r32 s = qCurve(x);
 	r32 t = qCurve(y);
 
-	i32 a = p[ix]     + iy;
-	i32 b = p[ix + 1] + iy;
+	i32 a = _pp[ix]     + iy;
+	i32 b = _pp[ix + 1] + iy;
 
-	return lerp(lerp(grad(p[a],     x,  y),
-					 grad(p[b],     x1, y),  s),
-				lerp(grad(p[a + 1], x,  y1),
-					 grad(p[b + 1], x1, y1), s), t) * PERLIN2_MULT;
+	return lerp(lerp(grad(_pp[a],     x,  y),
+					 grad(_pp[b],     x1, y),  s),
+				lerp(grad(_pp[a + 1], x,  y1),
+					 grad(_pp[b + 1], x1, y1), s), t) * PERLIN2_MULT;
 }
 
 r32 perlinNoise3(
@@ -618,22 +539,22 @@ r32 perlinNoise3(
 	r32 u = qCurve(z);
 
 	// Hash coordinates of the 8 cube corners
-	i32 a  = p[ix]     + iy;
-	i32 aa = p[a]      + iz;
-	i32 ab = p[a + 1]  + iz;
-	i32 b  = p[ix + 1] + iy;
-	i32 ba = p[b]      + iz;
-	i32 bb = p[b + 1]  + iz;
+	i32 a  = _pp[ix]     + iy;
+	i32 aa = _pp[a]      + iz;
+	i32 ab = _pp[a + 1]  + iz;
+	i32 b  = _pp[ix + 1] + iy;
+	i32 ba = _pp[b]      + iz;
+	i32 bb = _pp[b + 1]  + iz;
 
 	// Add blended results from 8 cube corners
-	return lerp(lerp(lerp(grad(p[aa],     x,  y,  z),
-						  grad(p[ba],     x1, y,  z),  s),
-					 lerp(grad(p[ab],     x,  y1, z),
-						  grad(p[bb],     x1, y1, z),  s), t),
-				lerp(lerp(grad(p[aa + 1], x,  y,  z1),
-						  grad(p[ba + 1], x1, y,  z1), s),
-					 lerp(grad(p[ab + 1], x,  y1, z1),
-						  grad(p[bb + 1], x1, y1, z1), s), t), u); // * PERLIN3_MULT;
+	return lerp(lerp(lerp(grad(_pp[aa],     x,  y,  z),
+						  grad(_pp[ba],     x1, y,  z),  s),
+					 lerp(grad(_pp[ab],     x,  y1, z),
+						  grad(_pp[bb],     x1, y1, z),  s), t),
+				lerp(lerp(grad(_pp[aa + 1], x,  y,  z1),
+						  grad(_pp[ba + 1], x1, y,  z1), s),
+					 lerp(grad(_pp[ab + 1], x,  y1, z1),
+						  grad(_pp[bb + 1], x1, y1, z1), s), t), u); // * PERLIN3_MULT;
 }
 
 r32 perlinNoise4(
@@ -664,38 +585,38 @@ r32 perlinNoise4(
 	r32 v = qCurve(w);
 
 	// Hash coordinates of the 16 corners
-	i32 a   = p[ix]     + iy;
-	i32 aa  = p[a]      + iz;
-	i32 ab  = p[a + 1]  + iz;
-	i32 b   = p[ix + 1] + iy;
-	i32 ba  = p[b]      + iz;
-	i32 bb  = p[b + 1]  + iz;
-	i32 aaa = p[aa]     + iw;
-	i32 aba = p[ab]     + iw;
-	i32 aab = p[aa + 1] + iw;
-	i32 abb = p[ab + 1] + iw;
-	i32 baa = p[ba]     + iw;
-	i32 bba = p[bb]     + iw;
-	i32 bab = p[ba + 1] + iw;
-	i32 bbb = p[bb + 1] + iw;
+	i32 a   = _pp[ix]     + iy;
+	i32 aa  = _pp[a]      + iz;
+	i32 ab  = _pp[a + 1]  + iz;
+	i32 b   = _pp[ix + 1] + iy;
+	i32 ba  = _pp[b]      + iz;
+	i32 bb  = _pp[b + 1]  + iz;
+	i32 aaa = _pp[aa]     + iw;
+	i32 aba = _pp[ab]     + iw;
+	i32 aab = _pp[aa + 1] + iw;
+	i32 abb = _pp[ab + 1] + iw;
+	i32 baa = _pp[ba]     + iw;
+	i32 bba = _pp[bb]     + iw;
+	i32 bab = _pp[ba + 1] + iw;
+	i32 bbb = _pp[bb + 1] + iw;
 
 	// Add blended results from 16 corners
-	return lerp(lerp(lerp(lerp(grad(p[aaa],     x,  y,  z,  w),
-							   grad(p[baa],     x1, y,  z,  w),  s),
-						  lerp(grad(p[aba],     x,  y1, z,  w),
-							   grad(p[bba],     x1, y1, z,  w),  s), t),
-					 lerp(lerp(grad(p[aab],     x,  y,  z1, w),
-							   grad(p[bab],     x1, y,  z1, w),  s),
-						  lerp(grad(p[abb],     x,  y1, z1, w),
-							   grad(p[bbb],     x1, y1, z1, w),  s), t), u),
-				lerp(lerp(lerp(grad(p[aaa + 1], x,  y,  z,  w1),
-							   grad(p[baa + 1], x1, y,  z,  w1), s),
-						  lerp(grad(p[aba + 1], x,  y1, z,  w1),
-							   grad(p[bba + 1], x1, y1, z,  w1), s), t),
-					 lerp(lerp(grad(p[aab + 1], x,  y,  z1, w1),
-							   grad(p[bab + 1], x1, y,  z1, w1), s),
-						  lerp(grad(p[abb + 1], x,  y1, z1, w1),
-							   grad(p[bbb + 1], x1, y1, z1, w1), s), t), u), v) * PERLIN4_MULT;
+	return lerp(lerp(lerp(lerp(grad(_pp[aaa],     x,  y,  z,  w),
+							   grad(_pp[baa],     x1, y,  z,  w),  s),
+						  lerp(grad(_pp[aba],     x,  y1, z,  w),
+							   grad(_pp[bba],     x1, y1, z,  w),  s), t),
+					 lerp(lerp(grad(_pp[aab],     x,  y,  z1, w),
+							   grad(_pp[bab],     x1, y,  z1, w),  s),
+						  lerp(grad(_pp[abb],     x,  y1, z1, w),
+							   grad(_pp[bbb],     x1, y1, z1, w),  s), t), u),
+				lerp(lerp(lerp(grad(_pp[aaa + 1], x,  y,  z,  w1),
+							   grad(_pp[baa + 1], x1, y,  z,  w1), s),
+						  lerp(grad(_pp[aba + 1], x,  y1, z,  w1),
+							   grad(_pp[bba + 1], x1, y1, z,  w1), s), t),
+					 lerp(lerp(grad(_pp[aab + 1], x,  y,  z1, w1),
+							   grad(_pp[bab + 1], x1, y,  z1, w1), s),
+						  lerp(grad(_pp[abb + 1], x,  y1, z1, w1),
+							   grad(_pp[bbb + 1], x1, y1, z1, w1), s), t), u), v) * PERLIN4_MULT;
 }
 
 r32 simplexNoise1(r32 x)
@@ -714,7 +635,7 @@ r32 simplexNoise1(r32 x)
 
 	// the maximum value of this noise is 8*(3/4)^4 = 2.53125
 	// so a factor of 0.395 scales it to fit exactly within [-1,1]
-	return 0.395f * ((t0 * t0 * grad(p[ix], x)) + (t1 * t1 * grad(p[ix + 1], x1)));
+	return 0.395f * ((t0 * t0 * grad(_pp[ix], x)) + (t1 * t1 * grad(_pp[ix + 1], x1)));
 }
 
 r32 simplexNoise2(
@@ -751,19 +672,19 @@ r32 simplexNoise2(
 	t = 0.5f - x*x - y*y;
 	if (t >= 0.0f) {
 		t *= t;
-		n = t * t * grad(p[ix + p[iy]], x, y);
+		n = t * t * grad(_pp[ix + _pp[iy]], x, y);
 	}
 
 	t = 0.5f - x1*x1 - y1*y1;
 	if (t >= 0.0f) {
 		t *= t;
-		n += t * t * grad(p[ix + ix1 + p[iy + iy1]], x1, y1);
+		n += t * t * grad(_pp[ix + ix1 + _pp[iy + iy1]], x1, y1);
 	}
 
 	t = 0.5f - x2*x2 - y2*y2;
 	if (t >= 0.0f) {
 		t *= t;
-		n += t * t * grad(p[ix + 1 + p[iy + 1]], x2, y2);
+		n += t * t * grad(_pp[ix + 1 + _pp[iy + 1]], x2, y2);
 	}
 
 	return 40.0f * n;
@@ -829,25 +750,25 @@ r32 simplexNoise3(
 	t = 0.6f - x*x - y*y - z*z;
 	if (t >= 0.0f) {
 		t *= t;
-		n = t * t * grad(p[ix + p[iy + p[iz]]], x, y, z);
+		n = t * t * grad(_pp[ix + _pp[iy + _pp[iz]]], x, y, z);
 	}
 
 	t = 0.6f - x1*x1 - y1*y1 - z1*z1;
 	if (t >= 0.0f) {
 		t *= t;
-		n += t * t * grad(p[ix + ix1 + p[iy + iy1 + p[iz + iz1]]], x1, y1, z1);
+		n += t * t * grad(_pp[ix + ix1 + _pp[iy + iy1 + _pp[iz + iz1]]], x1, y1, z1);
 	}
 
 	t = 0.6f - x2*x2 - y2*y2 - z2*z2;
 	if (t >= 0.0f) {
 		t *= t;
-		n += t * t * grad(p[ix + ix2 + p[iy + iy2 + p[iz + iz2]]], x2, y2, z2);
+		n += t * t * grad(_pp[ix + ix2 + _pp[iy + iy2 + _pp[iz + iz2]]], x2, y2, z2);
 	}
 
 	t = 0.6f - x3*x3 - y3*y3 - z3*z3;
 	if (t >= 0.0f) {
 		t *= t;
-		n += t * t * grad(p[ix + 1 + p[iy + 1 + p[iz + 1]]], x3, y3, z3);
+		n += t * t * grad(_pp[ix + 1 + _pp[iy + 1 + _pp[iz + 1]]], x3, y3, z3);
 	}
 
 	return 32.0f * n;
@@ -931,31 +852,31 @@ r32 simplexNoise4(
 	t = 0.6f - x*x - y*y - z*z - w*w;
 	if (t >= 0.0f) {
 		t *= t;
-		n = t * t * grad(p[ix + p[iy + p[iz + p[iw]]]], x, y, z, w);
+		n = t * t * grad(_pp[ix + _pp[iy + _pp[iz + _pp[iw]]]], x, y, z, w);
 	}
 
 	t = 0.6f - x1*x1 - y1*y1 - z1*z1 - w1*w1;
 	if (t >= 0.0f) {
 		t *= t;
-		n += t * t * grad(p[ix + ix1 + p[iy + iy1 + p[iz + iz1 + p[iw + iw1]]]], x1, y1, z1, w1);
+		n += t * t * grad(_pp[ix + ix1 + _pp[iy + iy1 + _pp[iz + iz1 + _pp[iw + iw1]]]], x1, y1, z1, w1);
 	}
 
 	t = 0.6f - x2*x2 - y2*y2 - z2*z2 - w2*w2;
 	if (t >= 0.0f) {
 		t *= t;
-		n += t * t * grad(p[ix + ix2 + p[iy + iy2 + p[iz + iz2 + p[iw + iw2]]]], x2, y2, z2, w2);
+		n += t * t * grad(_pp[ix + ix2 + _pp[iy + iy2 + _pp[iz + iz2 + _pp[iw + iw2]]]], x2, y2, z2, w2);
 	}
 
 	t = 0.6f - x3*x3 - y3*y3 - z3*z3 - w3*w3;
 	if (t >= 0.0f) {
 		t *= t;
-		n += t * t * grad(p[ix + ix3 + p[iy + iy3 + p[iz + iz3 + p[iw + iw3]]]], x3, y3, z3, w3);
+		n += t * t * grad(_pp[ix + ix3 + _pp[iy + iy3 + _pp[iz + iz3 + _pp[iw + iw3]]]], x3, y3, z3, w3);
 	}
 
 	t = 0.6f - x4*x4 - y4*y4 - z4*z4 - w4*w4;
 	if (t >= 0.0f) {
 		t *= t;
-		n += t * t * grad(p[ix + 1 + p[iy + 1 + p[iz + 1 + p[iw + 1]]]], x4, y4, z4, w4);
+		n += t * t * grad(_pp[ix + 1 + _pp[iy + 1 + _pp[iz + 1 + _pp[iw + 1]]]], x4, y4, z4, w4);
 	}
 
 	return 27.0f * n;
@@ -1244,21 +1165,21 @@ Noise3Deriv perlinNoise3Deriv(
 	r32 dz = qCurveDeriv(z);
 
 	// Hash coordinates of the 8 cube corners
-	i32 p_a  = p[ix]    + iy;
-	i32 p_aa = p[p_a]   + iz;
-	i32 p_ab = p[p_a+1] + iz;
-	i32 p_b  = p[ix+1]  + iy;
-	i32 p_ba = p[p_b]   + iz;
-	i32 p_bb = p[p_b+1] + iz;
+	i32 p_a  = _pp[ix]    + iy;
+	i32 p_aa = _pp[p_a]   + iz;
+	i32 p_ab = _pp[p_a+1] + iz;
+	i32 p_b  = _pp[ix+1]  + iy;
+	i32 p_ba = _pp[p_b]   + iz;
+	i32 p_bb = _pp[p_b+1] + iz;
 
-	i32 a = p[p_aa];
-	i32 b = p[p_ba];
-	i32 c = p[p_ab];
-	i32 d = p[p_bb];
-	i32 e = p[p_aa + 1];
-	i32 f = p[p_ba + 1];
-	i32 g = p[p_ab + 1];
-	i32 h = p[p_bb + 1];
+	i32 a = _pp[p_aa];
+	i32 b = _pp[p_ba];
+	i32 c = _pp[p_ab];
+	i32 d = _pp[p_bb];
+	i32 e = _pp[p_aa + 1];
+	i32 f = _pp[p_ba + 1];
+	i32 g = _pp[p_ab + 1];
+	i32 h = _pp[p_bb + 1];
 
 	r32 k0 = (r32)(a);
 	r32 k1 = (r32)(b - a);

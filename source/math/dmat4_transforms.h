@@ -772,4 +772,16 @@ dmat4 affineInverse(const dmat4& m)
 }
 
 
+void getForwardUpRight(
+	const dmat4& view,
+	dvec3& f,
+	dvec3& u,
+	dvec3& r)
+{ 
+	r = {  view[0][0],  view[1][0],  view[2][0] };
+	u = {  view[0][1],  view[1][1],  view[2][1] };
+	f = { -view[0][2], -view[1][2], -view[2][2] };
+}
+
+
 #endif

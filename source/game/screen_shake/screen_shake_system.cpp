@@ -7,7 +7,7 @@ void game::ScreenShakeSystem::updateFrameTick(
 	const UpdateInfo& ui)
 {
 	// for each ScreenShakeNode (receiver)
-	for (u32 n = 0;
+	for (u16 n = 0;
 		n < game.components.shakeNodes.length();
 		++n)
 	{
@@ -23,7 +23,7 @@ void game::ScreenShakeSystem::updateFrameTick(
 		r32 shakeFreqHz = 0;
 
 		// for each ScreenShakeProducer component, total turbulence, angle, freq for the receiver
-		for (u32 p = 0;
+		for (u16 p = 0;
 			p < game.components.shakeProducers.length();
 			++p)
 		{
@@ -62,7 +62,7 @@ void game::ScreenShakeSystem::updateFrameTick(
 	}
 
 	// for each ScreenShakeProducer component
-	u32 p = 0;
+	u16 p = 0;
 	while (p < game.components.shakeProducers.length())
 	{
 		Game::Components::ScreenShakeProducerComponent& cmp =
@@ -98,7 +98,7 @@ void game::ScreenShakeSystem::renderFrameTick(
 	const i64 realTime,
 	const i64 countsPassed)
 {
-	for (u32 n = 0;
+	for (u16 n = 0;
 		n < game.components.shakeNodes.length();
 		++n)
 	{

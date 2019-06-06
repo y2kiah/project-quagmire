@@ -50,11 +50,9 @@ void collectDescendants(
 	// get some temporary storage for the traversal queue
 	ScopedTemporaryMemory temp = scopedTemporaryMemory(frameScoped);
 
-	const size_t bfsQueueSize = scene.components.sceneNodes.length();
+	const u32 bfsQueueSize = scene.components.sceneNodes.length() + 1; // add 1 for root node
 	SceneNodeId* bfsQueueBuffer = allocArrayOfType(frameScoped, SceneNodeId, bfsQueueSize);
 	SceneNodeIdQueue bfsQueue(bfsQueueSize, bfsQueueBuffer);
-	
-	SceneNode& node = scene.components.sceneNodes[sceneNodeId]->data;
 	
 	bfsQueue.push(sceneNodeId);
 
@@ -162,10 +160,10 @@ NewEntityResult scene_createNewEntity(
 
 bool scene_removeNode(
 	Scene& scene,
+	MemoryArena& frameScoped,
 	SceneNodeId sceneNodeId,
 	bool cascade,
-	EntityIdQueue* outRemovedEntities,
-	MemoryArena& frameScoped)
+	EntityIdQueue* outRemovedEntities)
 {
 	if (!scene.components.sceneNodes.has(sceneNodeId)) {
 		return false;
@@ -197,7 +195,7 @@ bool scene_removeNode(
 		if (cascade) {
 			ScopedTemporaryMemory temp = scopedTemporaryMemory(frameScoped);
 			
-			const size_t bufferSize = scene.components.sceneNodes.length();
+			const u32 bufferSize = scene.components.sceneNodes.length() + 1; // add 1 for root node
 			SceneNodeId* handleQueueBuffer = allocArrayOfType(frameScoped, SceneNodeId, bufferSize);
 			SceneNodeIdQueue handleQueue(bufferSize, handleQueueBuffer);
 			
@@ -212,14 +210,23 @@ bool scene_removeNode(
 					if (entityIdOfRemoved != thisCmp.entityId) {
 						rmvEnt.push(entityIdOfRemoved);
 					}
-					scene_removeNode(scene, descSceneNodeId, true, outRemovedEntities);
+					scene_removeNode(
+						scene,
+						frameScoped,
+						descSceneNodeId,
+						true,
+						outRemovedEntities);
 				}
 			}
 			else {
 				while (!handleQueue.empty())
 				{
 					SceneNodeId descSceneNodeId = *handleQueue.pop_fifo();
-					scene_removeNode(scene, descSceneNodeId, true, nullptr);
+					scene_removeNode(
+						scene,
+						frameScoped,
+						descSceneNodeId,
+						true);
 				}
 			}
 		}
@@ -246,6 +253,7 @@ bool scene_removeNode(
 
 bool scene_removeEntity(
 	Scene& scene,
+	MemoryArena& frameScoped,
 	EntityId entityId,
 	bool cascade,
 	EntityIdQueue* outRemovedEntities)
@@ -264,7 +272,12 @@ bool scene_removeEntity(
 		sceneNodeId != null_h32;)
 	{
 		removed = removed &&
-			scene_removeNode(scene, sceneNodeId, cascade, outRemovedEntities);
+			scene_removeNode(
+				scene,
+				frameScoped,
+				sceneNodeId,
+				cascade,
+				outRemovedEntities);
 	}
 
 	return removed;
@@ -426,7 +439,7 @@ void scene_setActiveCamera(
 	Scene& scene,
 	u32 cameraId)
 {
-	activeRenderCamera = cameraId;
+	//activeRenderCamera = cameraId;
 }
 
 

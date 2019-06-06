@@ -1,7 +1,7 @@
 #ifndef _NOISE_H
 #define _NOISE_H
 
-#include "../utility/types.h"
+#include "utility/types.h"
 
 
 enum CoherentNoiseType : u8 {

@@ -34,6 +34,8 @@ struct dvec3
 		z = rhs.z;
 		return *this;
 	}
+
+	dvec3& normalize();
 };
 
 static_assert(sizeof(dvec3) == 24 && sizeof(_dvec3) == 24, "");
@@ -322,6 +324,14 @@ dvec3 normalize(const dvec3& v)
 {
 	assert(dot(v, v) != 0.0);
 	return v * (1.0 / sqrt(dot(v, v)));
+}
+
+dvec3& dvec3::normalize()
+{
+	dvec3& v = *this;
+	assert(dot(v, v) != 0.0);
+	v *= (1.0 / sqrt(dot(v, v)));
+	return v;
 }
 
 dvec3 cross(const dvec3& v1, const dvec3& v2)

@@ -53,8 +53,8 @@ void setWindowIcon(
 // TODO: find a way to do this without a .rc file or just use SDL same as on linux
 //	HICON icon = LoadIcon(handle, MAKEINTRESOURCE(IDI_ICON1));
 //	if (icon != nullptr) {
-//		SetClassLongPtr(hWnd, GCLP_HICON, reinterpret_cast<LONG_PTR>(icon));
-//		SetClassLongPtr(hWnd, GCLP_HICONSM, reinterpret_cast<LONG_PTR>(icon));
+//		SetClassLongPtr(hWnd, GCLP_HICON, (LONG_PTR)icon);
+//		SetClassLongPtr(hWnd, GCLP_HICONSM, (LONG_PTR)icon);
 //	}
 }
 

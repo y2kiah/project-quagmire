@@ -125,8 +125,6 @@ r32 getFovDegreesHorizontal(
 }
 
 
-
-
 /*void Camera::getNearClipCoordinates(dvec3 *topLeft, dvec3 *topRight, dvec3 *bottomLeft, dvec3 *bottomRight)
 {
 	calcMatrices();

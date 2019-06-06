@@ -8,6 +8,9 @@
 
 typedef h32 SceneNodeId;
 
+DenseQueueTyped(SceneNodeId, SceneNodeIdQueue);
+
+
 /**
  * SceneNode tracks the transform relative to a parent node and contains ids forming an
  * intrusive hierarchical tree. The SceneGraph is traversed starting at the root to get the
@@ -39,6 +42,7 @@ struct SceneNode {
 	SceneNodeId	parent;				// parent node index
 };
 
+
 /**
  * ModelInstance is a component that goes along with the SceneNode to make an
  * entity represent a unique instance of a model object in the scene.
@@ -47,6 +51,7 @@ struct ModelInstance {
 	SceneNodeId	sceneNodeId;		// scene node containing the root of the model instance
 	ComponentId	modelId;			// resource handle to the model resource
 };
+
 
 /**
  * The CameraInstance is a component that pairs with a SceneNode to make an entity represent
@@ -92,6 +97,7 @@ struct LightInstance {
 	u8			isShadowCaster;			// 1 if light casts shadow
 };
 
+
 /**
  * The Movement component is present for all SceneNodes that aren't static. This structure
  * contains prev/next values so the render loop can interpolate between them to get the
@@ -119,18 +125,36 @@ struct Movement {
 	dquat		nextRotation;			// next local rotation
 };
 
+
+struct SpatialCell {
+	u8 x, y, z;
+
+	bool operator==(const SpatialCell& c) const { return x == c.x && y == c.y && z == c.z; }
+	bool operator>=(const SpatialCell& c) const { return x >= c.x && y >= c.y && z >= c.z; }
+	bool operator<=(const SpatialCell& c) const { return x <= c.x && y <= c.y && z <= c.z; }
+};
+
+
 /**
- * All entities that can be rendered have a RenderCullInfo component. This stores the data
- * needed to keep track of its indexing in the space partitioning structure, and the data
- * needed to perform frustum culling.
+ * SpatialKey is used for lookups into the spatial hash map. The key holds two cells, a start and
+ * end, which represents a 3D block of cells that fall within the range (inclusive).
  */
-// TODO: this appears to be the right component for storage in the spatial grid 
-struct RenderCullInfo {
+struct SpatialKey {
+	SpatialCell cs, ce;
+};
+
+
+/**
+ * All entities that can be rendered have a SpatialInfo component. This stores the data
+ * needed to keep track of its key in the spatial grid, and to do frustum culling.
+ */
+struct SpatialInfo {
 	SceneNodeId	sceneNodeId;			// scene node related to this render culling information
 	u32			visibleFrustumBits;		// bits representing visibility in frustums
-	u32			minWorldAABB[3];		// AABB integer lower coords in worldspace
-	u32			maxWorldAABB[3];		// AABB integer upper coords in worldspace
-	r32			viewspaceBSphere[4];	// bounding sphere x,y,z,r in viewspace
+	Sphere		localBSphere;			// bounding sphere x,y,z,r in local coordinates (relative to parent SceneNode)
+	SpatialKey	gridCells;				// grid cell(s) that this object's bounding sphere occupies
+	u8			grid;					// reserved for later use with multiple grids
+	u8			outsideGrid;			// 1 if object's bsphere goes outside the grid boundaries
 };
 
 

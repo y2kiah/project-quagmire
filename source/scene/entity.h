@@ -1,8 +1,8 @@
 #ifndef _ENTITY_H
 #define _ENTITY_H
 
-#include "../utility/types.h"
-#include "../utility/dense_handle_map_16.h"
+#include "utility/types.h"
+#include "utility/dense_queue.h"
 
 #define MAX_ENTITY_COMPONENTS	64
 
@@ -12,7 +12,6 @@ typedef h32 ComponentId;
 typedef size_t ComponentType;
 
 DenseQueueTyped(EntityId, EntityIdQueue);
-DenseQueueTyped(SceneNodeId, SceneNodeIdQueue);
 
 
 /**
@@ -48,6 +47,34 @@ struct Entity {
 
 
 /**
+ * Uses a component mask to quickly see if all components in the mask exist in this entity
+ * @return true if all component types exist at least once, false if not
+ */
+inline bool entity_hasAllComponents(ComponentSet& set, u64 mask)
+{
+	return ((set.mask & mask) == mask);
+}
+
+/**
+ * Uses a component mask to quickly see if any components in the mask exist in this entity
+ * @return true if any component type exists at least once, false if not
+ */
+inline bool entity_hasAnyComponents(ComponentSet& set, u64 mask)
+{
+	return ((set.mask & mask) != 0);
+}
+
+/**
+ * Quickly check if any components of a single type exist in this entity
+ * @return true if any component type exists at least once, false if not
+ */
+inline bool entity_hasComponentType(ComponentSet& set, ComponentType ct)
+{
+	return ((set.mask >> ct) & 1UL);
+}
+
+
+/**
  * Returns true if the component exists in the entity.
  */
 bool entity_hasComponent(
@@ -77,7 +104,7 @@ ComponentId entity_getFirstComponent(
 			++c)
 		{
 			ComponentId cmpId = set.components[c];
-			if (ct == 1UL << cmpId.typeId) {
+			if (ct == 1ULL << cmpId.typeId) {
 				return cmpId;
 			}
 		}
@@ -99,7 +126,7 @@ bool entity_addComponent(
 			&& "max entity components reached, consider raising the limit and expanding the bit mask, or combine components");
 
 	if (!entity_hasComponent(set, id)) {
-		ComponentType ct = 1UL << id.typeId;
+		ComponentType ct = 1ULL << id.typeId;
 		set.mask |= ct;
 
 		set.components[set.componentsSize] = id;
@@ -119,7 +146,7 @@ bool entity_removeComponent(
 	ComponentSet& set,
 	ComponentId id)
 {
-	ComponentType ct = (1UL << id.typeId);
+	ComponentType ct = 1ULL << id.typeId;
 	bool hasAnotherMatchingComponentType = false;
 	bool removed = false;
 
@@ -143,7 +170,7 @@ bool entity_removeComponent(
 
 	// if no more components of this type, clear it in the mask
 	if (removed && !hasAnotherMatchingComponentType) {
-		set.mask &= ~(1UL << ct);
+		set.mask &= ~(1ULL << ct);
 	}
 
 	return removed;
@@ -162,9 +189,9 @@ bool entity_removeComponentsByType(
 		u32 c = 0;
 		while (c < set.componentsSize)
 		{
-			ComponentType ct = 1UL << set.components[c].typeId;
+			ComponentType ct = 1ULL << set.components[c].typeId;
 			// remove by swap and pop
-			if (ct & mask != 0) {
+			if ((ct & mask) != 0ULL) {
 				if (c != set.componentsSize - 1) {
 					set.components[c] = set.components[set.componentsSize - 1];
 				}
@@ -181,34 +208,6 @@ bool entity_removeComponentsByType(
 		return true;
 	}
 	return false;
-}
-
-
-/**
- * Uses a component mask to quickly see if all components in the mask exist in this entity
- * @return true if all component types exist at least once, false if not
- */
-inline bool entity_hasAllComponents(ComponentSet& set, u64 mask)
-{
-	return ((set.mask & mask) == mask);
-}
-
-/**
- * Uses a component mask to quickly see if any components in the mask exist in this entity
- * @return true if any component type exists at least once, false if not
- */
-inline bool entity_hasAnyComponents(ComponentSet& set, u64 mask)
-{
-	return ((set.mask & mask) != 0);
-}
-
-/**
- * Quickly check if any components of a single type exist in this entity
- * @return true if any component type exists at least once, false if not
- */
-inline bool entity_hasComponentType(ComponentSet& set, ComponentType ct)
-{
-	return ((set.mask >> ct) & 1UL);
 }
 
 

@@ -1,5 +1,5 @@
 #include "platform_input.h"
-#include "../utility/logger.h"
+#include "utility/logger.h"
 
 namespace input {
 

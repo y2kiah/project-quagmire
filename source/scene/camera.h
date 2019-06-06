@@ -93,6 +93,15 @@ r32 getFovDegreesHorizontal(
 	r32 fovDegreesVertical,
 	r32 aspectRatio);
 
+/**
+ * get forward up right vectors from the rows of a column-major, right handed view matrix
+ */
+void getForwardUpRight(
+	const dmat4& view,
+	dvec3& f,
+	dvec3& u,
+	dvec3& r);
+
 // struct CameraPersp : public Camera
 // {
 // 	vec3 getEulerAngles() const;

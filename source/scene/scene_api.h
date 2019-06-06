@@ -2,6 +2,7 @@
 #define _SCENE_API_H
 
 #include "scene.h"
+#include "../utility/memory.h"
 
 
 /**
@@ -53,6 +54,7 @@ NewEntityResult scene_createNewEntity(
  */
 bool scene_removeNode(
 	Scene& scene,
+	MemoryArena& frameScoped,
 	SceneNodeId sceneNodeId,
 	bool cascade,
 	EntityIdQueue* outRemovedEntities = nullptr);
@@ -73,6 +75,7 @@ bool scene_removeNode(
  */
 bool scene_removeEntity(
 	Scene& scene,
+	MemoryArena& frameScoped,
 	EntityId entityId,
 	bool cascade,
 	EntityIdQueue* outRemovedEntities = nullptr);

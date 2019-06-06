@@ -1,8 +1,8 @@
 #ifndef _GEOMETRY_H
 #define _GEOMETRY_H
 
-#include "../utility/types.h"
-#include "../math/conversions.h"
+#include "utility/types.h"
+#include "math/conversions.h"
 
 
 // Sphere
@@ -12,8 +12,13 @@
  * frustum_intersectSpheres_sse function.
  */
 struct Sphere {
-	vec3 center;
-	r32  radius;
+	union {
+		struct {
+			vec3	center;
+			r32		radius;
+		};
+		r32			E[4];
+	};
 };
 
 
@@ -99,6 +104,7 @@ enum FrustumPlane : u8
 	Near = 0, Far, Left, Right, Top, Bottom
 };
 
+
 struct alignas(16) Frustum
 {
 	// planes stored as SoA instead of AoS
@@ -107,6 +113,15 @@ struct alignas(16) Frustum
 	r32 nz[6];
 	r32 d[6];
 };
+
+
+struct FrustumPoints {
+	union {
+		struct { dvec3 eye, ftl, ftr, fbl, fbr, ntl, ntr, nbl, nbr; };
+		dvec3 E[9];
+	};
+};
+
 
 Plane frustum_getPlane(
 	const Frustum& f,
@@ -129,6 +144,46 @@ void frustum_getPlanes(
 	}
 }
 
+void frustum_getPoints(
+	const dmat4& view,
+	const dvec3& eyePoint, // camera position
+	r64 nearClip,
+	r64 farClip,
+	r32 fovDegreesVertical,
+	r32 aspectRatio,
+	FrustumPoints& outPoints)
+{
+	dvec3 f, u, r;
+	getForwardUpRight(view, f, u, r);
+	f.normalize();
+	u.normalize();
+	r.normalize();
+	
+	// get the half-width and half-height of the near and far planes
+	r64 hNear = tan(fovDegreesVertical * DEG_TO_RAD * 0.5) * nearClip;
+	r64 wNear = hNear * aspectRatio;
+	r64 hFar  = tan(fovDegreesVertical * DEG_TO_RAD * 0.5) * farClip;
+	r64 wFar  = hFar * aspectRatio;
+	// get center point on planes along forward vector
+	dvec3 cNear = eyePoint + (f * nearClip);
+	dvec3 cFar  = eyePoint + (f * farClip);
+	// get up and right vectors scaled by near and far planes
+	dvec3 uNear = u * hNear;
+	dvec3 rNear = r * hNear;
+	dvec3 uFar  = u * hFar;
+	dvec3 rFar  = r * hFar;
+
+	outPoints.eye = eyePoint;
+	outPoints.ftl = cFar  + uFar  - rFar;	// Far Top Left
+	outPoints.ftr = cFar  + uFar  + rFar;	// Far Top Right
+	outPoints.fbl = cFar  - uFar  - rFar;	// Far Bottom Left
+	outPoints.fbr = cFar  - uFar  + rFar;	// Far Bottom Right
+	outPoints.ntl = cNear + uNear - rNear;	// Near Top Left
+	outPoints.ntr = cNear + uNear + rNear;	// Near Top Right
+	outPoints.nbl = cNear - uNear - rNear;	// Near Bottom Left
+	outPoints.nbr = cNear + uNear + rNear;	// Near Bottom Right
+}
+
 /**
  * Matrix is column-major order for GL, row-major for D3D.
  * For input of projection matrix, planes are extracted in view/camera space.
@@ -136,11 +191,11 @@ void frustum_getPlanes(
  * For input of model*view*projection matrix, object space.
  * see "Fast Extraction of Viewing Frustum Planes from the World-View-Projection Matrix"
  */
-void frustum_extractFromMatrixGL(
-	Frustum& f,
+Frustum frustum_extractFromMatrixGL(
 	r32 matrix[16],
 	bool normalize = true)
 {
+	Frustum f;
 	const MatrixColumnMajor& m = *(MatrixColumnMajor*)matrix;
 				
 	f.nx[Near]   = m._41 + m._31;
@@ -187,13 +242,14 @@ void frustum_extractFromMatrixGL(
 		// 	f.d[p] = planes[p].d;
 		// }
 	}
+	return f;
 }
 
-void frustum_extractFromMatrixD3D(
-	Frustum& f,
+Frustum frustum_extractFromMatrixD3D(
 	r32 matrix[16],
 	bool normalize = true)
 {
+	Frustum f;
 	const MatrixRowMajor& m = *(MatrixRowMajor*)matrix;
 				
 	f.nx[Near]   = m._13;
@@ -240,6 +296,7 @@ void frustum_extractFromMatrixD3D(
 		// 	f.d[p] = planes[p].d;
 		// }
 	}
+	return f;
 }
 
 

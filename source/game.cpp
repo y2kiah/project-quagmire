@@ -33,6 +33,7 @@ static Game* _game = nullptr;
 #include "scene/camera.cpp"
 #include "scene/scene.cpp"
 #include "scene/scene_api.cpp"
+#include "game/screen_shake/screen_shake_system.cpp"
 
 
 /**
@@ -137,7 +138,7 @@ void gameRenderFrameTick(
 
 
 /**
- * Create and init the systems of the griffin engine, and do dependency injection
+ * Create and init engine systems
  */
 void makeCoreSystems(
 	GameMemory& gameMemory,
@@ -306,8 +307,6 @@ Game* makeGame(
 
 	// set up game scene
 	{
-//		using namespace griffin::scene;
-
 //		game.sceneId = engine.sceneManager->createScene("Game World", true);
 //		auto& scene = engine.sceneManager->getScene(game.sceneId);
 		
@@ -435,8 +434,12 @@ extern "C" {
 
 		if (!gameMemory->initialized) {
 			gameMemory->gameState = makeMemoryArena();
+			
 			gameMemory->transient = makeMemoryArena();
+			_allocSize(gameMemory->transient, megabytes(INIT_TRANSIENT_BLOCK_MEGABYTES), 16);
+			
 			gameMemory->frameScoped = makeMemoryArena();
+			_allocSize(gameMemory->frameScoped, megabytes(INIT_FRAMESCOPED_BLOCK_MEGABYTES), 16);
 
 			_game = makeGame(*gameMemory, *app);
 			
