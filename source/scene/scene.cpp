@@ -471,11 +471,11 @@ void cullEntitiesInCellPVS(
 	viewProj_camera[1][3] = 0.0f;
 	viewProj_camera[2][3] = 0.0f;
 
-	Frustum frustum = frustum_extractFromMatrixGL(viewProj_camera.E);
+	FrustumSoA frustum = frustum_extractFromMatrixGL(viewProj_camera.E);
 
 	// transform the frustum planes into a "homogeneous grid space" which has a scaled Y axis so
 	// the grid cell is a cube
-	Frustum f_hgs = frustum;
+	FrustumSoA f_hgs = frustum;
 	for (int p = 0; p < 6; ++p) {
 		f_hgs.ny[p] *= spatialGridSize_XZ_Y_ratio;
 	}
@@ -502,7 +502,7 @@ void cullEntitiesInCellPVS(
 		Sphere cellBSphere{ make_vec3(cellCenter), spatialGridCellRadius };
 
 		u8 cellResult = 0;
-		frustum_intersectSpheres_sse(f_hgs, 1, &cellBSphere, 1, &cellResult);
+		frustumSoA_intersectSpheres_sse(f_hgs, 1, &cellBSphere, 1, &cellResult);
 		assert(cellResult != Outside);
 
 		if (cellResult == Inside)
@@ -541,7 +541,7 @@ void cullEntitiesInCellPVS(
 				cameraSpaceBSphere.center += make_vec3(node.positionWorld - camInst.camera.eyePoint);
 
 				u8 objResult = 0;
-				frustum_intersectSpheres_sse(frustum, 1, &cameraSpaceBSphere, 1, &objResult);
+				frustumSoA_intersectSpheres_sse(frustum, 1, &cameraSpaceBSphere, 1, &objResult);
 				
 				u32 visibleBit = ((objResult != Outside) & 1UL) << cameraIndex;
 				

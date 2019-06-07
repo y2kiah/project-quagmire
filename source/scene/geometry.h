@@ -105,9 +105,11 @@ enum FrustumPlane : u8
 };
 
 
-struct alignas(16) Frustum
+/**
+ * planes stored as SoA instead of AoS
+ */
+struct alignas(16) FrustumSoA
 {
-	// planes stored as SoA instead of AoS
 	r32 nx[6];
 	r32 ny[6];
 	r32 nz[6];
@@ -123,15 +125,39 @@ struct FrustumPoints {
 };
 
 
+/**
+ * frustum information useful for intersection testing, particularly using the "radar" method
+ */
+struct FrustumInfo {
+	dvec3	eyePoint;			// eye point in world space
+
+	vec3	forward;			// forward, up, right vectors are normalized
+	vec3	up;
+	vec3	right;
+
+	r32		nearDist;			// distance to near and far clip planes
+	r32		farDist;
+
+	r32		farHalfWidth;		// half width and height of the far clip plane rectangle in world space coordinates 
+	r32		farHalfHeight;
+
+	r32		halfWidthPerDist;	// = farHalfWidth / farDist  clip rect size gradient useful for interpolation
+	r32		halfHeightPerDist;	// = farHalfHeight / farDist
+
+	r32		invCosHalfFovX;		// = 1.0f / cosf(fovX * 0.5f)  useful for computing sphere collision using "radar" method
+	r32		invCosHalfFovY;		// = 1.0f / cosf(fovY * 0.5f)
+};
+
+
 Plane frustum_getPlane(
-	const Frustum& f,
+	const FrustumSoA& f,
 	FrustumPlane p)
 {
 	return Plane{ f.nx[p], f.ny[p], f.nz[p], f.d[p] };
 }
 
 void frustum_getPlanes(
-	const Frustum& f,
+	const FrustumSoA& f,
 	Plane* outPlanes)
 {
 	assert(outPlanes);
@@ -191,11 +217,11 @@ void frustum_getPoints(
  * For input of model*view*projection matrix, object space.
  * see "Fast Extraction of Viewing Frustum Planes from the World-View-Projection Matrix"
  */
-Frustum frustum_extractFromMatrixGL(
+FrustumSoA frustum_extractFromMatrixGL(
 	r32 matrix[16],
 	bool normalize = true)
 {
-	Frustum f;
+	FrustumSoA f;
 	const MatrixColumnMajor& m = *(MatrixColumnMajor*)matrix;
 				
 	f.nx[Near]   = m._41 + m._31;
@@ -245,11 +271,11 @@ Frustum frustum_extractFromMatrixGL(
 	return f;
 }
 
-Frustum frustum_extractFromMatrixD3D(
+FrustumSoA frustum_extractFromMatrixD3D(
 	r32 matrix[16],
 	bool normalize = true)
 {
-	Frustum f;
+	FrustumSoA f;
 	const MatrixRowMajor& m = *(MatrixRowMajor*)matrix;
 				
 	f.nx[Near]   = m._13;
