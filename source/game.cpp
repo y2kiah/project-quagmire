@@ -18,7 +18,13 @@ struct SimulationUpdateContext {
 	SDLApplication*			app;
 };
 
-static PlatformApi* platform = nullptr;
+static PlatformApi* _platformApi = nullptr;
+
+PlatformApi& platformApi()
+{
+	assert(_platformApi);
+	return *_platformApi;
+}
 
 /**
  * it is possible to have multiple games in gameState memory at once, this pointer holds the game
@@ -26,10 +32,12 @@ static PlatformApi* platform = nullptr;
  */
 static Game* _game = nullptr;
 
+
 #include "utility/memory.cpp"
 #include "utility/logger.cpp"
 #include "math/noise.cpp"
 #include "input/game_input.cpp"
+#include "asset/asset.cpp"
 #include "scene/camera.cpp"
 #include "scene/scene.cpp"
 #include "scene/scene_api.cpp"
@@ -429,8 +437,8 @@ extern "C" {
 	{
 		assert(gameMemory && platformApi && app);
 
-		platform = platformApi;
-		logger::_log = platform->log;
+		_platformApi = platformApi;
+		logger::_log = platformApi->log;
 
 		if (!gameMemory->initialized) {
 			gameMemory->gameState = makeMemoryArena();

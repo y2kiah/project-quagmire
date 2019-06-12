@@ -274,7 +274,8 @@ void frustum_intersectPoints_4_sse(
 	_mm_store_ps((float*)resultSet, mm_result_z);
 }
 
-
+// TODO: write this using "radar" approach, and an SSE version, maybe convert grid cell sphere check over to AABB with sse
+#if 0
 IntersectionResult frustum_intersectAABB(
 	FrustumInfo& f,
 	dvec3 tl,
@@ -282,6 +283,7 @@ IntersectionResult frustum_intersectAABB(
 {
 
 }
+#endif
 
 
 /**

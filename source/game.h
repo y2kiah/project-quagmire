@@ -13,6 +13,7 @@
 #include "input/game_input.h"
 #include "math/qmath.h"
 #include "math/noise.h"
+#include "asset/asset.h"
 #include "scene/scene_api.h"
 #include "scene/camera.h"
 #include "game/screen_shake/screen_shake_system.h"

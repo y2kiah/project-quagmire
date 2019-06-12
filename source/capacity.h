@@ -2,8 +2,12 @@
 #define INIT_TRANSIENT_BLOCK_MEGABYTES      		64
 #define INIT_FRAMESCOPED_BLOCK_MEGABYTES        	64
 
+// File search recursion
+#define MAX_FILE_RECURSION_DEPTH                    10
+
 // Logger
-#define LOGGER_CAPACITY				50		// maximum number of messages that can build up in concurrent queue before it is flushed (per frame)
+// maximum number of messages that can build up in concurrent queue before it is flushed (per frame)
+#define LOGGER_CAPACITY				                50
 
 // Game Input
 #define PLATFORMINPUT_EVENTSQUEUE_CAPACITY			64

@@ -1,6 +1,7 @@
 
 #include <atomic>
 #include "../capacity.h"
+#include "platform.h"
 #include "platform_api.h"
 #include "input/platform_input.h"
 #include "utility/logger.h"
@@ -42,6 +43,21 @@ void showLastErrorAndQuit()
 	
 	MessageBoxW(NULL, pBuffer, L"Unrecoverable Error", MB_OK | MB_ICONERROR | MB_TOPMOST);
 	exit(1);
+}
+
+void logLastError()
+{
+	LPSTR pBuffer = nullptr;
+	FormatMessageA(
+		FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
+		0,
+		GetLastError(),
+		0,
+		(LPSTR)&pBuffer,
+		0,
+		0);
+	logger::error(logger::Category_System, pBuffer);
+	LocalFree(pBuffer);
 }
 
 void setWindowIcon(
@@ -195,8 +211,8 @@ PlatformBlock* platformAllocate(
 	SDL_LockMutex(gameContext.platformMemory.lock);
 	
 	block->prev = gameContext.platformMemory.sentinel.prev;
-    block->prev->next = block;
-    block->next->prev = block;
+	block->prev->next = block;
+	block->next->prev = block;
 
 	gameContext.platformMemory.totalSize += size;
 	++gameContext.platformMemory.numBlocks;
@@ -231,12 +247,93 @@ void platformDeallocate(
 			&& gameContext.platformMemory.totalSize == 0));
 
 	SDL_UnlockMutex(gameContext.platformMemory.lock);
-    
-    BOOL result = VirtualFree(block, 0, MEM_RELEASE);
-    assert(result);
+	
+	BOOL result = VirtualFree(block, 0, MEM_RELEASE);
+	assert(result);
 }
 
 
+PlatformFindAllFilesResult platformFindAllFiles(
+	const char* relSearchPath,
+	bool recursive = false,
+	u8 maxDepth = MAX_FILE_RECURSION_DEPTH,
+	FindAllFilesCallbackFunc* callback = nullptr,
+	void* userData = nullptr)
+{
+	PlatformFindAllFilesResult result{};
+	assert(callback);
+	WIN32_FIND_DATAA ffd;
+
+	HANDLE hFind = FindFirstFileExA(
+		relSearchPath,
+		FindExInfoBasic,
+		&ffd,
+		FindExSearchNameMatch,
+		NULL,
+		FIND_FIRST_EX_LARGE_FETCH);
+
+	if (hFind == INVALID_HANDLE_VALUE) 
+	{
+		logLastError();
+		return result;
+	}
+	
+	do {
+		if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+		{
+			callback(
+				ffd.cFileName,
+				0,
+				true,
+				userData);
+			++result.numDirectories;
+
+			if (recursive) {
+				assert(maxDepth != 1 && "max recursion depth reached, raise the limit or reduce nested directories.");
+				if (maxDepth != 1) {
+					PlatformFindAllFilesResult rr =
+						platformFindAllFiles(
+							ffd.cFileName,
+							true,
+							maxDepth - 1,
+							callback,
+							userData);
+					result.numFiles += rr.numFiles;
+					result.numDirectories += rr.numDirectories;
+				}
+			}
+		}
+		else {
+			LARGE_INTEGER fileSize;
+			fileSize.LowPart = ffd.nFileSizeLow;
+			fileSize.HighPart = ffd.nFileSizeHigh;
+			assert(fileSize.QuadPart <= UINT_MAX && "individual files must be under 4GB");
+
+			callback(
+				ffd.cFileName,
+				(u32)fileSize.QuadPart,
+				false,
+				userData);
+			++result.numFiles;
+		}
+	}
+	while (FindNextFileA(hFind, &ffd) != 0);
+	
+	FindClose(hFind);
+
+	return result;
+}
+
+
+PlatformApi& platformApi()
+{
+	assert(_platformApi);
+	return *_platformApi;
+}
+
+
+
+// NOT _WIN32
 #else
 
 #include <unistd.h>
@@ -441,6 +538,7 @@ PlatformApi createPlatformApi()
 	api.log = &logger::log;
 	api.allocate = &platformAllocate;
 	api.deallocate = &platformDeallocate;
+	api.findAllFiles = &platformFindAllFiles;
 
 	return api;
 }

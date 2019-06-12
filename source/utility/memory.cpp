@@ -1,5 +1,5 @@
 #include "memory.h"
-#include "../platform/platform_api.h"
+#include "platform/platform_api.h"
 
 
 MemoryBlock* pushBlock(
@@ -9,7 +9,7 @@ MemoryBlock* pushBlock(
 	assert(arena.threadID == SDL_ThreadID() && "MemoryArena thread mismatch");
 
 	// MemoryBlock safe to cast directly from PlatformBlock, it is asserted to be the base member
-	MemoryBlock* newBlock = (MemoryBlock*)platform->allocate(minimumSize);
+	MemoryBlock* newBlock = (MemoryBlock*)platformApi().allocate(minimumSize);
 	
 	newBlock->prev = arena.lastBlock;
 	if (arena.lastBlock) {
@@ -44,7 +44,7 @@ bool popBlock(
 		--arena.numBlocks;
 		arena.totalSize -= last->size;
 
-		platform->deallocate((PlatformBlock*)last);
+		platformApi().deallocate((PlatformBlock*)last);
 	}
 	return (last != nullptr);
 }
@@ -80,7 +80,7 @@ void removeBlock(
 		--arena.numBlocks;
 		arena.totalSize -= block->size;
 
-		platform->deallocate((PlatformBlock*)block);
+		platformApi().deallocate((PlatformBlock*)block);
 	}
 }
 
@@ -144,38 +144,13 @@ void preemptivelyPushBlock(
 }
 
 
-void* _allocSize(
-	MemoryArena& arena,
-	size_t size,
-	u32 align)
-{
-	assert(arena.threadID == SDL_ThreadID() && "MemoryArena thread mismatch");
-
-	void* allocAddr = nullptr;
-
-	if (!arena.currentBlock) {
-		MemoryBlock* block = pushBlock(arena, size);
-		allocAddr = block->base;
-		block->used += size;
-	}
-	else {
-		BlockFitResult fit = getBlockToFit(arena, arena.currentBlock, size, align);
-		MemoryBlock* block = fit.block;
-		allocAddr = fit.allocAddr;
-		block->used += fit.alignedSize;
-	}
-
-	return allocAddr;
-}
-
-
 void clearArena(
 	MemoryArena& arena)
 {
 	MemoryBlock* block = arena.firstBlock;
 	while (block) {
 		MemoryBlock* next = block->next;
-		platform->deallocate((PlatformBlock*)block);
+		platformApi().deallocate((PlatformBlock*)block);
 		block = next;
 	}
 	arena = makeMemoryArena();
@@ -217,7 +192,7 @@ void shrinkArena(
 		MemoryBlock* prev = arena->lastBlock->prev;
 		arena->totalSize -= arena->lastBlock->size;
 		--arena->numBlocks;
-		platform->deallocate((PlatformBlock*)arena->lastBlock);
+		platformApi().deallocate((PlatformBlock*)arena->lastBlock);
 		
 		if (arena->currentBlock == arena->lastBlock) {
 			arena->currentBlock = prev;
@@ -228,4 +203,49 @@ void shrinkArena(
 		arena->firstBlock = nullptr;
 		assert(arena->numBlocks == 0 && arena->totalSize == 0);
 	}
+}
+
+
+void* _allocSize(
+	MemoryArena& arena,
+	size_t size,
+	u32 align)
+{
+	assert(arena.threadID == SDL_ThreadID() && "MemoryArena thread mismatch");
+
+	void* allocAddr = nullptr;
+
+	if (!arena.currentBlock) {
+		MemoryBlock* block = pushBlock(arena, size);
+		allocAddr = block->base;
+		block->used += size;
+	}
+	else {
+		BlockFitResult fit = getBlockToFit(arena, arena.currentBlock, size, align);
+		MemoryBlock* block = fit.block;
+		allocAddr = fit.allocAddr;
+		block->used += fit.alignedSize;
+	}
+
+	return allocAddr;
+}
+
+
+char* allocStringCopy(
+	MemoryArena& arena,
+	const char* src,
+	size_t size)
+{
+	assert(src);
+	char* dest = (char*)_allocSize(arena, size+1, alignof(char)); // +1 for null terminating character
+	_strncpy_s(dest, size+1, src, size);
+	return dest;
+}
+
+
+char* allocStringCopy(
+	MemoryArena& arena,
+	const char* src)
+{
+	return allocStringCopy(arena, src, strlen(src));
 }

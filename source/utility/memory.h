@@ -254,11 +254,17 @@ void* _allocSize(
 	size_t size,
 	u32 align);
 
+char* allocStringCopy(
+	MemoryArena& arena,
+	const char* src);
 
 #define allocType(arena, Type) \
 	(Type*)_allocSize(arena, sizeof(Type), alignof(Type))
 
 #define allocArrayOfType(arena, Type, n) \
 	(Type*)_allocSize(arena, sizeof(Type)*n, alignof(Type))
+
+#define allocBuffer(arena, size, align) \
+	(u8*)_allocSize(arena, size, align)
 
 #endif

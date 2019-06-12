@@ -87,10 +87,30 @@ struct SDLApplication {
 typedef PlatformBlock* PlatformAllocateFunc(size_t);
 typedef void PlatformDeallocateFunc(PlatformBlock*);
 
+typedef void FindAllFilesCallbackFunc(
+	const char* filePath,
+	u32 sizeBytes,
+	bool isDirectory,
+	void* userData);
+
+struct PlatformFindAllFilesResult {
+	u32	numFiles;
+	u32	numDirectories;
+};
+
+typedef PlatformFindAllFilesResult PlatformFindAllFilesFunc(
+	const char* relSearchPath,
+	bool recursive,
+	u8 maxDepth,
+	FindAllFilesCallbackFunc* callback,
+	void* userData);
+
+
 struct PlatformApi {
-	logger::LogFunc*		log;
-	PlatformAllocateFunc*	allocate;
-	PlatformDeallocateFunc*	deallocate;
+	logger::LogFunc*			log;
+	PlatformAllocateFunc*		allocate;
+	PlatformDeallocateFunc*		deallocate;
+	PlatformFindAllFilesFunc*	findAllFiles;
 };
 
 struct Game;
@@ -106,6 +126,8 @@ struct GameMemory {
 namespace logger {
 	void log(Category, Priority, const char*, va_list);
 }
+
+PlatformApi& platformApi();
 
 
 #endif

@@ -16,7 +16,7 @@ extern "C" {
 static SDLApplication app;
 static GameContext gameContext{};
 static MemoryArena platformMemory = makeMemoryArena();
-static PlatformApi* platform = nullptr;
+static PlatformApi* _platformApi = nullptr;
 
 #include "utility/platform_logger.cpp"
 #include "platform/timer.cpp"
@@ -250,7 +250,7 @@ int gameProcess(void* ctx)
 
 	if (!gameContext.gameCode.onLoad(
 			&gameContext.gameMemory,
-			platform,
+			_platformApi,
 			gameContext.app))
 	{
 		gameContext.done = true;
@@ -273,7 +273,7 @@ int gameProcess(void* ctx)
 			gameContext.done =
 				gameContext.gameCode.updateAndRender(
 						&gameContext.gameMemory,
-						platform,
+						_platformApi,
 						&gameContext.input,
 						gameContext.app,
 						realTime,
@@ -291,7 +291,7 @@ int gameProcess(void* ctx)
 				if (loadGameCode(gameContext.gameCode)) {
 					gameContext.gameCode.onLoad(
 							&gameContext.gameMemory,
-							platform,
+							_platformApi,
 							gameContext.app);
 				}
 			}, ctx);
@@ -302,7 +302,7 @@ int gameProcess(void* ctx)
 
 	gameContext.gameCode.onExit(
 			&gameContext.gameMemory,
-			platform,
+			_platformApi,
 			gameContext.app);
 
 	// NOTE: be sure to wait on important futures here for processes that must finish before exit (e.g. save game)
@@ -319,7 +319,7 @@ int main(int argc, char *argv[])
 	initHighPerfTimer();
 	
 	PlatformApi platformApi = createPlatformApi();
-	platform = &platformApi;
+	_platformApi = &platformApi;
 
 	logger::_log = &logger::log;
 
