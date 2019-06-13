@@ -22,7 +22,7 @@ struct MemoryBlock {
 
 
 struct PlatformBlock {
-	MemoryBlock		arenaBlock;
+	MemoryBlock		memoryBlock;
 	// linked list for all allocated blocks
 	PlatformBlock*	next;
 	PlatformBlock*	prev;
@@ -32,7 +32,7 @@ struct PlatformBlock {
  * line alignment of a block allocation
  */
 static_assert_aligned_size(PlatformBlock, 64);
-static_assert(offsetof(PlatformBlock, arenaBlock) == 0, "MemoryBlock must be first member of PlatformBlock");
+static_assert(offsetof(PlatformBlock, memoryBlock) == 0, "MemoryBlock must be first member of PlatformBlock");
 
 
 struct MemoryArena {
@@ -45,6 +45,23 @@ struct MemoryArena {
 	u32				numBlocks;
 	u32				threadID;		// threadID is tracked to later assert the threadID matches on allocations
 	// TODO: store allocator type, store flags like readonly, over/underflow protection, etc.
+};
+
+
+struct HeapBlock {
+	HeapBlock*		prev;
+	HeapBlock*		next;
+	size_t			size;
+};
+
+struct MemoryHeap {
+	MemoryBlock*	firstBlock;		// beginning of the block list
+	MemoryBlock*	lastBlock;		// end of the block list, new blocks are pushed here
+	HeapBlock*		freeFront;		// first block in the freelist
+
+	size_t			totalSize;		// total available capacity in all blocks (not including space for headers)
+	u32				numBlocks;
+	u32				threadID;		// threadID is tracked to later assert the threadID matches on allocations
 };
 
 

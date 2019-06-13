@@ -18,6 +18,9 @@
 #define GAMEINPUT_MAX_JOYSTICKS						64
 #define GAMEINPUT_MAX_AXES							256
 
+// Assets
+#define ASSET_PACKS_CAPACITY						16
+
 // Scene
 // TODO: should these be smaller and we would have multiple spatial stores?
 #define SCENE_MAX_ENTITIES							USHRT_MAX-1

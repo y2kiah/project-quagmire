@@ -204,8 +204,8 @@ PlatformBlock* platformAllocate(
 	}
 
 	PlatformBlock* block = (PlatformBlock*)memory;
-	block->arenaBlock.base = (void*)((uintptr_t)memory + sizeof(PlatformBlock));
-	block->arenaBlock.size = size - sizeof(PlatformBlock);
+	block->memoryBlock.base = (void*)((uintptr_t)memory + sizeof(PlatformBlock));
+	block->memoryBlock.size = size - sizeof(PlatformBlock);
 	block->next = &gameContext.platformMemory.sentinel;
 
 	SDL_LockMutex(gameContext.platformMemory.lock);
@@ -227,7 +227,7 @@ void platformDeallocate(
 {
 	SDL_LockMutex(gameContext.platformMemory.lock);
 
-	size_t size = block->arenaBlock.size + sizeof(PlatformBlock);
+	size_t size = block->memoryBlock.size + sizeof(PlatformBlock);
 	gameContext.platformMemory.totalSize -= size;
 	--gameContext.platformMemory.numBlocks;
 	

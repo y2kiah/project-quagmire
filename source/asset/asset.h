@@ -4,6 +4,7 @@
 #include "utility/common.h"
 #include "utility/memory.h"
 #include "utility/dense_queue.h"
+#include "utility/sparse_handle_map_16.h"
 #include "capacity.h"
 
 /**
@@ -28,22 +29,18 @@ typedef h32 AssetId;
 #pragma pack(push, 1)
 
 struct AssetInfo {
-	u32			offset;				// offset to assetData from base of file
+	u32			offset;				// offset to asset from base of assetData section
 	u32			size;				// assetData size
 	u32			pathStringOffset;	// offset to path string
 	u32			pathStringSize;		// size of path string not including null terminator
-	
 };
 
-struct AssetPackHeader {
-	u32			PACK;				// {'P','A','C','K'}
-	u16			version;
-	u16			numAssets;	
-};
 
 struct alignas(64) AssetPack
 {
-	AssetPackHeader	header;
+	u32			PACK;				// {'P','A','C','K'}
+	u16			version;
+	u16			numAssets;
 	u32			assetInfoOffset;
 	u32			assetInfoSize;
 	u32			pathStringsOffset;
@@ -63,6 +60,13 @@ struct alignas(64) AssetPack
 static_assert(sizeof(AssetPack) == 64, "AssetPack data should be cache-aligned");
 
 #pragma pack(pop)
+
+
+struct LoadedAssetPack {
+	AssetPack*	info;
+	FILE*		pakFile;
+	//const char*	watchDirectory; // TODO: store some link to an associated directory in tools builds here
+};
 
 
 enum AssetStatus {
@@ -89,11 +93,11 @@ struct Asset {
 };
 
 DenseQueueTyped(u16, AssetCacheLRU);
+SparseHandleMap16TypedWithBuffer(LoadedAssetPack, AssetPackMap, h32, 0, ASSET_PACKS_CAPACITY);
+
 
 struct AssetStore {
-	AssetPack		*packs;
-	u32				numPacks;
-	u32				_padding;
+	AssetPackMap	packs;
 
 	AssetCacheLRU	textureCache;
 	AssetCacheLRU	modelCache;
@@ -105,8 +109,9 @@ AssetPack* buildAssetPackFromDirectory(
 	const char* packDirectory,
 	MemoryArena& taskMem);
 
-u32 loadAssetPackFromFile(
+h32 openAssetPackFile(
+	const char* filename,
+	AssetStore& store,
 	MemoryArena& transient);
-
 
 #endif

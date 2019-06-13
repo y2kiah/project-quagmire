@@ -225,7 +225,7 @@ bool SparseHandleMap16::erase(h32 handle)
 
 	#if defined(QUAGMIRE_SLOWCHECKS) && QUAGMIRE_SLOWCHECKS != 0
 	// clear removed item memory to zero (slow build only) to help in debugging
-	itemzero(item(i.data));
+	itemzero(i.data);
 	#endif
 
 	--length;
@@ -366,10 +366,49 @@ void SparseHandleMap16::deinit()
 		void clear()						{ _map.clear(); }\
 		void reset()						{ _map.reset(); }\
 		uintptr_t has(h32 handle)			{ return _map.has(handle); }\
-		inline Item item(u16 index)			{ return (Item)_map.item(index); }\
+		inline Item item(u16 index) {\
+			SparseHandleMap16::Item i = _map.item(index);\
+			return Item{ i.header, (Type*)i.data };\
+		}\
 		void init(u16 capacity, void* buffer = nullptr)\
 											{ _map.init(TypeSize, capacity, TypeId, buffer); }\
 		void deinit()						{ _map.deinit(); }\
 	};
+
+
+// Macro like SparseHandleMap16Typed but also internally includes the storage buffer, so there is no
+// need to call init or create the buffer externally
+#define SparseHandleMap16TypedWithBuffer(Type, Name, HndType, TypeId, _capacity) \
+	struct Name {\
+		enum { TypeSize = sizeof(Type) };\
+		struct Item { SparseHandleMap16::Header* header; Type* data; };\
+		SparseHandleMap16 _map;\
+		u8 _buffer[(sizeof(Type) + sizeof(SparseHandleMap16::Header)) * _capacity];\
+		static_assert(is_aligned(sizeof(Name::_buffer),8),"sizeof items array must be a multiple of 8");\
+		static size_t getTotalBufferSize(u16 capacity) {\
+			return sizeof(_buffer);\
+		}\
+		explicit Name()	: _buffer{} {\
+			_map.init(TypeSize, _capacity, TypeId, &_buffer);\
+		}\
+		Type* at(HndType handle)			{ return (Type*)_map.at(handle); }\
+		Type* operator[](HndType handle)	{ return at(handle); }\
+		bool erase(HndType handle)			{ return _map.erase(handle); }\
+		HndType insert(Type* src = nullptr, Type** out = nullptr) {\
+			return _map.insert((void*)src, (void**)out);\
+		}\
+		void clear()						{ _map.clear(); }\
+		void reset()						{ _map.reset(); }\
+		uintptr_t has(HndType handle)		{ return _map.has(handle); }\
+		inline Item item(u16 index) {\
+			SparseHandleMap16::Item i = _map.item(index);\
+			return Item{ i.header, (Type*)i.data };\
+		}\
+		void init(u16 capacity, void* buffer = nullptr)\
+											{ _map.init(TypeSize, capacity, TypeId, buffer); }\
+		void deinit()						{ _map.deinit(); }\
+	};\
+	static_assert(std::is_same<h32,HndType>::value, #HndType " must be typedef h32");
+
 
 #endif

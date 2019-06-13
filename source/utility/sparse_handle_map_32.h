@@ -226,7 +226,7 @@ bool SparseHandleMap32::erase(h64 handle)
 
 	#if defined(QUAGMIRE_SLOWCHECKS) && QUAGMIRE_SLOWCHECKS != 0
 	// clear removed item memory to zero (slow build only) to help in debugging
-	itemzero(item(i.data));
+	itemzero(i.data);
 	#endif
 
 	--length;
@@ -367,7 +367,10 @@ void SparseHandleMap32::deinit()
 		void clear()						{ _map.clear(); }\
 		void reset()						{ _map.reset(); }\
 		uintptr_t has(h64 handle)			{ return _map.has(handle); }\
-		inline Item item(u32 index)			{ return (Item)_map.item(index); }\
+		inline Item item(u32 index) {\
+			SparseHandleMap32::Item i = _map.item(index);\
+			return Item{ i.header, (Type*)i.data };\
+		}\
 		void init(u32 capacity, void* buffer = nullptr)\
 											{ _map.init(TypeSize, capacity, TypeId, buffer); }\
 		void deinit()						{ _map.deinit(); }\

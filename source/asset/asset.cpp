@@ -3,6 +3,10 @@
 #include "utility/hash.h"
 
 
+#define ASSET_PACK_CODE	(((u32)'P' << 0) | ((u32)'A' << 8) | ((u32)'C' << 16) | ((u32)'K' << 24))
+#define ASSET_PACK_VERSION	1
+
+
 struct CollectedAsset {
 	CollectedAsset* next;
 	u32		assetId;
@@ -16,6 +20,13 @@ struct CollectAssetParams {
 	MemoryArena&	taskMem;
 	CollectedAsset*	collectedAssets;
 };
+
+struct AssetIndexSort {
+	u32			originalIndex;
+	u32			assetId;
+	AssetInfo	assetInfo;
+};
+
 
 void collectAsset(
 	const char* filePath,
@@ -38,6 +49,13 @@ void collectAsset(
 	ca.sizeBytes = sizeBytes;
 	ca.pathStringSize = filePathLen;
 	collectedAsset->pathString = allocStringCopy(taskMem, filePath, filePathLen);
+}
+
+
+int assetIdComparator(const void* ia, const void* ib) {
+	u32 a = ((AssetIndexSort*)ia)->assetId;
+	u32 b = ((AssetIndexSort*)ib)->assetId;
+	return (a < b ? -1 : (a > b ? 1 : 0));
 }
 
 
@@ -64,52 +82,60 @@ AssetPack* buildAssetPackFromDirectory(
 	assert(ffr.numFiles < USHRT_MAX);
 
 	u16 n = (u16)ffr.numFiles;
-	FILE* file = nullptr;
+	FILE* pakFile = nullptr;
 	const char* pakFilename = "assets/test.pak";
-	fopen_s(&file, pakFilename, "w+b");
+	fopen_s(&pakFile, pakFilename, "w+b");
 	
-	if (n > 0 && file)
+	if (n > 0 && pakFile)
 	{
 		result = allocType(taskMem, AssetPack);
 		AssetPack& pack = *result;
 
-		pack.header.PACK = ((u32)'P' | ((u32)'A' << 8) | ((u32)'C' << 16) | ((u32)'K' << 24));
-		pack.header.version = 0;
+		pack.PACK = ASSET_PACK_CODE;
+		pack.version = ASSET_PACK_VERSION;
 		
-		pack.header.numAssets = n;
-		pack.assetInfoOffset = sizeof(AssetPack) + (sizeof(u32) * n);
+		pack.numAssets = n;
+		pack.assetInfoOffset = sizeof(AssetPack) + (sizeof(pack.assetIds[0]) * n);
 		pack.assetInfoSize = sizeof(AssetInfo) * n;
 
 		pack.pathStringsOffset = pack.assetInfoOffset + pack.assetInfoSize;
 
-		u32* assetIds = allocArrayOfType(taskMem, u32, n);
-		AssetInfo* assetInfo = allocArrayOfType(taskMem, AssetInfo, n);
-
+		// create an indexing array to be sorted
+		AssetIndexSort* index = allocArrayOfType(taskMem, AssetIndexSort, n);
+		
 		CollectedAsset& ca = *sentinel.next;
 		for (u16 i = 0; i < n; ++i)
 		{
-			pack.assetIds[i] = ca.assetId;
-			pack.assetInfo[i].size = ca.sizeBytes;
-			pack.assetInfo[i].offset = pack.assetDataSize;
-			pack.assetInfo[i].pathStringSize = ca.pathStringSize;
-			pack.assetInfo[i].pathStringOffset = pack.pathStringsSize;
+			index[i].originalIndex = i;
+			index[i].assetId = ca.assetId;
+			index[i].assetInfo.size = ca.sizeBytes;
+			index[i].assetInfo.offset = pack.assetDataSize;
+			index[i].assetInfo.pathStringSize = ca.pathStringSize;
+			index[i].assetInfo.pathStringOffset = pack.pathStringsSize;
 
 			pack.pathStringsSize += ca.pathStringSize + 1; // +1 for null terminating character
 			pack.assetDataSize += ca.sizeBytes;
 			ca = *ca.next;
 		}
 
-		char* pathStrings = (char*)allocBuffer(taskMem, pack.pathStringsSize, alignof(char));
-		
-		pack.assetDataOffset = pack.pathStringsOffset + pack.pathStringsSize;
+		// sort the index array based on assetIds
+		qsort(index, n, sizeof(index[0]), assetIdComparator);
 
-		// copy path strings to a single buffer
+		u32* assetIds = allocArrayOfType(taskMem, u32, n);
+		AssetInfo* assetInfo = allocArrayOfType(taskMem, AssetInfo, n);
+		char* pathStrings = (char*)allocBuffer(taskMem, pack.pathStringsSize, alignof(char));
+
+		// build the final assetIds and corresponding assetInfo arrays using sorted index
+		// copy path strings to a single buffer in the original order
 		ca = *sentinel.next;
 		char* dst = pathStrings;
 		u32 offsetCheck = 0;
 		for (u16 i = 0; i < n; ++i)
 		{
-			assert(pack.assetInfo[i].pathStringOffset == offsetCheck);
+			pack.assetIds[i] = index[i].assetId;
+			pack.assetInfo[i] = index[i].assetInfo;
+
+			assert(pack.assetInfo[index[i].originalIndex].pathStringOffset == offsetCheck);
 
 			_strncpy_s(
 				dst,
@@ -122,21 +148,22 @@ AssetPack* buildAssetPackFromDirectory(
 			ca = *ca.next;
 		}
 
-		fwrite(result, sizeof(AssetPack), 1, file);
-		fwrite(assetIds, sizeof(u32), n, file);
-		fwrite(assetInfo, sizeof(AssetInfo), n, file);
-		fwrite(pathStrings, sizeof(char), pack.pathStringsSize, file);
+		fwrite(result, sizeof(AssetPack), 1, pakFile);
+		fwrite(assetIds, sizeof(assetIds[0]), n, pakFile);
+		fwrite(assetInfo, sizeof(AssetInfo), n, pakFile);
+		fwrite(pathStrings, sizeof(char), pack.pathStringsSize, pakFile);
 
-		// append all assets to the file
+		// append all assets to the pakFile
+		pack.assetDataOffset = pack.pathStringsOffset + pack.pathStringsSize;
+
 		u8* tmpBuf = allocBuffer(taskMem, 64, 64);
 		ca = *sentinel.next;
 		offsetCheck = 0;
-		for (
-			u16 i = 0;
+		for (u16 i = 0;
 			i < n && result;
 			++i)
 		{
-			assert(pack.assetInfo[i].offset == offsetCheck);
+			assert(pack.assetInfo[index[i].originalIndex].offset == offsetCheck);
 
 			FILE* fAsset = nullptr;
 			fopen_s(&fAsset, ca.pathString, "rb");
@@ -148,7 +175,7 @@ AssetPack* buildAssetPackFromDirectory(
 						result = nullptr;
 						break;
 					}
-					fwrite(tmpBuf, 1, xferBytes, file);
+					fwrite(tmpBuf, 1, xferBytes, pakFile);
 					b -= xferBytes;
 				}
 				assert(feof(fAsset));
@@ -166,9 +193,9 @@ AssetPack* buildAssetPackFromDirectory(
 		pack.assetInfo = assetInfo;
 		pack.pathStrings = pathStrings;
 
-		fclose(file);
+		fclose(pakFile);
 
-		// an error occurred, remove the file
+		// an error occurred, remove the pakFile
 		if (!result) {
 			remove(pakFilename);
 		}
@@ -178,10 +205,68 @@ AssetPack* buildAssetPackFromDirectory(
 }
 
 
-u32 loadAssetPackFromFile(
+h32 openAssetPackFile(
+	const char* filename,
+	AssetStore& store,
 	MemoryArena& transient)
 {
-	assert(false && "not implemented");
+	h32 handle = null_h32;
+	LoadedAssetPack loadedPack{};
 
-	return true;
+	fopen_s(&loadedPack.pakFile, filename, "rb");
+	
+	if (loadedPack.pakFile)
+	{
+		AssetPack tmp{};
+		fread(&tmp, sizeof(AssetPack), 1, loadedPack.pakFile);
+		assert(tmp.PACK == ASSET_PACK_CODE && tmp.version == ASSET_PACK_VERSION);
+
+		u16 n = tmp.numAssets;
+		u32 loadSize = tmp.assetDataOffset;
+		
+		rewind(loadedPack.pakFile);
+		u8* buf = allocBuffer(transient, loadSize, 64);
+		
+		tmp.assetIds = (u32*)(buf + sizeof(AssetPack));
+		tmp.assetInfo = (AssetInfo*)(buf + tmp.assetInfoOffset);
+		tmp.pathStrings = (char*)(buf + tmp.pathStringsOffset);
+		
+		loadedPack.info = (AssetPack*)buf;
+		*loadedPack.info = tmp;
+
+		handle = store.packs.insert(&loadedPack);
+	}
+
+	return handle;
+}
+
+
+u8* loadAssetDataFromPack(
+	u32 assetId,
+	LoadedAssetPack& pack,
+	MemoryArena& transient) // TODO: pass an asset heap instead of a MemoryArena
+{
+	assert(pack.pakFile);
+	u8* assetBuffer = nullptr;
+	
+	u32* pId = (u32*)
+		bsearch(
+			&assetId,
+			pack.info->assetIds,
+			pack.info->numAssets,
+			sizeof(u32),
+			assetIdComparator);
+	
+	if (pId) {
+		u16 index = (u16)(pId - pack.info->assetIds); // u32 pointer difference with base yields the index
+		AssetInfo& assetInfo = pack.info->assetInfo[index];
+		
+		fseek(pack.pakFile, pack.info->assetDataOffset + assetInfo.offset, SEEK_SET);
+		// TODO: get this from an asset heap, not a linear arena
+		// 16 byte align the asset in case we use SSE for processing
+		assetBuffer = allocBuffer(transient, assetInfo.size, 16);
+		fread(assetBuffer, 1, assetInfo.size, pack.pakFile);
+	}
+
+	return assetBuffer;
 }
