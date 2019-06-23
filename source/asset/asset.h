@@ -65,6 +65,7 @@ static_assert(sizeof(AssetPack) == 64, "AssetPack data should be cache-aligned")
 struct LoadedAssetPack {
 	AssetPack*	info;
 	FILE*		pakFile;
+	u64			pakFileLastWrite;
 	//const char*	watchDirectory; // TODO: store some link to an associated directory in tools builds here
 };
 
@@ -110,8 +111,8 @@ AssetPack* buildAssetPackFromDirectory(
 	MemoryArena& taskMem);
 
 h32 openAssetPackFile(
-	const char* filename,
 	AssetStore& store,
+	const char* filename,
 	MemoryArena& transient);
 
 #endif

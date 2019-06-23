@@ -87,6 +87,9 @@ struct SDLApplication {
 typedef PlatformBlock* PlatformAllocateFunc(size_t);
 typedef void PlatformDeallocateFunc(PlatformBlock*);
 
+
+// Find all files
+
 typedef void FindAllFilesCallbackFunc(
 	const char* filePath,
 	u32 sizeBytes,
@@ -105,12 +108,46 @@ typedef PlatformFindAllFilesResult PlatformFindAllFilesFunc(
 	FindAllFilesCallbackFunc* callback,
 	void* userData);
 
+// File information
+
+struct PlatformFileInfo {
+	u64		lastWrite;
+};
+
+
+// Watch for file / directory changes
+
+typedef u64 PlatformFileChangeHandle;
+
+enum PlatformWatchEventType : u8 {
+	Platform_WatchEvent_Change = 0,	// includes creating, renaming or deleting a file or directory, and modifying last write time
+	Platform_WatchEvent_Timeout		// intermittentTimeout occurs without an event, useful for detecting thread exit condition
+};
+
+typedef int FileChangeCallbackFunc(
+	PlatformWatchEventType changeType,
+	u32 handleIndex,
+	PlatformFileChangeHandle handle,
+	void* userData,
+	MemoryArena& taskMemory);
+
+typedef int PlatformRunDirectoryWatchLoop(
+	PlatformFileChangeHandle* handles,
+	const u32* numHandles,
+	FileChangeCallbackFunc* onChangeCallback,
+	u32 intermittentTimeoutMS,
+	void* userData,
+	MemoryArena& taskMemory);
+
+
+// Platform API function pointers passed to game dll
 
 struct PlatformApi {
-	logger::LogFunc*			log;
-	PlatformAllocateFunc*		allocate;
-	PlatformDeallocateFunc*		deallocate;
-	PlatformFindAllFilesFunc*	findAllFiles;
+	logger::LogFunc*				log;
+	PlatformAllocateFunc*			allocate;
+	PlatformDeallocateFunc*			deallocate;
+	PlatformFindAllFilesFunc*		findAllFiles;
+	PlatformRunDirectoryWatchLoop*	watchDirectory;
 };
 
 struct Game;

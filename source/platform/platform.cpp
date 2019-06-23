@@ -1,4 +1,3 @@
-
 #include <atomic>
 #include "../capacity.h"
 #include "platform.h"
@@ -194,7 +193,11 @@ SystemInfo platformGetSystemInfo()
 PlatformBlock* platformAllocate(
 	size_t minimumSize)
 {
+	assert(minimumSize < UINT_MAX); // we don't use 8 bytes to store size, no block should ever be larger than 4GB
+
 	SIZE_T size = ((minimumSize / app.systemInfo.allocationGranularity) + 1) * app.systemInfo.allocationGranularity;
+	SIZE_T minAllocSize = ((MEMORY_MIN_PLATFORM_ALLOC_SIZE / app.systemInfo.allocationGranularity) + 1) * app.systemInfo.allocationGranularity;
+	size = max(size, minAllocSize);
 	void* memory = VirtualAlloc(0, size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
 	
 	// if we can't allocate memory, time to panic (for now)
@@ -205,7 +208,7 @@ PlatformBlock* platformAllocate(
 
 	PlatformBlock* block = (PlatformBlock*)memory;
 	block->memoryBlock.base = (void*)((uintptr_t)memory + sizeof(PlatformBlock));
-	block->memoryBlock.size = size - sizeof(PlatformBlock);
+	block->memoryBlock.size = (u32)(size - sizeof(PlatformBlock));
 	block->next = &gameContext.platformMemory.sentinel;
 
 	SDL_LockMutex(gameContext.platformMemory.lock);
@@ -320,6 +323,98 @@ PlatformFindAllFilesResult platformFindAllFiles(
 	while (FindNextFileA(hFind, &ffd) != 0);
 	
 	FindClose(hFind);
+
+	return result;
+}
+
+
+PlatformFileChangeHandle platformBeginDirectoryWatch(
+	const char* relWatchPath)
+{
+	PlatformFileChangeHandle result = 0;
+
+	HANDLE dwChangeHandle = FindFirstChangeNotificationA(
+			relWatchPath,				   // directory to watch
+			TRUE,						   // watch subtree
+			FILE_NOTIFY_CHANGE_FILE_NAME | // watch file, directory, and last write time changes
+			FILE_NOTIFY_CHANGE_DIR_NAME |
+			FILE_NOTIFY_CHANGE_LAST_WRITE);
+	
+	if (dwChangeHandle != INVALID_HANDLE_VALUE) {
+		result = (PlatformFileChangeHandle)dwChangeHandle;
+	}
+	return result;
+}
+
+void platformEndDirectoryWatch(
+	PlatformFileChangeHandle handle)
+{
+	HANDLE dwChangeHandle = (HANDLE)handle;
+	FindCloseChangeNotification(dwChangeHandle);
+}
+
+/**
+ * Blocking call that begins a directory watch loop. Call this in a dedicated thread to monitor a
+ * directory and its subpaths for file and directory changes.
+ * 
+ * The onChangeCallback is called when an event or an intermittent timeout occurs. A low timeout
+ * period is important for responding to the program exit condition in a timely manner, although
+ * simply not waiting for the thread to join and allowing the OS to clean up is a fine option.
+ * 
+ * The loop exits when onChangeCallback returns a non-zero value, causing this function to return.
+ * The onChangeCallback runs in the same thread from which this function is called, so be careful
+ * about locking any shared state passed through the userData pointer. onChangeCallback may be used
+ * to directly run tasks or may queue up tasks to be run on another worker thread.
+ * 
+ * This functions returns non-zero on failure, and zero for any other exit condition.
+ */
+int platformRunDirectoryWatchLoop(
+	PlatformFileChangeHandle* handles,
+	const u32* numHandles,
+	FileChangeCallbackFunc* onChangeCallback,
+	u32 intermittentTimeoutMS,
+	void* userData,
+	MemoryArena& taskMemory)
+{
+	int result = 0;
+	assert(onChangeCallback);
+	assert(intermittentTimeoutMS <= 1000 && "a low timeout (<= ~33ms) is recommended");
+
+	HANDLE* dwChangeHandles = (HANDLE*)handles;
+
+	bool done = false;
+	while (!done)
+	{
+		DWORD dwWaitStatus = 
+			WaitForMultipleObjects(
+				*numHandles,
+				dwChangeHandles,
+				FALSE,
+				intermittentTimeoutMS);
+
+		if (dwWaitStatus == WAIT_TIMEOUT) {
+			done = (
+				onChangeCallback(
+					Platform_WatchEvent_Timeout,
+					0, 0,
+					userData,
+					taskMemory) != 0);
+		}
+		else {
+			u32 index = dwWaitStatus - WAIT_OBJECT_0;
+
+			done = (
+				onChangeCallback(
+					Platform_WatchEvent_Change,
+					index, handles[index],
+					userData,
+					taskMemory) != 0);
+
+			if (!done) {
+				done = (FindNextChangeNotification(dwChangeHandles[index]) == FALSE);
+			}
+		}
+	}
 
 	return result;
 }
@@ -539,6 +634,7 @@ PlatformApi createPlatformApi()
 	api.allocate = &platformAllocate;
 	api.deallocate = &platformDeallocate;
 	api.findAllFiles = &platformFindAllFiles;
+	api.watchDirectory = &platformRunDirectoryWatchLoop;
 
 	return api;
 }

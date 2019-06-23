@@ -33,7 +33,8 @@ PlatformApi& platformApi()
 static Game* _game = nullptr;
 
 
-#include "utility/memory.cpp"
+#include "utility/memory_arena.cpp"
+#include "utility/memory_heap.cpp"
 #include "utility/logger.cpp"
 #include "math/noise.cpp"
 #include "input/game_input.cpp"

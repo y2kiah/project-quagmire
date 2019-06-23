@@ -6,26 +6,40 @@
 #include "utility/common.h"
 
 struct MemoryArena;
+struct MemoryHeap;
 
 struct MemoryBlock {
-	void*			base;
-	size_t			size;
-	uintptr_t		used;
-	// linked list for blocks in the arena
-	MemoryBlock*	next;
-	MemoryBlock*	prev;
+	enum MemoryBlockType : u8 { ArenaBlock, HeapBlock };
+
+	void*				base;
+	u32					size;
+	
+	u32					used;		// for MemoryArenas, used bytes in block
+									// for MemoryHeaps, non-free allocated bytes plus all HeapAllocation header bytes
+	u32					numAllocs;	// for MemoryHeaps only, number of allocations in block
+
+	MemoryBlockType		blockType;
+	u8					_padding[3];
+
+	// linked list for blocks in the arena/heap
+	MemoryBlock*		next;
+	MemoryBlock*		prev;
+	
 	// TODO: this will result in dangling pointer if arena is destroyed and block remins in the platform list
 	// should this be a handle to an arena instead?
 	// or should we always free blocks when arena is destroyed and set this null
-	MemoryArena*	arena;
+	union {
+		MemoryArena*	arena;
+		MemoryHeap*		heap;
+	};
 };
 
 
 struct PlatformBlock {
-	MemoryBlock		memoryBlock;
+	MemoryBlock			memoryBlock;
 	// linked list for all allocated blocks
-	PlatformBlock*	next;
-	PlatformBlock*	prev;
+	PlatformBlock*		next;
+	PlatformBlock*		prev;
 };
 /**
  * PlatformBlock headers must be a multiple of 64 so they do not impact the cache
@@ -41,27 +55,49 @@ struct MemoryArena {
 	MemoryBlock*	lastBlock;		// end of the block list, new blocks are pushed here
 	MemoryBlock*	currentBlock;	// block currently being used for allocations (may not be the last block)
 
-	size_t			totalSize;		// total available capacity in all blocks (not including space for headers)
+	size_t			totalSize;		// total available capacity in all blocks (not including space for PlatformBlock headers)
 	u32				numBlocks;
 	u32				threadID;		// threadID is tracked to later assert the threadID matches on allocations
-	// TODO: store allocator type, store flags like readonly, over/underflow protection, etc.
+	// TODO: store debug flags like readonly, over/underflow protection, etc.?
 };
 
 
-struct HeapBlock {
-	HeapBlock*		prev;
-	HeapBlock*		next;
-	size_t			size;
+struct HeapAllocation {
+	HeapAllocation*	prev;			// linked list of allocations
+	HeapAllocation*	next;
+	HeapAllocation*	prevFree;		// linked list of free allocations
+	HeapAllocation*	nextFree;
+	u32				offset;			// byte offset from MemoryBlock base to HeapAllocation header
+	u32				size;			// size of block not including 64-byte header
+	u32				requestedSize;	// size requested, which may be smaller than allocation size
+	u16				refCount;		// reference count, optional
+	u8				free;
+	// TODO: store index into freelist acceleration table
+	u8				_padding[13];
+	u32				signature;		// known signature for debug checking that an address passed to freeAlloc is actually
+									// a valid HeapAllocation, the 4 bytes preceding the memory address must contain this value
 };
+static_assert(sizeof(HeapAllocation) == 64, "");
+
 
 struct MemoryHeap {
 	MemoryBlock*	firstBlock;		// beginning of the block list
 	MemoryBlock*	lastBlock;		// end of the block list, new blocks are pushed here
-	HeapBlock*		freeFront;		// first block in the freelist
+	
+	HeapAllocation*	front;			// allocation block linked list, all allocations including those in free list
+	HeapAllocation*	back;
+	HeapAllocation*	freeFront;		// free list of allocation blocks
+	HeapAllocation*	freeBack;
 
-	size_t			totalSize;		// total available capacity in all blocks (not including space for headers)
+	size_t			totalSize;		// total available capacity in all blocks, not including space for the
+									// PlatformBlock headers, but including all space used by HeapAllocation headers
 	u32				numBlocks;
 	u32				threadID;		// threadID is tracked to later assert the threadID matches on allocations
+
+	// TODO: take a bit from numBlocks or totalSize to store whether heap uses freelist acceleration table or not
+	// this table would be allocated alongside MemoryHeap directly following the heap using a new make* function
+	// this heap+table would be allocated in the gameMemory arena, but not part of game state struct since it should
+	// not be serialized
 };
 
 
@@ -89,6 +125,8 @@ struct PlatformMemory {
 };
 
 
+// MemoryArena Functions
+
 MemoryArena makeMemoryArena()
 {
 	MemoryArena arena{};
@@ -101,7 +139,7 @@ void clearArena(
 
 void clearForwardOf(
 	MemoryBlock* blockStart,
-	uintptr_t usedStart);
+	u32 usedStart);
 
 void shrinkArena(
 	MemoryArena& arena);
@@ -114,7 +152,7 @@ void shrinkArena(
  */
 MemoryBlock* pushBlock(
 	MemoryArena& arena,
-	size_t minimumSize = 0);
+	u32 minimumSize = 0);
 
 /**
  * Returns true if the last block is freed, false if the list is empty
@@ -123,17 +161,17 @@ bool popBlock(
 	MemoryArena& arena);
 
 /**
- * Frees a block from any spot within the arena list, or not belonging to an arena.
+ * Frees a block from any spot within the arena list.
  */
-void removeBlock(
+void removeArenaBlock(
 	MemoryBlock* block);
 
 
 struct TemporaryMemory {
 	MemoryBlock*	blockStart;
-	uintptr_t		usedStart;
+	u32				usedStart;
 
-	explicit TemporaryMemory(MemoryBlock* bs, uintptr_t us) :
+	explicit TemporaryMemory(MemoryBlock* bs, u32 us) :
 		blockStart{ bs },
 		usedStart{ us }
 	{}
@@ -196,9 +234,9 @@ void keepTemporaryMemory(
 
 struct ScopedTemporaryMemory {
 	MemoryBlock*	blockStart;
-	uintptr_t		usedStart;
+	u32				usedStart;
 
-	explicit ScopedTemporaryMemory(MemoryBlock* bs, uintptr_t us) :
+	explicit ScopedTemporaryMemory(MemoryBlock* bs, u32 us) :
 		blockStart{ bs },
 		usedStart{ us }
 	{}
@@ -234,7 +272,7 @@ ScopedTemporaryMemory scopedTemporaryMemory(
 struct BlockFitResult {
 	MemoryBlock*	block;
 	void* 			allocAddr;
-	size_t			alignedSize;
+	u32				alignedSize;
 };
 
 
@@ -252,11 +290,10 @@ struct BlockFitResult {
 BlockFitResult getBlockToFit(
 	MemoryArena& arena,
 	MemoryBlock* startBlock,
-	size_t size,
+	u32 size,
 	u32 align);
 
 
-#define PREEMPTIVE_ALLOC_THRESHOLD	4096
 /**
  * Detect when the currentBlock is nearly full and push a new block without moving the pointer
  * forward. This can be done at advantageous times in the game loop to avoid on-demand allocations
@@ -268,8 +305,13 @@ void preemptivelyPushBlock(
 
 void* _allocSize(
 	MemoryArena& arena,
-	size_t size,
+	u32 size,
 	u32 align);
+
+char* allocStringNCopy(
+	MemoryArena& arena,
+	const char* src,
+	u32 size);
 
 char* allocStringCopy(
 	MemoryArena& arena,
@@ -283,5 +325,102 @@ char* allocStringCopy(
 
 #define allocBuffer(arena, size, align) \
 	(u8*)_allocSize(arena, size, align)
+
+
+// MemoryHeap Functions
+
+MemoryHeap makeMemoryHeap()
+{
+	MemoryHeap heap{};
+	heap.threadID = SDL_ThreadID();
+	return heap;
+}
+
+void clearHeap(
+	MemoryHeap& heap);
+
+void shrinkHeap(
+	MemoryHeap& heap);
+
+/**
+ * Adds a new block to the end of the list of at least minimumSize, or the system allocation
+ * granularity, whichever is greater. Block sizes are most likely multiples of 64K on Win32.
+ * The first 64 bytes of a block contains the MemoryBlock header, so the available size returned
+ * in the block will be the total allocation size (multiple of 64K) minus 64.
+ */
+MemoryBlock* pushBlock(
+	MemoryHeap& heap,
+	u32 minimumSize = 0);
+
+/**
+ * Frees a block from any spot within the heap list.
+ */
+void removeHeapBlock(
+	MemoryBlock* block);
+
+/**
+ * Starting at the front of the freelist and moving along the list, looks for the first allocation
+ * with room for the requested allocation size, plus an alignment offset if necessary. If the end
+ * of the freelist is reached with no result, a new block is pushed.
+ */
+HeapAllocation* getAllocationToFit(
+	MemoryHeap& heap,
+	u32 size);
+
+
+/**
+ * Detect when the heap is nearly full and push a new block. This can be done at advantageous
+ * times in the game loop to avoid on-demand allocations within the critical path resulting in
+ * frame stutters.
+ */
+void preemptivelyPushBlock(
+	MemoryHeap& heap);
+
+
+void* _heapAllocSize(
+	MemoryHeap& heap,
+	u32 size,
+	bool clearToZero = true);
+
+char* heapAllocStringNCopy(
+	MemoryHeap& heap,
+	const char* src,
+	u32 size);
+
+char* heapAllocStringCopy(
+	MemoryHeap& heap,
+	const char* src);
+
+#define heapAllocType(arena, Type) \
+	(Type*)_heapAllocSize(arena, sizeof(Type), true)
+
+#define heapAllocArrayOfType(arena, Type, n) \
+	(Type*)_heapAllocSize(arena, sizeof(Type)*n, true)
+
+#define heapAllocBuffer(arena, size, clearToZero) \
+	(u8*)_heapAllocSize(arena, size, clearToZero)
+
+
+/**
+ * Frees a heap allocation. Pass the data address, not the address of the HeapAllocation header.
+ * Calling freeAlloc directly when there is a refCount remaining asserts.
+ */
+void freeAlloc(void* addr);
+
+/**
+ * Increments the reference count for a heap allocation. Pass the data address, not the address of
+ * the HeapAllocation header. Once the first call to addRef is made, the memory becomes reference
+ * counted, and must be freed via symmetric calls to releaseRef.
+ * @returns the new reference count
+ */
+u16 addRef(void* addr);
+
+/**
+ * Decrements the reference count for a heap allocation. Pass the data address, not the address of
+ * the HeapAllocation header. Calls to releaseRef for a non-reference-counted allocation asserts.
+ * If the reference count remaining is 0, the allocation is freed.
+ * @returns the new reference count
+ */
+u16 releaseRef(void* addr);
 
 #endif

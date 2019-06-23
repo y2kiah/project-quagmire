@@ -22,7 +22,8 @@ static PlatformApi* _platformApi = nullptr;
 #include "platform/timer.cpp"
 #include "platform/platform.cpp"
 #include "input/platform_input.cpp"
-#include "utility/memory.cpp"
+#include "utility/memory_arena.cpp"
+#include "utility/memory_heap.cpp"
 
 
 bool initApplication()

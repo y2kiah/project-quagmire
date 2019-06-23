@@ -1,13 +1,24 @@
+// Memory system
+
+// this is always rounded up to the nearest multiple of allocationGranularity queried from the
+// system, however it may be beneficial to make the smallest platform blocks significantly larger
+// than the granularity
+#define MEMORY_MIN_PLATFORM_ALLOC_SIZE				64000
+// 8 blocks of 64 bytes
+#define MEMORY_HEAP_MIN_SPLIT_SIZE					512
+
+#define MEMORY_ARENA_PREEMPTIVE_ALLOC_THRESHOLD		4096
+
 // Storage first block size
-#define INIT_TRANSIENT_BLOCK_MEGABYTES      		64
-#define INIT_FRAMESCOPED_BLOCK_MEGABYTES        	64
+#define INIT_TRANSIENT_BLOCK_MEGABYTES				64
+#define INIT_FRAMESCOPED_BLOCK_MEGABYTES			64
 
 // File search recursion
-#define MAX_FILE_RECURSION_DEPTH                    10
+#define MAX_FILE_RECURSION_DEPTH					10
 
 // Logger
 // maximum number of messages that can build up in concurrent queue before it is flushed (per frame)
-#define LOGGER_CAPACITY				                50
+#define LOGGER_CAPACITY								50
 
 // Game Input
 #define PLATFORMINPUT_EVENTSQUEUE_CAPACITY			64

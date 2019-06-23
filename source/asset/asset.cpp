@@ -1,6 +1,7 @@
 #include "asset.h"
 #include "platform/platform_api.h"
 #include "utility/hash.h"
+#include <cstdio>
 
 
 #define ASSET_PACK_CODE	(((u32)'P' << 0) | ((u32)'A' << 8) | ((u32)'C' << 16) | ((u32)'K' << 24))
@@ -48,7 +49,7 @@ void collectAsset(
 	ca.assetId = crc32(filePath, filePathLen);
 	ca.sizeBytes = sizeBytes;
 	ca.pathStringSize = filePathLen;
-	collectedAsset->pathString = allocStringCopy(taskMem, filePath, filePathLen);
+	collectedAsset->pathString = allocStringNCopy(taskMem, filePath, filePathLen);
 }
 
 
@@ -206,8 +207,8 @@ AssetPack* buildAssetPackFromDirectory(
 
 
 h32 openAssetPackFile(
-	const char* filename,
 	AssetStore& store,
+	const char* filename,
 	MemoryArena& transient)
 {
 	h32 handle = null_h32;
@@ -241,6 +242,8 @@ h32 openAssetPackFile(
 }
 
 
+// TODO: replace CRT FILE* ops with platform-specific File I/O
+// https://docs.microsoft.com/en-us/windows/desktop/FileIO/i-o-concepts
 u8* loadAssetDataFromPack(
 	u32 assetId,
 	LoadedAssetPack& pack,
@@ -249,6 +252,9 @@ u8* loadAssetDataFromPack(
 	assert(pack.pakFile);
 	u8* assetBuffer = nullptr;
 	
+	// TODO: test search by cache line, compare <=> to last element on a cache line
+	// walk backwards if <, jump to end of next cache line if >, repeat
+	// could lead to faster overall performace due to better pre-cache prediction
 	u32* pId = (u32*)
 		bsearch(
 			&assetId,
@@ -269,4 +275,13 @@ u8* loadAssetDataFromPack(
 	}
 
 	return assetBuffer;
+}
+
+
+int fileChangeCallback(
+	PlatformWatchEventType changeType,
+	void* userData,
+	MemoryArena& taskMemory)
+{
+	return 0;
 }
