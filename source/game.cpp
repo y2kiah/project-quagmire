@@ -450,6 +450,9 @@ extern "C" {
 			gameMemory->frameScoped = makeMemoryArena();
 			_allocSize(gameMemory->frameScoped, megabytes(INIT_FRAMESCOPED_BLOCK_MEGABYTES), 16);
 
+			gameMemory->resourceHeap = makeMemoryHeap();
+			_heapAllocSize(gameMemory->resourceHeap, megabytes(INIT_RESOURCEHEAP_BLOCK_MEGABYTES), false);
+
 			_game = makeGame(*gameMemory, *app);
 			
 			gameMemory->initialized = true;

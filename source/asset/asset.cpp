@@ -209,7 +209,7 @@ AssetPack* buildAssetPackFromDirectory(
 h32 openAssetPackFile(
 	AssetStore& store,
 	const char* filename,
-	MemoryArena& transient)
+	MemoryHeap& heap)
 {
 	h32 handle = null_h32;
 	LoadedAssetPack loadedPack{};
@@ -226,7 +226,7 @@ h32 openAssetPackFile(
 		u32 loadSize = tmp.assetDataOffset;
 		
 		rewind(loadedPack.pakFile);
-		u8* buf = allocBuffer(transient, loadSize, 64);
+		u8* buf = heapAllocBuffer(heap, loadSize, false);
 		
 		tmp.assetIds = (u32*)(buf + sizeof(AssetPack));
 		tmp.assetInfo = (AssetInfo*)(buf + tmp.assetInfoOffset);
@@ -242,12 +242,12 @@ h32 openAssetPackFile(
 }
 
 
-// TODO: replace CRT FILE* ops with platform-specific File I/O
+// TODO: replace FILE* ops with platform-specific File I/O
 // https://docs.microsoft.com/en-us/windows/desktop/FileIO/i-o-concepts
 u8* loadAssetDataFromPack(
 	u32 assetId,
 	LoadedAssetPack& pack,
-	MemoryArena& transient) // TODO: pass an asset heap instead of a MemoryArena
+	MemoryHeap& heap)
 {
 	assert(pack.pakFile);
 	u8* assetBuffer = nullptr;
@@ -268,9 +268,8 @@ u8* loadAssetDataFromPack(
 		AssetInfo& assetInfo = pack.info->assetInfo[index];
 		
 		fseek(pack.pakFile, pack.info->assetDataOffset + assetInfo.offset, SEEK_SET);
-		// TODO: get this from an asset heap, not a linear arena
-		// 16 byte align the asset in case we use SSE for processing
-		assetBuffer = allocBuffer(transient, assetInfo.size, 16);
+		
+		assetBuffer = heapAllocBuffer(heap, assetInfo.size, false);
 		fread(assetBuffer, 1, assetInfo.size, pack.pakFile);
 	}
 

@@ -2,6 +2,75 @@
 #include "platform/platform_api.h"
 
 
+u8 getFreeTableListIndexForSize(u32 size)
+{
+	for (u8 li = 8; li >= 0; --li) {
+		u32 listUpToSize = 1024 * (1 << (li * 2));
+		if (size <= listUpToSize) {
+			return li;
+		}
+	}
+	return UCHAR_MAX;
+}
+
+void addAllocationToFreeTable(
+	MemoryHeap& heap,
+	HeapAllocation* halloc)
+{
+	assert(halloc->free && halloc->freeTableIdx == UCHAR_MAX);
+	
+	if (heap.freeTable) {
+		HeapFreeTable& freeTable = *(HeapFreeTable*)((uintptr_t)&heap + sizeof(MemoryHeap));
+		
+		u8 li = getFreeTableListIndexForSize(halloc->size);
+		if (li != UCHAR_MAX)
+		{
+			u8 freeCount = freeTable.freeCounts[li];
+			if (freeCount < MEMORY_HEAP_FREETABLE_CAPACITY) {
+				HeapFreeIndex& hfi = freeTable.freeLists[li][freeCount];
+				hfi.heapAlloc = halloc;
+				hfi.size = halloc->size;
+				++freeTable.freeCounts[li];
+				halloc->freeTableIdx = freeCount;
+			}
+		}
+	}
+}
+
+
+void removeAllocationFromFreeTable(
+	MemoryHeap& heap,
+	HeapAllocation* halloc)
+{
+	assert(halloc->free);
+	if (heap.freeTable && halloc->freeTableIdx != UCHAR_MAX) {
+		HeapFreeTable& freeTable = *(HeapFreeTable*)((uintptr_t)&heap + sizeof(MemoryHeap));
+		
+		u8 li = getFreeTableListIndexForSize(halloc->size);
+		
+		assert(li != UCHAR_MAX);
+		assert(freeTable.freeLists[li][halloc->freeTableIdx].heapAlloc == halloc);
+
+		u8 freeCount = freeTable.freeCounts[li];
+		if (freeCount - 1 != halloc->freeTableIdx) {
+			freeTable.freeLists[li][halloc->freeTableIdx] =
+				freeTable.freeLists[li][freeCount - 1];
+		}
+		++freeTable.freeCounts[li];	
+		halloc->freeTableIdx = UCHAR_MAX;
+	}
+}
+
+
+inline bool allocationIsWithinBlock(
+	HeapAllocation* ha,
+	MemoryBlock& block)
+{
+	return ((uintptr_t)ha >= (uintptr_t)block.base
+			&& (uintptr_t)ha <= (uintptr_t)block.base + block.size);
+}
+
+
 MemoryBlock* pushBlock(
 	MemoryHeap& heap,
 	u32 minimumSize)
@@ -12,14 +81,20 @@ MemoryBlock* pushBlock(
 	minimumSize += sizeof(HeapAllocation);
 	// MemoryBlock safe to cast directly from PlatformBlock, it is asserted to be the base member
 	MemoryBlock* newBlock = (MemoryBlock*)platformApi().allocate(minimumSize);
+	newBlock->heap = &heap;
 	newBlock->blockType = MemoryBlock::HeapBlock;
 	newBlock->numAllocs = 1;
 	newBlock->used = sizeof(HeapAllocation);
 
 	HeapAllocation* halloc = (HeapAllocation*)newBlock->base;
+	
 	// clear memory to zero
 	*halloc = HeapAllocation{};
+	
 	halloc->size = newBlock->size - sizeof(HeapAllocation);
+	halloc->offset = (u32)((uintptr_t)halloc - (uintptr_t)newBlock);
+	assert(halloc->size % 64 == 0 && halloc->offset == 64);
+
 	// put new block's allocation at the back of the list
 	halloc->prev = heap.back;
 	heap.back = halloc;
@@ -29,12 +104,16 @@ MemoryBlock* pushBlock(
 
 	// put the allocation at the back of the freelist
 	halloc->free = 1;
+	halloc->freeTableIdx = UCHAR_MAX;
 	halloc->prevFree = heap.freeBack;
 	heap.freeBack = halloc;
 	if (!heap.freeFront) {
 		heap.freeFront = halloc;
 	}
 
+	addAllocationToFreeTable(heap, halloc);
+
+	// add to back of heap block linked list
 	newBlock->prev = heap.lastBlock;
 	if (heap.lastBlock) {
 		heap.lastBlock->next = newBlock;
@@ -88,10 +167,12 @@ void removeHeapBlock(
 				lastFreeBeforeBlock = ha->prevFree;
 			}
 			firstFreeAfterBlock = ha->nextFree;
+			removeAllocationFromFreeTable(heap, ha);
 		}
 		ha = ha->next;
 	}
-	while (ha && (uintptr_t)ha <= (uintptr_t)block->base + block->size);
+	while (ha && allocationIsWithinBlock(ha, *block));
+
 	HeapAllocation* firstAfterBlock = ha;
 
 	if (lastBeforeBlock) {
@@ -128,32 +209,82 @@ HeapAllocation* getAllocationToFit(
 	MemoryHeap& heap,
 	u32 size)
 {
-	u32 requestedSize = size;
 	size = _align(size, 64); // size allocated in 64 byte chunks
 
-	HeapAllocation *ha = heap.freeFront;
-	// find first allocation to fit
-	while (ha && ha->size < size) {
-		ha = ha->nextFree;
+	HeapAllocation *ha = nullptr;
+
+	// use freetable to find an allocation
+	if (heap.freeTable && heap.freeFront && size <= megabytes(16))
+	{
+		HeapFreeTable& freeTable = *(HeapFreeTable*)((uintptr_t)&heap + sizeof(MemoryHeap));
+		if (freeTable.hasFree) {
+			for (u8 li = 0; li < 8; ++li)
+			{
+				u32 listUpToSize = 1024 * (1 << (li * 2));
+				if (size <= listUpToSize && freeTable.freeCounts[li])
+				{
+					// find smallest allocation in the list to fit
+					u32 smallest = UINT32_MAX;
+					u16 smallestIdx = UINT16_MAX;
+					for (u16 hfi = 0; hfi < freeTable.freeCounts[li]; ++hfi)
+					{
+						u32 freeAllocSize = freeTable.freeLists[li][hfi].size;
+						if (freeAllocSize < smallest) {
+							smallest = freeTable.freeLists[li][hfi].size;
+							smallestIdx = hfi;
+						}
+					}
+					ha = freeTable.freeLists[li][smallestIdx].heapAlloc;
+					break;
+				}
+			}
+		}
 	}
+
+	// walk freelist to find an allocation
+	if (!ha && heap.freeFront) {
+		ha = heap.freeFront;
+		// find first allocation to fit
+		while (ha && ha->size < size) {
+			ha = ha->nextFree;
+		}
+	}
+	
 	// or push a new block
 	if (!ha) {
 		pushBlock(heap, size);
 		ha = heap.freeFront;
 	}
+	
+	return ha;
+}
+
+
+/**
+ * Calling this function assumes you will be allocating the first part of the split while the
+ * remaining size is added to the free list.
+ */
+HeapAllocation* splitAllocationForSize(
+	MemoryHeap& heap,
+	HeapAllocation* ha,
+	u32 size)
+{
+	size = _align(size, 64); // size allocated in 64 byte chunks
 
 	MemoryBlock& block = *(MemoryBlock*)((uintptr_t)ha - ha->offset);
-	
+
 	// split the allocation if it's too large and the remaining space could fit another allocation
 	// of adequate size, including the new HeapAllocation header
 	if (ha->size - size - sizeof(HeapAllocation) >= MEMORY_HEAP_MIN_SPLIT_SIZE)
 	{
+		removeAllocationFromFreeTable(heap, ha);
+		
 		HeapAllocation* newAlloc = (HeapAllocation*)((uintptr_t)ha + sizeof(HeapAllocation) + size);
 		*newAlloc = HeapAllocation{}; // clear memory to zero
 		newAlloc->offset = ha->offset + sizeof(HeapAllocation) + size;
 		newAlloc->size = ha->size - size - sizeof(HeapAllocation);
 		ha->size = size;
-		assert((uintptr_t)newAlloc == (uintptr_t)ha + newAlloc->offset);
+		assert((uintptr_t)newAlloc == (uintptr_t)&block + newAlloc->offset);
 		++block.numAllocs;
 		block.used += sizeof(HeapAllocation);
 		
@@ -168,6 +299,7 @@ HeapAllocation* getAllocationToFit(
 		ha->next = newAlloc;
 
 		newAlloc->free = 1;
+		newAlloc->freeTableIdx = UCHAR_MAX;
 		newAlloc->prevFree = ha;
 		if (ha->nextFree) {
 			ha->nextFree->prevFree = newAlloc;
@@ -177,8 +309,10 @@ HeapAllocation* getAllocationToFit(
 		}
 		newAlloc->nextFree = ha->nextFree;
 		ha->nextFree = newAlloc;
+
+		addAllocationToFreeTable(heap, newAlloc);
+		addAllocationToFreeTable(heap, ha);
 	}
-	
 	return ha;
 }
 
@@ -203,7 +337,16 @@ void clearHeap(
 		platformApi().deallocate((PlatformBlock*)block);
 		block = next;
 	}
-	heap = makeMemoryHeap();
+	
+	if (heap.freeTable) {
+		HeapFreeTable& freeTable = *(HeapFreeTable*)((uintptr_t)&heap + sizeof(MemoryHeap));
+		freeTable.hasFree = 0;
+		heap = makeMemoryHeap();
+		heap.freeTable = 1;
+	}
+	else {
+		heap = makeMemoryHeap();
+	}
 }
 
 
@@ -229,10 +372,15 @@ void* _heapAllocSize(
 {
 	assert(heap.threadID == SDL_ThreadID() && "MemoryHeap thread mismatch");
 
-	HeapAllocation* ha = getAllocationToFit(heap, size);
+	HeapAllocation* ha =
+		splitAllocationForSize(
+			heap,
+			getAllocationToFit(heap, size),
+			size);
 	MemoryBlock& block = *(MemoryBlock*)((uintptr_t)ha - ha->offset);
 	block.used += ha->size;
 	// remove allocation from freelist
+	removeAllocationFromFreeTable(heap, ha);
 	ha->free = 0;
 	ha->requestedSize = size;
 	ha->signature = HEAP_ALLOCATION_SIGNATURE;
@@ -287,27 +435,33 @@ void freeAlloc(void* addr)
 	MemoryHeap& heap = *block.heap;
 
 	// check if we can merge into the previous allocation
-	if (ha->prev && ha->prev->free)
+	if (ha->prev
+		&& ha->prev->free
+		&& allocationIsWithinBlock(ha->prev, block))
 	{
+		HeapAllocation* merge = ha->prev;
+		removeAllocationFromFreeTable(heap, merge);
+
 		if (ha->next) {
-			ha->next->prev = ha->prev;
+			ha->next->prev = merge;
 		}
 		else {
-			heap.back = ha->prev;
+			heap.back = merge;
 		}
-		ha->prev->next = ha->next;
+		merge->next = ha->next;
 		
 		u32 mergedSize = (u32)sizeof(HeapAllocation) + ha->size;
-		ha->prev->size += mergedSize;
+		merge->size += mergedSize;
 
 		--block.numAllocs;
 		block.used -= mergedSize;
 		
-		ha = ha->prev;
+		ha = merge;
 	}
 	// if we can't merge with previous allocation, make this allocation free
 	else {
 		ha->free = 1;
+		ha->freeTableIdx = UCHAR_MAX;
 		ha->signature = 0;
 		ha->requestedSize = 0;
 
@@ -321,9 +475,13 @@ void freeAlloc(void* addr)
 	}
 
 	// check if we can merge with the next allocation
-	if (ha->next && ha->next->free)
+	if (ha->next
+		&& ha->next->free
+		&& allocationIsWithinBlock(ha->next, block))
 	{
 		HeapAllocation* merge = ha->next;
+		removeAllocationFromFreeTable(heap, merge);
+
 		if (merge->next) {
 			merge->next->prev = ha;
 		}
@@ -351,6 +509,8 @@ void freeAlloc(void* addr)
 		--block.numAllocs;
 		block.used -= sizeof(HeapAllocation);
 	}
+
+	addAllocationToFreeTable(heap, ha);
 }
 
 u16 addRef(void* addr)

@@ -156,6 +156,7 @@ struct GameMemory {
 	MemoryArena		gameState;
 	MemoryArena		transient;
 	MemoryArena		frameScoped;
+	MemoryHeap		resourceHeap;
 	Game*			game;		// Note: using void* here to avoid having to declare Game struct on the platform side
 	bool			initialized;
 };

@@ -1,17 +1,19 @@
 // Memory system
 
 // this is always rounded up to the nearest multiple of allocationGranularity queried from the
-// system, however it may be beneficial to make the smallest platform blocks significantly larger
-// than the granularity
-#define MEMORY_MIN_PLATFORM_ALLOC_SIZE				64000
+// system, however it may be beneficial to make the smallest platform blocks larger than the
+// granularity size
+#define MEMORY_MIN_PLATFORM_ALLOC_SIZE				65536
 // 8 blocks of 64 bytes
 #define MEMORY_HEAP_MIN_SPLIT_SIZE					512
+#define MEMORY_HEAP_FREETABLE_CAPACITY		        8
 
 #define MEMORY_ARENA_PREEMPTIVE_ALLOC_THRESHOLD		4096
 
 // Storage first block size
 #define INIT_TRANSIENT_BLOCK_MEGABYTES				64
 #define INIT_FRAMESCOPED_BLOCK_MEGABYTES			64
+#define INIT_RESOURCEHEAP_BLOCK_MEGABYTES           256
 
 // File search recursion
 #define MAX_FILE_RECURSION_DEPTH					10

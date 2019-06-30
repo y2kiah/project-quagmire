@@ -72,8 +72,8 @@ struct HeapAllocation {
 	u32				requestedSize;	// size requested, which may be smaller than allocation size
 	u16				refCount;		// reference count, optional
 	u8				free;
-	// TODO: store index into freelist acceleration table
-	u8				_padding[13];
+	u8				freeTableIdx;	// index in heap's free table (if exists) or 0xFF if not in table
+	u8				_padding[12];
 	u32				signature;		// known signature for debug checking that an address passed to freeAlloc is actually
 									// a valid HeapAllocation, the 4 bytes preceding the memory address must contain this value
 };
@@ -91,13 +91,11 @@ struct MemoryHeap {
 
 	size_t			totalSize;		// total available capacity in all blocks, not including space for the
 									// PlatformBlock headers, but including all space used by HeapAllocation headers
-	u32				numBlocks;
-	u32				threadID;		// threadID is tracked to later assert the threadID matches on allocations
+	
+	u32				numBlocks : 31;
+	u32				freeTable : 1;
 
-	// TODO: take a bit from numBlocks or totalSize to store whether heap uses freelist acceleration table or not
-	// this table would be allocated alongside MemoryHeap directly following the heap using a new make* function
-	// this heap+table would be allocated in the gameMemory arena, but not part of game state struct since it should
-	// not be serialized
+	u32				threadID;		// threadID is tracked to later assert the threadID matches on allocations
 };
 
 
@@ -333,6 +331,56 @@ MemoryHeap makeMemoryHeap()
 {
 	MemoryHeap heap{};
 	heap.threadID = SDL_ThreadID();
+	return heap;
+}
+
+
+struct HeapFreeIndex {
+	HeapAllocation*	heapAlloc;
+	u32				size;
+	u32				_padding;
+};
+
+constexpr const int MHFC = MEMORY_HEAP_FREETABLE_CAPACITY;
+
+struct HeapFreeTable {
+	union {
+		struct {
+			HeapFreeIndex	free1K[MHFC];	// [512, 1K]
+			HeapFreeIndex	free4K[MHFC];	// (1K,4K]
+			HeapFreeIndex	free16K[MHFC];	// (4K,16K]
+			HeapFreeIndex	free64K[MHFC];	// (16K,64K]
+			HeapFreeIndex	free256K[MHFC];	// (64K,256K]
+			HeapFreeIndex	free1M[MHFC];	// (256K,1M]
+			HeapFreeIndex	free4M[MHFC];	// (1M,4M]
+			HeapFreeIndex	free16M[MHFC];	// (4M,16M]
+		};
+		HeapFreeIndex	freeLists[8][MHFC];
+	};
+	union {
+		struct {
+			u8	count1K;
+			u8	count4K;
+			u8	count16K;
+			u8	count64K;
+			u8	count256K;
+			u8	count1M;
+			u8	count4M;
+			u8	count16M;
+		};
+		u8		freeCounts[8];
+		u64		hasFree;
+	};
+};
+
+
+MemoryHeap* makeMemoryHeapWithFreeTable(
+	MemoryArena& arena)
+{
+	u32 totalSize = sizeof(MemoryHeap) + sizeof(HeapFreeTable);
+	MemoryHeap* heap = (MemoryHeap*)allocBuffer(arena, totalSize, alignof(MemoryHeap));
+	heap->threadID = SDL_ThreadID();
+	heap->freeTable = 1;
 	return heap;
 }
 

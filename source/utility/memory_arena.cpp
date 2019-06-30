@@ -10,7 +10,7 @@ MemoryBlock* pushBlock(
 
 	// MemoryBlock safe to cast directly from PlatformBlock, it is asserted to be the base member
 	MemoryBlock* newBlock = (MemoryBlock*)platformApi().allocate(minimumSize);
-	
+	newBlock->arena = &arena;
 	newBlock->blockType = MemoryBlock::ArenaBlock;
 	newBlock->prev = arena.lastBlock;
 	if (arena.lastBlock) {
