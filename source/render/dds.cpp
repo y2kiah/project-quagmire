@@ -315,8 +315,7 @@ namespace render
 			fseek(fp, 0, SEEK_END);
 			
 			u32 size = ftell(fp);
-			ScopedTemporaryMemory temp = scopedTemporaryMemory(transient);
-			u8* dataPtr = (u8*)allocArrayOfType(transient, u8, size);
+			u8* dataPtr = allocBuffer(transient, size, 8);
 			
 			fread(dataPtr, 1, size, fp);
 			fclose(fp);
@@ -331,7 +330,7 @@ namespace render
 	DDSTexture &DDSImage::operator[](u32 index)
 	{
 		// make sure an image has been loaded
-		assert(valid && index < (u32)images.size());
+		assert(valid && index < numImages);
 
 		return images[index];
 	}
@@ -344,8 +343,10 @@ namespace render
 		return images[0];
 	}
 
-	// uploads a compressed/uncompressed 1D texture
-	bool DDSImage::upload_texture1D()
+	/**
+	 * uploads a compressed/uncompressed 1D texture
+	 */
+	void DDSImage::upload_texture1D()
 	{
 		assert(valid && images[0] && images[0].height == 1 && images[0].width > 0);
 
@@ -389,24 +390,26 @@ namespace render
 				//glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAX_LEVEL, numMipMaps);
 			}
 		}
-
-		return true;
 	}
 
-	// uploads a compressed/uncompressed 2D texture
-	//
-	// imageIndex - allows you to optionally specify other loaded surfaces for 2D
-	//              textures such as a face in a cubemap or a slice in a volume
-	//
-	//              default: 0
-	//
-	// target     - allows you to optionally specify a different texture target for
-	//              the 2D texture such as a specific face of a cubemap
-	//
-	//              default: GL_TEXTURE_2D
-	bool DDSImage::upload_texture2D(u32 imageIndex, GLenum target)
+	/**
+	 * uploads a compressed/uncompressed 2D texture
+	 * 
+	 * imageIndex - allows you to optionally specify other loaded surfaces for 2D
+	 *              textures such as a face in a cubemap or a slice in a volume
+	 * 
+	 *              default: 0
+	 * 
+	 * target     - allows you to optionally specify a different texture target for
+	 *              the 2D texture such as a specific face of a cubemap
+	 * 
+	 *              default: GL_TEXTURE_2D
+	 */
+	void DDSImage::upload_texture2D(
+		u32 imageIndex,
+		GLenum target)
 	{
-		assert(valid && imageIndex >= 0 && imageIndex < (u32)images.size());
+		assert(valid && imageIndex >= 0 && imageIndex < numImages);
 		assert(images[imageIndex] && images[imageIndex].height > 0 && images[imageIndex].width > 0);
 		assert(target == GL_TEXTURE_2D || (target >= GL_TEXTURE_CUBE_MAP_POSITIVE_X && target <= GL_TEXTURE_CUBE_MAP_NEGATIVE_Z));
 
@@ -452,26 +455,23 @@ namespace render
 		}
 
 		ASSERT_GL_ERROR;
-		return true;
 	}
 
-	bool DDSImage::upload_textureRectangle()
+	void DDSImage::upload_textureRectangle()
 	{
-		assert(valid && images.size() >= 1);
+		assert(valid && numImages >= 1);
 
-		if (!upload_texture2D(0, GL_TEXTURE_RECTANGLE)) {
-			return false;
-		}
-
-		return true;
+		upload_texture2D(0, GL_TEXTURE_RECTANGLE);
 	}
 
-	// uploads a compressed/uncompressed cubemap texture
-	bool DDSImage::upload_textureCubemap(bool swapY)
+	/**
+	 * uploads a compressed/uncompressed cubemap texture
+	 */
+	void DDSImage::upload_textureCubemap(
+		bool swapY)
 	{
-		assert(valid && cubemap && images.size() == 6);
+		assert(valid && cubemap && numImages == 6);
 
-		bool result = true;
 		u32 numMipMaps = images[0].numMipmaps;
 
 		glTexStorage2D(GL_TEXTURE_CUBE_MAP, numMipMaps + 1, internalFormat, images[0].width, images[0].height);
@@ -490,15 +490,16 @@ namespace render
 				target = GL_TEXTURE_CUBE_MAP_POSITIVE_Y;
 			}
 
-			result = upload_texture2D(n, target);
+			upload_texture2D(n, target);
 		}
 
 		ASSERT_GL_ERROR;
-		return result;
 	}
 
-	// uploads a compressed/uncompressed 3D texture
-	bool DDSImage::upload_texture3D()
+	/**
+	 * uploads a compressed/uncompressed 3D texture
+	 */
+	void DDSImage::upload_texture3D()
 	{
 		assert(valid && volume && images[0].depth >= 1);
 
@@ -540,7 +541,6 @@ namespace render
 				//glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAX_LEVEL, numMipMaps);
 			}
 		}
-		return true;
 	}
 
 	// clamps input size to [1-size]

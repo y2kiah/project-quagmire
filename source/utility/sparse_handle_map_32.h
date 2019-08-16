@@ -56,7 +56,6 @@ struct SparseHandleMap32 {
 	 * Constructor
 	 * @param	elementSizeB	size in bytes of individual objects stored
 	 * @param	capacity		maximum number of objects that can be stored
-	 * @param	itemTypeId		typeId used by the h64::typeId variable for this container
 	 * @param	buffer
 	 *	Optional pre-allocated buffer for all dynamic storage used in the SparseHandleMap32, with ample
 	 *	size (obtained by call to getTotalBufferSize). If passed, the memory is not owned by
@@ -66,10 +65,9 @@ struct SparseHandleMap32 {
 	explicit SparseHandleMap32(
 		u16 _elementSizeB,
 		u32 _capacity,
-		u16 itemTypeId = 0,
 		void* buffer = nullptr)
 	{
-		init(_elementSizeB, _capacity, itemTypeId, buffer);
+		init(_elementSizeB, _capacity, buffer);
 	}
 
 	explicit SparseHandleMap32() {}
@@ -102,9 +100,13 @@ struct SparseHandleMap32 {
 	 * initialization.
 	 * @param[in]	src		optional pointer to an object to copy into inner storage
 	 * @param[out]	out		optional return pointer to the new object
+	 * @param		typeId	typeId used by the h64::typeId variable for this container
 	 * @returns the id
 	 */
-	h64 insert(void* src = nullptr, void** out = nullptr);
+	h64 insert(
+		void* src = nullptr,
+		void** out = nullptr,
+		u16 typeId = 0);
 
 	/**
 	 * Removes all items by adding each entry to the free-list and leaving its generation intact.
@@ -164,7 +166,6 @@ struct SparseHandleMap32 {
 
 	void init(u16 elementSizeB,
 			  u32 capacity,
-			  u16 itemTypeId = 0,
 			  void* buffer = nullptr);
 
 	void deinit();
@@ -178,7 +179,10 @@ size_t SparseHandleMap32::getTotalBufferSize(u16 elementSizeB, u32 capacity)
 }
 
 
-h64 SparseHandleMap32::insert(void* src, void** out)
+h64 SparseHandleMap32::insert(
+	void* src,
+	void** out,
+	u16 typeId)
 {
 	assert(length < capacity && "SparseHandleMap32 is full");
 	h64 handle = null_h64;
@@ -192,6 +196,7 @@ h64 SparseHandleMap32::insert(void* src, void** out)
 		i.header->next = index;
 		++i.header->generation;
 		i.header->free = 0;
+		i.header->typeId = typeId;
 		
 		handle = *(h64*)i.header;
 		
@@ -261,14 +266,12 @@ void SparseHandleMap32::clear()
 
 void SparseHandleMap32::reset()
 {
-	u16 typeId = ((Header*)items)->typeId;
-
 	#if defined(QUAGMIRE_SLOWCHECKS) && QUAGMIRE_SLOWCHECKS != 0
 	// clear item memory to zero (slow build only) to help in debugging
 	memset(items, 0, capacity * (elementSizeB + sizeof(Header)));
 	#endif
 
-	Header h = { 0, typeId, 0, 1 };
+	Header h = { 0, 0, 0, 1 };
 	uintptr_t item = (uintptr_t)items;
 	for (u32 i = 0; i < capacity; ++i) {
 		++h.next;
@@ -309,7 +312,6 @@ uintptr_t SparseHandleMap32::has(h64 handle)
 void SparseHandleMap32::init(
 	u16 _elementSizeB,
 	u32 _capacity,
-	u16 itemTypeId,
 	void* buffer)
 {
 	elementSizeB = _elementSizeB;
@@ -326,7 +328,6 @@ void SparseHandleMap32::init(
 	items = buffer;
 
 	// reset to set up the sparseIds freelist
-	((Header*)items)->typeId = itemTypeId;
 	reset();
 }
 
@@ -357,13 +358,13 @@ void SparseHandleMap32::deinit()
 		static size_t getTotalBufferSize(u32 capacity)\
 											{ return SparseHandleMap32::getTotalBufferSize(TypeSize, capacity); }\
 		explicit Name(u32 _capacity, void* buffer = nullptr)\
-											{ _map.init(TypeSize, _capacity, TypeId, buffer); }\
+											{ _map.init(TypeSize, _capacity, buffer); }\
 		explicit Name() {}\
 		Type* at(h64 handle)				{ return (Type*)_map.at(handle); }\
 		Type* operator[](h64 handle)		{ return at(handle); }\
 		bool erase(h64 handle)				{ return _map.erase(handle); }\
-		h64 insert(Type* src = nullptr, Type** out = nullptr)\
-											{ return _map.insert((void*)src, (void**)out); }\
+		h64 insert(Type* src = nullptr, Type** out = nullptr, u16 typeId = TypeId)\
+											{ return _map.insert((void*)src, (void**)out, typeId); }\
 		void clear()						{ _map.clear(); }\
 		void reset()						{ _map.reset(); }\
 		uintptr_t has(h64 handle)			{ return _map.has(handle); }\
@@ -372,8 +373,42 @@ void SparseHandleMap32::deinit()
 			return Item{ i.header, (Type*)i.data };\
 		}\
 		void init(u32 capacity, void* buffer = nullptr)\
-											{ _map.init(TypeSize, capacity, TypeId, buffer); }\
+											{ _map.init(TypeSize, capacity, buffer); }\
 		void deinit()						{ _map.deinit(); }\
 	};
+
+// Macro like SparseHandleMap32Typed but also internally includes the storage buffer, so there is no
+// need to call init or create the buffer externally
+#define SparseHandleMap32TypedWithBuffer(Type, Name, HndType, TypeId, _capacity) \
+	struct Name {\
+		enum { TypeSize = sizeof(Type) };\
+		struct Item { SparseHandleMap32::Header* header; Type* data; };\
+		SparseHandleMap32 _map;\
+		u8 _buffer[(sizeof(Type) + sizeof(SparseHandleMap32::Header)) * _capacity];\
+		static_assert(is_aligned(sizeof(Name::_buffer),8),"sizeof items array must be a multiple of 8");\
+		static size_t getTotalBufferSize(u32 capacity) {\
+			return sizeof(_buffer);\
+		}\
+		explicit Name()	: _buffer{} {\
+			_map.init(TypeSize, _capacity, &_buffer);\
+		}\
+		Type* at(HndType handle)			{ return (Type*)_map.at(handle); }\
+		Type* operator[](HndType handle)	{ return at(handle); }\
+		bool erase(HndType handle)			{ return _map.erase(handle); }\
+		HndType insert(Type* src = nullptr, Type** out = nullptr, u8 typeId = TypeId) {\
+			return _map.insert((void*)src, (void**)out, typeId);\
+		}\
+		void clear()						{ _map.clear(); }\
+		void reset()						{ _map.reset(); }\
+		uintptr_t has(HndType handle)		{ return _map.has(handle); }\
+		inline Item item(u32 index) {\
+			SparseHandleMap32::Item i = _map.item(index);\
+			return Item{ i.header, (Type*)i.data };\
+		}\
+		void init(u32 capacity, void* buffer = nullptr)\
+											{ _map.init(TypeSize, capacity, buffer); }\
+		void deinit()						{ _map.deinit(); }\
+	};\
+	static_assert(std::is_same<h64,HndType>::value, #HndType " must be typedef h64");
 
 #endif

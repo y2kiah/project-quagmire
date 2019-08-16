@@ -44,6 +44,8 @@
 #define megabytes(v)    kilobytes(v)*1024
 #define gigabytes(v)    megabytes(v)*1024
 
+#define bytesToMegabytes(v)     v/1048576
+
 // export macros
 #ifdef _MSC_VER
 #define _export __declspec(dllexport)

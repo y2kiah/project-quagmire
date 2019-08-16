@@ -23,7 +23,32 @@
  */
 
 
-typedef h32 AssetId;
+typedef h32 AssetHnd;
+
+enum AssetStatus : u32 {
+	Asset_NotLoaded = 0,		// asset is not present or evicted
+	Asset_Queued,				// asset is waiting in the async queue
+	Asset_Loading,				// reading bytes from disk
+	Asset_Loaded,				// all bytes read from disk
+	Asset_Building,				// processing on the load thread after bytes are loaded, if needed
+	Asset_Built,				// load thread processing done
+	Asset_Initializing,			// processing on the game thread, if needed
+	Asset_Ready,				// asset can be used
+	Asset_Error					// asset load error
+};
+
+/**
+ * The AssetType is stored in the typeId member of the AssetHnd
+ */
+enum AssetType : u8 {
+	Asset_Unknown = 0,
+	Asset_Texture2D,
+	Asset_TextureCubeMap,
+	Asset_Model,
+	Asset_Sound,
+	Asset_Music//,
+	//Asset_EntityData	TODO: maybe text or other interactive entity data too not appropriate for code?
+};
 
 
 #pragma pack(push, 1)
@@ -31,6 +56,7 @@ typedef h32 AssetId;
 struct AssetInfo {
 	u32			offset;				// offset to asset from base of assetData section
 	u32			size;				// assetData size
+	AssetHnd	handle;				// 0 on disk, stores handle when asset is created
 	u32			pathStringOffset;	// offset to path string
 	u32			pathStringSize;		// size of path string not including null terminator
 };
@@ -50,7 +76,7 @@ struct alignas(64) AssetPack
 	
 	u32			_padding[2];
 
-	// These pointers are zero'd on disk and intitialized on load
+	// These pointers are 0 on disk and intitialized on load
 
 	u32*		assetIds;	// crc32 of the asset path/filename relative to the pack's root,
 							// unique id within the pack, array sorted for binary search
@@ -63,46 +89,91 @@ static_assert(sizeof(AssetPack) == 64, "AssetPack data should be cache-aligned")
 
 
 struct LoadedAssetPack {
-	AssetPack*	info;
-	FILE*		pakFile;
-	u64			pakFileLastWrite;
-	//const char*	watchDirectory; // TODO: store some link to an associated directory in tools builds here
+	AssetPack*		assetPack;
+	const char*		filename;
+	FILE*			pakFile;
+	u64				pakFileLastWrite;
+	//const char*	watchDirectory; // TODO: store some link to an associated directory here (in tools builds)
 };
 
 
-enum AssetStatus {
-	Asset_NotLoaded = 0,		// asset is not present
-	Asset_BytesLoaded,
-	Asset_Processing,
-	Asset_Processed,
-	Asset_Framework_Loaded,
-	Asset_Framework_Unloaded
-};
+struct AssetCallbacks;
 
-enum AssetCategory : u8 {
-	Asset_None = 0,
-	Asset_Texture,
-	Asset_Model,
-	Asset_Sound,
-	Asset_Music//,
-	//Asset_EntityData	TODO: maybe text or other interactive entity data too not appropriate for code?
-};
 
 struct Asset {
+	AssetStatus		status;
+	u32				assetInfoIndex;	// index into AssetInfo array (from bsearch of assetId)
+	u32				sizeBytes;
+	h32				assetPack;
 	
-	u8		statusFlags;
+	h32				assetTypeHnd;	// handle to asset type-specific object (e.g. Texture2D_GL)
+	u32				flags;			// 4 bytes dedicated for build/init flags used in loading the asset 
+
+	AssetHnd		lruNext;
+	AssetHnd		lruPrev;
+
+	void*			assetData;		// buffer for data loaded from AssetPack file
+
+	AssetCallbacks*	callbacks;
 };
 
-DenseQueueTyped(u16, AssetCacheLRU);
+
+/**
+ * Asset building done on the loading thread, called after bytes are loaded with the
+ * asset->assetData buffer loaded with size of asset->sizeBytes. Build/init options may be passed
+ * in asset->flags.
+ */
+typedef void AssetBuildCallbackFunc(
+	AssetHnd hnd,
+	Asset* asset);
+
+/**
+ * Asset initialization done on the game thread. Initialization should not set an asset
+ * status directly, but should return a status of either Ready or Error.
+ */
+typedef AssetStatus AssetInitCallbackFunc(
+	AssetHnd hnd,
+	Asset* asset);
+
+// Asset removal done on the game thread
+typedef void AssetRemoveCallbackFunc(
+	AssetHnd hnd,
+	Asset* asset);
+
+struct AssetCallbacks {
+	AssetBuildCallbackFunc*		buildCallback;
+	AssetInitCallbackFunc*		initCallback;
+	AssetRemoveCallbackFunc*	removeCallback;
+};
+
+
 SparseHandleMap16TypedWithBuffer(LoadedAssetPack, AssetPackMap, h32, 0, ASSET_PACKS_CAPACITY);
+SparseHandleMap16TypedWithBuffer(Asset, AssetMap, AssetHnd, 0, ASSET_MAP_CAPACITY);
+//SparseHandleMap16TypedWithBuffer(ModelAsset, ModelMap, ModelId, Asset_Model, ASSET_MODELS_CAPACITY);
+ConcurrentQueueTypedWithBuffer(AssetHnd, AssetAsyncQueue, ASSET_LOAD_QUEUE_CAPACITY, 0);
+
+
+struct AssetCache {
+	AssetHnd		lruFront;
+	AssetHnd		lruBack;
+	size_t			totalSizeBytes;
+	size_t			targetMaxSizeBytes;
+};
 
 
 struct AssetStore {
-	AssetPackMap	packs;
+	AssetPackMap		packs;
+	
+	AssetMap			assets;
+	
+	AssetCache			assetCache;
 
-	AssetCacheLRU	textureCache;
-	AssetCacheLRU	modelCache;
-	AssetCacheLRU	soundCache;
+	AssetAsyncQueue		loadQueue;
+	AssetAsyncQueue		initQueue;
+
+	SDL_Thread*			loadThread;
+	
+	MemoryHeap			assetHeap;
 };
 
 
@@ -112,7 +183,52 @@ AssetPack* buildAssetPackFromDirectory(
 
 h32 openAssetPackFile(
 	AssetStore& store,
-	const char* filename,
-	MemoryArena& transient);
+	const char* filename);
+
+/**
+ * Starts a thread to process the asset loading queue.
+ */
+void startAsyncLoadAssets(
+	GameMemory* gameMemory);
+
+/**
+ * Stops the asset load thread.
+ */
+void stopAsyncLoadAssets(
+	GameMemory* gameMemory);
+
+/**
+ * Called from the main game thread, processes loaded assets to get them into final Ready state.
+ * Also may queue up more loads for child resources.
+ */
+void initLoadedAssets(
+	AssetStore& store);
+
+void maintainAssetCache(
+	AssetStore& store,
+	SystemInfo& info);
+
+/**
+ * To convert path strings to assetId, use CRC32 macro for static strings and crc32 function for
+ * runtime strings.
+ */
+AssetHnd createAsset(
+	AssetStore& store,
+	h32 pack,
+	u32 assetId,
+	AssetType assetType,
+	h32 assetTypeHnd,
+	u32 flags,
+	AssetCallbacks* callbacks);
+
+/**
+ * Returns the asset if it exists, otherwise nullptr. If status is NotLoaded, adds asset to the
+ * loading queue. If status is Ready, moves asset to back of the LRU list. Calling code must
+ * handle nullptr return gracefully. This function is thread-safe and will not result in multiple
+ * queued requests for loading.
+ */
+Asset* getAsset(
+	AssetStore& store,
+	AssetHnd hnd);
 
 #endif

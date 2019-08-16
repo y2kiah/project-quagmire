@@ -1,7 +1,7 @@
 #include <GL/glew.h>
 #include "texture_gl.h"
-#include "dds.h"
 #include "utility/logger.h"
+#include "platform/platform_api.h"
 
 namespace render
 {
@@ -74,145 +74,7 @@ namespace render
 		ASSERT_GL_ERROR;
 	}
 
-	bool Texture2D_GL::createFromMemory(
-		u8* data,
-		size_t size,
-		u32 width,
-		u32 height,
-		u8 components,
-		u8 componentSize,
-		u8 levels,
-		u8 flags,
-		u32 format)
-	{
-		assert(components > 0 && components <= 4 && "components out of range");
-		assert(componentSize > 0 && componentSize <= 8 && "componentSize out of range");
-		assert(levels > 0 && levels <= 13 && "level (probably) out of range, need more than 13 mipmaps?");
-
-		sizeBytes = size;
-		width = width;
-		height = height;
-		components = components;
-		numMipmaps = levels - 1;
-
-		// get number of mipmaps to be generated
-		if (levels == 1 && (flags & Texture2DFlag_GenerateMipmaps)) {
-			numMipmaps = (u32)(floorf(log2f((r32)(width > height ? width : height))));
-		}
-
-		u32 componentsLookup = components - 1;
-		u32 componentSizeLookup = componentSize / 2; // 1 => 0,  2 => 1,  4 => 2
-		u32 typeLookup = 
-			(flags & Texture2DFlag_Float ? 1 :
-			(flags & Texture2DFlag_Int   ? 2 :
-			(flags & Texture2DFlag_UInt  ? 3 :
-			(flags & Texture2DFlag_sRGB  ? 4 : 0))));
-
-		if (format == 0) {
-			format = g_formatLookup[(flags & Texture2DFlag_BGRA) ? 1 : 0][componentsLookup];
-		}
-		GLint internalFormat = g_internalFormatLookup[componentsLookup][componentSizeLookup][typeLookup];
-		
-		if (format == 0 || internalFormat == 0) {
-			logger::warn(logger::Category_Render, "invalid texture format");
-			return false;
-		}
-
-		// create texture storage
-		glGenTextures(1, &glTexture);
-		glBindTexture(GL_TEXTURE_2D, glTexture);
-		glTexStorage2D(GL_TEXTURE_2D, numMipmaps + 1, internalFormat, width, height);
-
-		// upload pixel data
-		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, format, GL_UNSIGNED_BYTE, data);
-
-		if (levels == 1 && numMipmaps > 0) {
-			glGenerateTextureMipmap(glTexture);
-		}
-		else if (numMipmaps > 0) {
-			u8* pData = data + (width * height * components * componentSize);
-			u32 mipWidth = width / 2;
-			u32 mipHeight = height / 2;
-
-			for (u32 level = 1; level <= numMipmaps; ++level) {
-				glTexSubImage2D(GL_TEXTURE_2D, level, 0, 0, width, height, format, GL_UNSIGNED_BYTE, pData);
-				pData += (mipWidth * mipHeight * components * componentSize);
-				mipWidth /= 2;
-				mipHeight /= 2;
-			}
-
-			assert(width == 1 && height == 1 && data - pData == size && "problem with mipmap chain data");
-		}
-
-		setTextureParameters();
-
-		ASSERT_GL_ERROR;
-		return true;
-	}
-
-	bool Texture2D_GL::loadDDSFromMemory(
-		u8* data,
-		size_t size,
-		bool sRGB)
-	{
-		// if image is already loaded, do some cleanup?
-
-		glGenTextures(1, &glTexture);
-		glBindTexture(GL_TEXTURE_2D, glTexture);
-		
-		DDSImage image;
-		bool ok = image.loadFromMemory(data, true, sRGB)
-					&& !image.cubemap && !image.volume
-					&& image.upload_texture2D();
-
-		if (ok) {
-			sizeBytes = size;
-			width = image.get_width();
-			height = image.get_height();
-			numMipmaps = image.get_num_mipmaps();
-			components = image.components;
-
-			setTextureParameters();
-		}
-		else {
-			logger::warn(logger::Category_Render, "texture loading error");
-		}
-
-		ASSERT_GL_ERROR;
-		return ok;
-	}
-
-	bool Texture2D_GL::loadDDSFromFile(
-		MemoryArena& transient,
-		const char* filename,
-		bool sRGB)
-	{
-		// if image is already loaded, do some cleanup?
-
-		glGenTextures(1, &glTexture);
-		glBindTexture(GL_TEXTURE_2D, glTexture);
-		DDSImage image;
-		bool ok = image.loadFromFile(transient, filename, true, sRGB)
-					&& !image.cubemap && !image.volume
-					&& image.upload_texture2D();
-
-		if (ok) {
-			sizeBytes = image.get_size();
-			width = image.get_width();
-			height = image.get_height();
-			numMipmaps = image.get_num_mipmaps();
-			components = image.components;
-
-			setTextureParameters();
-		}
-		else {
-			logger::warn(logger::Category_Render, "texture loading error");
-		}
-
-		return ok;
-	}
-
-	void Texture2D_GL::bind(u32 textureSlot) const
+	void Texture2D_GL::bind(u32 textureSlot)
 	{
 		assert(glTexture != 0 && textureSlot >= 0 && textureSlot < 32 && "textureSlot must be in 0-31 range");
 
@@ -228,6 +90,123 @@ namespace render
 			glDeleteTextures(1, &glTexture);
 			glTexture = 0;
 		}
+	}
+
+
+	Texture2D_GL createFromMemory(
+		u8* data,
+		u32 size,
+		u32 width,
+		u32 height,
+		u8 components,
+		u8 componentSize,
+		u8 levels,
+		u32 format,
+		AssetHnd asset,
+		u32 flags)
+	{
+		assert(components > 0 && components <= 4 && "components out of range");
+		assert(componentSize > 0 && componentSize <= 8 && "componentSize out of range");
+		assert(levels > 0 && levels <= 13 && "level (probably) out of range, need more than 13 mipmaps?");
+
+		Texture2D_GL tex{};
+		tex.sizeBytes = size;
+		tex.width = width;
+		tex.height = height;
+		tex.components = components;
+		tex.numMipmaps = levels - 1;
+		tex.asset = asset;
+		tex.flags = flags;
+
+		// get number of mipmaps to be generated
+		if (levels == 1 && (flags & TextureFlag_GenerateMipmaps)) {
+			tex.numMipmaps = (u32)(floorf(log2f((r32)(width > height ? width : height))));
+		}
+
+		u32 componentsLookup = components - 1;
+		u32 componentSizeLookup = componentSize / 2; // 1 => 0,  2 => 1,  4 => 2
+		u32 typeLookup = 
+			(flags & TextureFlag_Float ? 1 :
+			(flags & TextureFlag_Int   ? 2 :
+			(flags & TextureFlag_UInt  ? 3 :
+			(flags & TextureFlag_sRGB  ? 4 : 0))));
+
+		if (format == 0) {
+			format = g_formatLookup[(flags & TextureFlag_BGRA) ? 1 : 0][componentsLookup];
+		}
+		GLint internalFormat = g_internalFormatLookup[componentsLookup][componentSizeLookup][typeLookup];
+		
+		if (format != 0 && internalFormat != 0)
+		{
+			// create texture storage
+			glGenTextures(1, &tex.glTexture);
+			glBindTexture(GL_TEXTURE_2D, tex.glTexture);
+			glTexStorage2D(GL_TEXTURE_2D, tex.numMipmaps + 1, internalFormat, width, height);
+
+			// upload pixel data
+			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, format, GL_UNSIGNED_BYTE, data);
+
+			if (levels == 1 && tex.numMipmaps > 0) {
+				glGenerateTextureMipmap(tex.glTexture);
+			}
+			else if (tex.numMipmaps > 0) {
+				u8* pData = data + (width * height * components * componentSize);
+				u32 mipWidth = width / 2;
+				u32 mipHeight = height / 2;
+
+				for (u32 level = 1; level <= tex.numMipmaps; ++level) {
+					glTexSubImage2D(GL_TEXTURE_2D, level, 0, 0, width, height, format, GL_UNSIGNED_BYTE, pData);
+					pData += (mipWidth * mipHeight * components * componentSize);
+					mipWidth /= 2;
+					mipHeight /= 2;
+				}
+
+				assert(width == 1 && height == 1 && (uintptr_t)(data - pData) == size && "problem with mipmap chain data");
+			}
+
+			tex.setTextureParameters();
+		}
+		else {
+			logger::warn(logger::Category_Render, "invalid texture format");
+		}
+
+		ASSERT_GL_ERROR;
+		return tex;
+	}
+
+	bool initFromDDS(
+		Texture2D_GL& tex,
+		DDSImage& dds,
+		u32 size,
+		AssetHnd asset,
+		u32 flags)
+	{
+		bool result = true;
+		if (dds.valid
+			&& !dds.cubemap && !dds.volume)
+		{
+			tex.sizeBytes = size;
+			tex.width = dds.get_width();
+			tex.height = dds.get_height();
+			tex.numMipmaps = dds.get_num_mipmaps();
+			tex.components = dds.components;
+			tex.asset = asset;
+			tex.flags = flags;
+
+			glGenTextures(1, &tex.glTexture);
+			glBindTexture(GL_TEXTURE_2D, tex.glTexture);
+			
+			dds.upload_texture2D();
+
+			tex.setTextureParameters();
+		}
+		else {
+			logger::warn(logger::Category_Render, "texture loading error");
+			result = false;
+		}
+
+		ASSERT_GL_ERROR;
+		return result;
 	}
 
 
@@ -258,69 +237,8 @@ namespace render
 		}
 	}
 
-	bool TextureCubeMap_GL::loadDDSFromMemory(
-		u8* data,
-		size_t size,
-		bool swapY,
-		bool sRGB)
-	{
-		// if image is already loaded, do some cleanup?
-
-		glGenTextures(1, &glTexture);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, glTexture);
-		DDSImage image;
-		bool ok = image.loadFromMemory(data, true, sRGB)
-					&& image.cubemap
-					&& image.upload_textureCubemap(swapY);
-
-		if (ok) {
-			sizeBytes = size;
-			width = image.get_width();
-			height = image.get_height();
-			numMipmaps = image.get_num_mipmaps();
-			components = image.components;
-
-			setTextureParameters();
-		}
-		else {
-			logger::warn(logger::Category_Render, "texture loading error");
-		}
-
-		return ok;
-	}
-
-	bool TextureCubeMap_GL::loadDDSFromFile(
-		MemoryArena& transient,
-		const char* filename,
-		bool swapY,
-		bool sRGB)
-	{
-		// if image is already loaded, do some cleanup?
-
-		glGenTextures(1, &glTexture);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, glTexture);
-		DDSImage image;
-		bool ok = image.loadFromFile(transient, filename, true, sRGB)
-					&& image.cubemap
-					&& image.upload_textureCubemap(swapY);
-
-		if (ok) {
-			sizeBytes = image.get_size();
-			width = image.get_width();
-			height = image.get_height();
-			numMipmaps = image.get_num_mipmaps();
-			components = image.components;
-
-			setTextureParameters();
-		}
-		else {
-			logger::warn(logger::Category_Render, "texture loading error");
-		}
-
-		return ok;
-	}
-
-	void TextureCubeMap_GL::bind(u32 textureSlot) const
+	void TextureCubeMap_GL::bind(
+		u32 textureSlot)
 	{
 		assert(glTexture != 0 && textureSlot >= 0 && textureSlot < 32 && "textureSlot must be in 0-31 range");
 
@@ -335,6 +253,167 @@ namespace render
 			glTexture = 0;
 		}
 	}
+
+
+	bool initFromDDS(
+		TextureCubeMap_GL& tex,
+		DDSImage& dds,
+		u32 size,
+		AssetHnd asset,
+		u32 flags)
+	{
+		bool result = true;
+		if (dds.valid
+			&& dds.cubemap && !dds.volume && dds.numImages == 6)
+		{
+			tex.sizeBytes = size;
+			tex.width = dds.get_width();
+			tex.height = dds.get_height();
+			tex.numMipmaps = dds.get_num_mipmaps();
+			tex.components = dds.components;
+			tex.asset = asset;
+			tex.flags = flags;
+
+			glGenTextures(1, &tex.glTexture);
+			glBindTexture(GL_TEXTURE_2D, tex.glTexture);
+			
+			dds.upload_texture2D();
+
+			tex.setTextureParameters();
+		}
+		else {
+			logger::warn(logger::Category_Render, "texture loading error");
+			result = false;
+		}
+
+		ASSERT_GL_ERROR;
+		return result;
+	}
+
+
+	// Texture2D Asset Functions
+
+	void buildTexture2D(
+		AssetHnd hnd,
+		Asset* asset)
+	{
+		DDSImage dds{};
+		bool ok = dds.loadFromMemory(
+			(u8*)asset->assetData,
+			asset->sizeBytes,
+			(asset->flags & TextureFlag_FlipY),
+			(asset->flags & TextureFlag_sRGB));
+
+		if (ok) {
+
+		}
+	}
+
+	AssetStatus initTexture2D(
+		AssetHnd hnd,
+		Asset* asset)
+	{
+		Texture2D_GL tex = 
+		initFromDDS(
+			tex,
+			DDSImage& dds,
+			asset->sizeBytes,
+			hnd);
+		
+	}
+
+	void removeTexture2D(
+		AssetHnd hnd,
+		Asset* asset)
+	{
+
+	}
+
+
+	static AssetCallbacks texture2DCallbacks = {
+		&buildTexture2D,
+		&initTexture2D,
+		&removeTexture2D
+	};
+
+
+	TextureId createTexture2DAsset(
+		AssetStore& store,
+		Texture2D_HandleMap& textures2D,
+		h32 assetPack,
+		u32 assetId,
+		u32 textureParams)
+	{
+		Texture2D_GL* tex = nullptr;
+		TextureId id = textures2D.insert(
+			nullptr, &tex, Asset_Texture2D);
+
+		AssetHnd hnd = createAsset(
+			store,
+			assetPack,
+			assetId,
+			Asset_Texture2D,
+			id,
+			textureParams,
+			&texture2DCallbacks);
+		
+		tex->asset = hnd;
+		
+		return id;
+	}
+
+
+	// TextureCubeMap Asset Functions
+
+	void buildTextureCubeMap(
+		AssetHnd hnd,
+		Asset* asset)
+	{
+		DDSImage dds;
+		//dds.loadFromMemory(asset->assetData, true, sRGB)
+
+	}
+
+	AssetStatus initTextureCubeMap(
+		AssetHnd hnd,
+		Asset* asset)
+	{
+
+	}
+
+	void removeTextureCubeMap(
+		AssetHnd hnd,
+		Asset* asset)
+	{
+
+	}
+
+
+	static AssetCallbacks textureCubeMapCallbacks = {
+		&buildTextureCubeMap,
+		&initTextureCubeMap,
+		&removeTextureCubeMap
+	};
+
+
+	/*void createTextureCubeMapAsset(
+		AssetStore& store,
+		h32 assetPack,
+		u32 assetId,
+		bool sRGB)
+	{
+		Texture2D_GL* tex = nullptr;
+		TextureId id = renderAssets.textures2D.insert(
+			nullptr, &tex, Asset_Texture2D);
+		
+		AssetHnd hnd = createAsset(
+			store,
+			assetPack,
+			assetId,
+			Asset_Texture2D,
+			asset
+			&textureCubeMapCallbacks);
+	}*/
 }
 
 #include "dds.cpp"

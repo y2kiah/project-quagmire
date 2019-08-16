@@ -8,9 +8,10 @@
 #include "buffers_gl.h"
 
 
+typedef h32 ModelId;
+
 namespace render
 {
-	
 	#define MAX_MESHSCENENODE_NAME_SIZE		64
 	#define MAX_ANIMATION_NAME_SIZE			64
 
@@ -187,9 +188,9 @@ namespace render
 
 
 	/**
-	 * The Mesh_GL has a trivially-copyable and padded data layout for direct memory-image
-	 * serialization. This is contained by a Model_GL, which provides a richer C++ interface
-	 * and handles to child resources for the mesh like textures and the material shader.
+	 * The Mesh_GL has an aligned and padded data layout for direct memory-image serialization.
+	 * This is contained by a Model_GL, which provides a richer interface and handles to child
+	 * assets for the mesh like textures and the material shader.
 	 */
 	struct Mesh_GL
 	{
@@ -335,8 +336,8 @@ namespace render
 		bool			assetsLoaded;	// true when all asset asyncronous loading completed, model can be rendered
 
 
-		void render(Scene& scene, ComponentId modelInstanceId, u8 viewport);
-		void draw(ComponentId modelInstanceId, u32 drawSetIndex);
+//		void render(Scene& scene, ComponentId modelInstanceId, u8 viewport);
+//		void draw(ComponentId modelInstanceId, u32 drawSetIndex);
 		
 		/**
 		 * Builds a list of render keys/entries  for
@@ -363,10 +364,10 @@ namespace render
 		 * Creates OpenGL buffers in the internal mesh. Call this from the OpenGL thread after
 		 * the mesh is constructed.
 		 */
-		void createBuffers()
-		{
-			mesh.createBuffersFromInternalMemory();
-		}
+//		void createBuffers()
+//		{
+//			mesh.createBuffersFromInternalMemory();
+//		}
 	};
 
 }

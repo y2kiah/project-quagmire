@@ -198,7 +198,7 @@ namespace render
 
 		DDSSurface& get_mipmap(u32 index)
 		{
-			assert(index < (u32)mipmaps.size());
+			assert(index < numMipmaps);
 			return mipmaps[index];
 		}
 	};
@@ -247,11 +247,11 @@ namespace render
 		void flip_blocks_dxtc5(DXTColBlock* line, u32 numBlocks);
 		void flip_dxt5_alpha(DXT5AlphaBlock* block);
 
-		bool upload_texture1D();
-		bool upload_texture2D(u32 imageIndex = 0, u32 glTarget = 0x0DE1); // GLenum = GL_TEXTURE_2D
-		bool upload_textureRectangle();
-		bool upload_texture3D();
-		bool upload_textureCubemap(bool swapY = false);
+		void upload_texture1D();
+		void upload_texture2D(u32 imageIndex = 0, u32 glTarget = 0x0DE1); // GLenum = GL_TEXTURE_2D
+		void upload_textureRectangle();
+		void upload_texture3D();
+		void upload_textureCubemap(bool swapY = false);
 
 		u32 get_width()
 		{

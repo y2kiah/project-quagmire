@@ -89,8 +89,8 @@ struct MemoryHeap {
 	HeapAllocation*	freeFront;		// free list of allocation blocks
 	HeapAllocation*	freeBack;
 
-	size_t			totalSize;		// total available capacity in all blocks, not including space for the
-									// PlatformBlock headers, but including all space used by HeapAllocation headers
+	size_t			totalSize;		// total capacity in all blocks, not including space for the PlatformBlock
+									// headers, but including all space used by HeapAllocation headers
 	
 	u32				numBlocks : 31;
 	u32				freeTable : 1;
@@ -101,7 +101,7 @@ struct MemoryHeap {
 
 /**
  * PlatformMemory tracks a thread-safe linked list of allocated memory blocks belonging to all
- * MemoryArenas across the system.
+ * MemoryArenas and MemoryHeaps across the system.
  */
 struct PlatformMemory {
 	PlatformBlock	sentinel;		// tracks bounds of PlatformBlock list, allows iteration forward and backward

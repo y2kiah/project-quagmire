@@ -47,6 +47,9 @@ struct SystemInfo {
 	u32				logicalProcessorCount;
 	u32				systemRAM;		// amount of system RAM in MB
 	
+	size_t			availPhysBytes;	// available physical memory in MB
+	size_t			availVirtBytes;	// available virtual memory in MB
+	
 	u32				pageSize;
 	u32				allocationGranularity;
 	
@@ -156,8 +159,7 @@ struct GameMemory {
 	MemoryArena		gameState;
 	MemoryArena		transient;
 	MemoryArena		frameScoped;
-	MemoryHeap		resourceHeap;
-	Game*			game;		// Note: using void* here to avoid having to declare Game struct on the platform side
+	Game*			game;
 	bool			initialized;
 };
 

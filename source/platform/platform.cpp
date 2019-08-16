@@ -90,6 +90,11 @@ void unloadGameCode(
 	GameCode& gameCode)
 {
 	if (gameCode.gameDLL) {
+		gameContext.gameCode.onUnload(
+			&gameContext.gameMemory,
+			_platformApi,
+			gameContext.app);
+
 		FreeLibrary(gameCode.gameDLL);
 		gameCode.gameDLL = 0;
 	}
@@ -105,8 +110,9 @@ bool loadGameDLL(
 	gameCode.gameDLL = LoadLibraryA(gameDLLPath);
 	if (gameCode.gameDLL) {
 		gameCode.updateAndRender = (GameUpdateAndRenderFunc*)GetProcAddress(gameCode.gameDLL, "gameUpdateAndRender");
-		gameCode.onLoad = (GameOnLoadFunc*)GetProcAddress(gameCode.gameDLL, "onLoad");
-		gameCode.onExit = (GameOnExitFunc*)GetProcAddress(gameCode.gameDLL, "onExit");
+		gameCode.onLoad   = (GameOnLoadFunc*)GetProcAddress(gameCode.gameDLL, "onLoad");
+		gameCode.onUnload = (GameOnUnloadFunc*)GetProcAddress(gameCode.gameDLL, "onUnload");
+		gameCode.onExit   = (GameOnExitFunc*)GetProcAddress(gameCode.gameDLL, "onExit");
 
 		gameCode.isValid = (gameCode.updateAndRender);
 	}
@@ -159,10 +165,21 @@ bool loadGameCode(
 	if (!gameCode.isValid) {
 		gameCode.updateAndRender = nullptr;
 		gameCode.onLoad = nullptr;
+		gameCode.onUnload = nullptr;
 		gameCode.onExit = nullptr;
 	}
 
 	return loaded;
+}
+
+void updateMemoryStatus(
+	SystemInfo& info)
+{
+	MEMORYSTATUSEX status;
+	status.dwLength = sizeof(status);
+	GlobalMemoryStatusEx(&status);
+	info.availPhysBytes = status.ullAvailPhys;
+	info.availVirtBytes = status.ullAvailVirtual;
 }
 
 SystemInfo platformGetSystemInfo()
@@ -184,6 +201,7 @@ SystemInfo platformGetSystemInfo()
 	info.processorRevision = si.wProcessorRevision;
 
 	info.systemRAM = SDL_GetSystemRAM();
+	updateMemoryStatus(info);
 
 	// TODO: call IsProcessorFeaturePresent on features we need to check for
 
@@ -465,11 +483,8 @@ void setWindowIcon(WindowData *windowData)
 
 GameCode
 loadGameCode(
-	//win32_state *State,
-	char *gameDLLName)
-{
-	GameCode gameCode = {};
-	
+	GameCode& gameCode)
+{	
 	struct stat fileStatus;
 	if (stat(gameDLLName, &fileStatus) == 0) {
 		gameCode.dllLastWriteTime = fileStatus.st_mtime;

@@ -4,10 +4,10 @@
 #include "utility/common.h"
 
 
+typedef h32 ShaderId;
+
 namespace render
 {
-	typedef h32 ShaderId;
-
 	/**
 	 * Enum of all standard uniform blocks. These are bound by name using an enum-to-string macro,
 	 * so exact name matching is important. The value corresponds to the binding point index with

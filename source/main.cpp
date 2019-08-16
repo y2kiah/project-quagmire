@@ -290,10 +290,13 @@ int gameProcess(void* ctx)
 		gameCodeHotLoad.tick(500.0f, realTime, countsPassed, timer.countsPerMs, frame, 1.0f,
 			[](UpdateInfo& ui, void* ctx) {
 				if (loadGameCode(gameContext.gameCode)) {
-					gameContext.gameCode.onLoad(
+					if (!gameContext.gameCode.onLoad(
 							&gameContext.gameMemory,
 							_platformApi,
-							gameContext.app);
+							gameContext.app))
+					{
+						gameContext.done = true;
+					}
 				}
 			}, ctx);
 		#endif
@@ -339,7 +342,7 @@ int main(int argc, char *argv[])
 	TemporaryMemory tkn = beginTemporaryMemory(platformMemory);
 	using Something = h64;
 	Something s = { 1, 1, 1, 1 };
-	DenseHandleMap32 testMap(sizeof(Something), 100, 1, allocArrayOfType(platformMemory, Something, 100));
+	DenseHandleMap32 testMap(sizeof(Something), 100, allocArrayOfType(platformMemory, Something, 100));
 	Something* items = (Something*)testMap.items;
 	h64 h1 = testMap.insert();
 	h64 h2 = testMap.insert(&s);
@@ -373,7 +376,11 @@ int main(int argc, char *argv[])
 
 	// This starts the game thread. OpenGL context is transferred to this thread
 	// after OpenGL is initialized on the OS thread. This thread joins after SDL_QUIT.
-	SDL_Thread *gameThread = SDL_CreateThread(gameProcess, "GameThread", (void *)&gameContext);
+	SDL_Thread *gameThread =
+		SDL_CreateThread(
+			gameProcess,
+			"GameThread",
+			(void*)&gameContext);
 
 	/**
 	* OS-Input Thread, runs the platform message loop
@@ -402,6 +409,8 @@ int main(int argc, char *argv[])
 				}
 			}
 		}
+		
+		updateMemoryStatus(app.systemInfo);
 		
 		// run tasks with Thread_OS_Input thread affinity
 		//engine.threadPool->executeFixedThreadTasks(ThreadAffinity::Thread_OS_Input);

@@ -42,6 +42,9 @@ static Game* _game = nullptr;
 #include "scene/camera.cpp"
 #include "scene/scene.cpp"
 #include "scene/scene_api.cpp"
+
+#include "render/texture_gl.cpp" // eventually replace with just renderer_gl.cpp
+
 #include "game/screen_shake/screen_shake_system.cpp"
 
 
@@ -114,6 +117,7 @@ void gameUpdateFrameTick(
  */
 void gameRenderFrameTick(
 	GameMemory* gameMemory,
+	SDLApplication* app,
 	r32 interpolation,
 	i64 realTime,
 	i64 countsPassed)
@@ -122,7 +126,10 @@ void gameRenderFrameTick(
 
 	//	logger::verbose("Render realTime=%lu: interpolation=%0.3f\n", realTime, interpolation);
 
-	//	engine.resourceLoader->executeCallbacks();
+	// keep the cache target size updated
+	maintainAssetCache(game.assetStore, app->systemInfo);
+	// process assets that are loaded
+	initLoadedAssets(game.assetStore);
 
 	//	game.screenShaker.renderFrameTick(game, engine, interpolation, realTime, countsPassed);
 
@@ -143,6 +150,20 @@ void gameRenderFrameTick(
 		interpolation);
 
 	//	engine.renderSystem->renderFrame(interpolation, engine);
+}
+
+
+void startWorkerThreads(
+	GameMemory* gameMemory)
+{
+	startAsyncLoadAssets(gameMemory);
+}
+
+
+void stopWorkerThreads(
+	GameMemory* gameMemory)
+{
+	stopAsyncLoadAssets(gameMemory);
 }
 
 
@@ -218,7 +239,14 @@ void makeCoreSystems(
 	 * Build the resource system
 	 */
 	{
-//		using namespace resource;
+		game.assetStore.loadQueue.init();
+		game.assetStore.initQueue.init();
+		game.assetStore.assetHeap = makeMemoryHeap();
+		size_t availMB = bytesToMegabytes(min(app.systemInfo.availPhysBytes, app.systemInfo.availVirtBytes));
+		size_t initHeapSize = availMB >= INIT_IDEAL_ASSETHEAP_BLOCK_MEGABYTES
+								? INIT_IDEAL_ASSETHEAP_BLOCK_MEGABYTES
+								: max(availMB, (size_t)INIT_MIN_ASSETHEAP_BLOCK_MEGABYTES);
+		pushBlock(game.assetStore.assetHeap, (u32)megabytes(min(initHeapSize, (size_t)UINT_MAX)));
 
 		// Build resource caches
 		//   Permanent Cache
@@ -249,9 +277,6 @@ void makeCoreSystems(
 		#endif
 
 		// add Lua APIs
-
-
-//		engine.resourceLoader = loaderPtr;
 	}
 
 	/**
@@ -290,6 +315,8 @@ void makeCoreSystems(
 
 //		engine.sceneManager = scenePtr;
 	}
+
+	startWorkerThreads(&gameMemory);
 }
 
 
@@ -393,7 +420,7 @@ void destroyGame(
 
 extern "C" {
 	_export
-	u8
+	i32
 	gameUpdateAndRender(
 		GameMemory* gameMemory,
 		PlatformApi* platformApi,
@@ -421,16 +448,16 @@ extern "C" {
 
 		//engine.threadPool->executeFixedThreadTasks(ThreadAffinity::Thread_OpenGL_Render);
 
-		gameRenderFrameTick(gameMemory, interpolation, realTime, countsPassed);
+		gameRenderFrameTick(gameMemory, app, interpolation, realTime, countsPassed);
 		
 		// TODO: for now, quitting just involves hitting ESC key, this will obviously change in the future
-		u8 quit = game.gameInput.actions.exit.active;
+		i32 quit = game.gameInput.actions.exit.active;
 		
 		return quit;
 	}
 
 	_export
-	u8
+	i32
 	onLoad(
 		GameMemory* gameMemory,
 		PlatformApi* platformApi,
@@ -441,6 +468,7 @@ extern "C" {
 		_platformApi = platformApi;
 		logger::_log = platformApi->log;
 
+		// on initial load
 		if (!gameMemory->initialized) {
 			gameMemory->gameState = makeMemoryArena();
 			
@@ -450,18 +478,30 @@ extern "C" {
 			gameMemory->frameScoped = makeMemoryArena();
 			_allocSize(gameMemory->frameScoped, megabytes(INIT_FRAMESCOPED_BLOCK_MEGABYTES), 16);
 
-			gameMemory->resourceHeap = makeMemoryHeap();
-			_heapAllocSize(gameMemory->resourceHeap, megabytes(INIT_RESOURCEHEAP_BLOCK_MEGABYTES), false);
-
 			_game = makeGame(*gameMemory, *app);
 			
 			gameMemory->initialized = true;
 		}
+		// on reload
 		else {
 			_game = gameMemory->game;
+			
+			startWorkerThreads(gameMemory);
 		}
 
 		return (_game != nullptr ? 1 : 0);
+	}
+
+	_export
+	void
+	onUnload(
+		GameMemory* gameMemory,
+		PlatformApi* platformApi,
+		SDLApplication* app)
+	{
+		assert(gameMemory && platformApi && app);
+
+		stopWorkerThreads(gameMemory);
 	}
 
 	_export
@@ -471,6 +511,8 @@ extern "C" {
 		PlatformApi* platformApi,
 		SDLApplication* app)
 	{
+		assert(gameMemory && platformApi && app);
+
 		if (_game) {
 			destroyGame(gameMemory, *_game);
 		}

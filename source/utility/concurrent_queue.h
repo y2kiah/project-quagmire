@@ -12,13 +12,13 @@
  */
 struct alignas(64) ConcurrentQueue
 {
-	SDL_mutex*	lock = nullptr;
-	SDL_cond*	cond = nullptr;
+	SDL_mutex*	lock;
+	SDL_cond*	cond;
 	
 	DenseQueue	queue;
 	
 	// padding added for 64 byte total size, to avoid potential false sharing of the ConcurrentQueue's cache line
-	u8			_padding[24] = {};
+	u8			_padding[24];
 
 	// Functions
 
@@ -371,19 +371,56 @@ void ConcurrentQueue::deinit()
 		bool try_pop(Type* outData, u32 timeoutMS)	{ return _q.try_pop((void*)outData, timeoutMS); }\
 		u32 try_pop_all(Type* outData, u32 max = 0)	{ return _q.try_pop_all((void*)outData, max); }\
 		u32 try_pop_all_push(DenseQueue& pushTo)	{ return _q.try_pop_all_push(pushTo); }\
-		bool try_pop_if(Type* outData, ConcurrentQueue::UnaryPredicate* p_)\
-													{ return _q.try_pop_if((void*)outData, p_); }\
-		u32 try_pop_while(Type* outData, u32 max, ConcurrentQueue::UnaryPredicate* p_)\
-													{ return _q.try_pop_while((void*)outData, max, p_); }\
+		bool try_pop_if(Type* outData, ConcurrentQueue::UnaryPredicate* p_) {\
+			return _q.try_pop_if((void*)outData, p_);\
+		}\
+		u32 try_pop_while(Type* outData, u32 max, ConcurrentQueue::UnaryPredicate* p_) {\
+			return _q.try_pop_while((void*)outData, max, p_);\
+		}\
 		void wait_pop(Type* outData) 				{ _q.wait_pop((void*)outData); }\
 		void clear() 								{ return _q.clear(); }\
 		bool empty() 								{ return _q.empty(); }\
 		u32 unsafe_size() 							{ return _q.unsafe_size(); }\
 		u32 capacity() 								{ return _q.capacity(); }\
-		void init(u32 capacity, void* buffer = nullptr, u8 assertOnFull = 1)\
-													{ _q.init(TypeSize, capacity, buffer, assertOnFull); }\
+		void init(u32 capacity, void* buffer = nullptr, u8 assertOnFull = 1) {\
+			_q.init(TypeSize, capacity, buffer, assertOnFull);\
+		}\
 		void deinit() 								{ _q.deinit(); }\
 		Type* data()								{ return (Type*)_q.queue.items; }\
 	};
+
+
+#define ConcurrentQueueTypedWithBuffer(Type, Name, _capacity, _assertOnFull) \
+	struct Name {\
+		enum { TypeSize = sizeof(Type) };\
+		ConcurrentQueue _q;\
+		Type _buffer[_capacity];\
+		explicit Name()\
+			: _q(TypeSize, _capacity, &_buffer, _assertOnFull) {}\
+		Type* push(Type* inData)					{ return (Type*)_q.push((void*)inData); }\
+		Type* push(const Type& inData)				{ return (Type*)_q.push((void*)&inData); }\
+		Type* push_n(Type* inData, u32 count) 		{ return (Type*)_q.push_n((void*)inData, count); }\
+		bool try_pop(Type* outData) 				{ return _q.try_pop((void*)outData); }\
+		bool try_pop(Type* outData, u32 timeoutMS)	{ return _q.try_pop((void*)outData, timeoutMS); }\
+		u32 try_pop_all(Type* outData, u32 max = 0)	{ return _q.try_pop_all((void*)outData, max); }\
+		u32 try_pop_all_push(DenseQueue& pushTo)	{ return _q.try_pop_all_push(pushTo); }\
+		bool try_pop_if(Type* outData, ConcurrentQueue::UnaryPredicate* p_) {\
+			return _q.try_pop_if((void*)outData, p_);\
+		}\
+		u32 try_pop_while(Type* outData, u32 max, ConcurrentQueue::UnaryPredicate* p_) {\
+			return _q.try_pop_while((void*)outData, max, p_);\
+		}\
+		void wait_pop(Type* outData) 				{ _q.wait_pop((void*)outData); }\
+		void clear() 								{ return _q.clear(); }\
+		bool empty() 								{ return _q.empty(); }\
+		u32 unsafe_size() 							{ return _q.unsafe_size(); }\
+		u32 capacity() 								{ return _q.capacity(); }\
+		void init() {\
+			_q.init(TypeSize, _capacity, &_buffer, _assertOnFull);\
+		}\
+		void deinit() 								{ _q.deinit(); }\
+		Type* data()								{ return (Type*)_q.queue.items; }\
+	};
+
 
 #endif

@@ -39,7 +39,6 @@ struct DenseHandleMap16 {
 	 * Constructor
 	 * @param	elementSizeB	size in bytes of individual objects stored
 	 * @param	capacity		maximum number of objects that can be stored
-	 * @param	itemTypeId		typeId used by the h32::typeId variable for this container
 	 * @param	buffer
 	 *	Optional pre-allocated buffer for all dynamic storage used in the DenseHandleMap16, with ample
 	 *	size (obtained by call to getTotalBufferSize). If passed, the memory is not owned by
@@ -49,10 +48,9 @@ struct DenseHandleMap16 {
 	explicit DenseHandleMap16(
 		u16 _elementSizeB,
 		u16 _capacity,
-		u8 itemTypeId = 0,
 		void* buffer = nullptr)
 	{
-		init(_elementSizeB, _capacity, itemTypeId, buffer);
+		init(_elementSizeB, _capacity, buffer);
 	}
 
 	explicit DenseHandleMap16() {}
@@ -88,9 +86,13 @@ struct DenseHandleMap16 {
 	 * initialization.
 	 * @param[in]	src		optional pointer to an object to copy into inner storage
 	 * @param[out]	out		optional return pointer to the new object
+	 * @param		typeId	typeId used by the h32::typeId variable for this container
 	 * @returns the id
 	 */
-	h32 insert(void* src = nullptr, void** out = nullptr);
+	h32 insert(
+		void* src = nullptr,
+		void** out = nullptr,
+		u8 typeId = 0);
 
 	/**
 	 * Removes all items, leaving the sparseIds set intact by adding each entry to the free-
@@ -173,7 +175,6 @@ struct DenseHandleMap16 {
 
 	void init(u16 elementSizeB,
 			  u16 capacity,
-			  u8 itemTypeId = 0,
 			  void* buffer = nullptr);
 
 	void deinit();
@@ -192,7 +193,10 @@ size_t DenseHandleMap16::getTotalBufferSize(u16 elementSizeB, u16 capacity)
 }
 
 
-h32 DenseHandleMap16::insert(void* src, void** out)
+h32 DenseHandleMap16::insert(
+	void* src,
+	void** out,
+	u8 typeId)
 {
 	assert(length < capacity && "DenseHandleMap16 is full");
 	h32 handle = null_h32;
@@ -207,6 +211,7 @@ h32 DenseHandleMap16::insert(void* src, void** out)
 		innerId.free = 0;
 		++innerId.generation; // increment generation so remaining outer ids go stale
 		innerId.index = length;
+		innerId.typeId = typeId;
 		sparseIds[sparseIndex] = innerId;
 
 		handle = innerId;
@@ -297,7 +302,7 @@ void DenseHandleMap16::clear()
 
 void DenseHandleMap16::reset()
 {
-	h32 innerId = { 0, sparseIds[0].typeId, 0, 1 };
+	h32 innerId = { 0, 0, 0, 1 };
 	for (u16 i = 0; i < capacity; ++i) {
 		++innerId.index;
 		sparseIds[i].value = innerId.value;
@@ -412,7 +417,6 @@ size_t DenseHandleMap16::defragment(Compare* comp, size_t maxSwaps)
 void DenseHandleMap16::init(
 	u16 _elementSizeB,
 	u16 _capacity,
-	u8 itemTypeId,
 	void* buffer)
 {
 	elementSizeB = _elementSizeB & 0x3FFF;
@@ -437,7 +441,6 @@ void DenseHandleMap16::init(
 	assert(is_aligned(denseToSparse, 2) && "denseToSparse not properly aligned");
 
 	// reset to set up the sparseIds freelist
-	sparseIds[0].typeId = itemTypeId;
 	reset();
 }
 
@@ -469,14 +472,14 @@ void DenseHandleMap16::deinit()
 			return DenseHandleMap16::getTotalBufferSize(TypeSize, capacity);\
 		}\
 		explicit Name(u16 _capacity, Type* buffer = nullptr) {\
-			_map.init(TypeSize, _capacity, TypeId, (void*)buffer);\
+			_map.init(TypeSize, _capacity, (void*)buffer);\
 		}\
 		explicit Name() {}\
 		Type* at(HndType handle)			{ return (Type*)_map.at(handle); }\
 		Type* operator[](HndType handle)	{ return at(handle); }\
 		bool erase(HndType handle)			{ return _map.erase(handle); }\
-		HndType insert(Type* src = nullptr, Type** out = nullptr) {\
-			return _map.insert((void*)src, (void**)out);\
+		HndType insert(Type* src = nullptr, Type** out = nullptr, u8 typeId = TypeId) {\
+			return _map.insert((void*)src, (void**)out, typeId);\
 		}\
 		void clear()						{ _map.clear(); }\
 		void reset()						{ _map.reset(); }\
@@ -492,7 +495,7 @@ void DenseHandleMap16::deinit()
 		inline Type* items() 				{ return (Type*)_map.items; }\
 		inline u16 length()					{ return _map.length; }\
 		void init(u16 capacity, void* buffer = nullptr) {\
-			_map.init(TypeSize, capacity, TypeId, buffer);\
+			_map.init(TypeSize, capacity, buffer);\
 		}\
 		void deinit()						{ _map.deinit(); }\
 	};\
@@ -509,12 +512,12 @@ void DenseHandleMap16::deinit()
 		static size_t getTotalBufferSize(u16 capacity) {\
 			return sizeof(_buffer);\
 		}\
-		explicit Name()	: _buffer{}			{ _map.init(TypeSize, _capacity, TypeId, &_buffer); }\
+		explicit Name()	: _buffer{}			{ _map.init(TypeSize, _capacity, &_buffer); }\
 		Type* at(HndType handle)			{ return (Type*)_map.at(handle); }\
 		Type* operator[](HndType handle)	{ return at(handle); }\
 		bool erase(HndType handle)			{ return _map.erase(handle); }\
-		HndType insert(Type* src = nullptr, Type** out = nullptr) {\
-			return _map.insert((void*)src, (void**)out);\
+		HndType insert(Type* src = nullptr, Type** out = nullptr, u8 typeId = TypeId) {\
+			return _map.insert((void*)src, (void**)out, typeId);\
 		}\
 		void clear()						{ _map.clear(); }\
 		void reset()						{ _map.reset(); }\

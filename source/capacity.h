@@ -13,7 +13,8 @@
 // Storage first block size
 #define INIT_TRANSIENT_BLOCK_MEGABYTES				64
 #define INIT_FRAMESCOPED_BLOCK_MEGABYTES			64
-#define INIT_RESOURCEHEAP_BLOCK_MEGABYTES           256
+#define INIT_MIN_ASSETHEAP_BLOCK_MEGABYTES          64
+#define INIT_IDEAL_ASSETHEAP_BLOCK_MEGABYTES        256
 
 // File search recursion
 #define MAX_FILE_RECURSION_DEPTH					10
@@ -33,6 +34,8 @@
 
 // Assets
 #define ASSET_PACKS_CAPACITY						16
+#define ASSET_MAP_CAPACITY                          512
+#define ASSET_LOAD_QUEUE_CAPACITY                   32
 
 // Scene
 // TODO: should these be smaller and we would have multiple spatial stores?

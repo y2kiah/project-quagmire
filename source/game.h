@@ -13,8 +13,12 @@
 #include "input/game_input.h"
 #include "math/qmath.h"
 #include "math/noise.h"
+
+#include "render/texture_gl.h" // TODO: replace several of these with renderer_gl
+//#include "render/mesh_gl.h"
+//#include "render/shader_gl.h"
+
 #include "asset/asset.h"
-#include "scene/scene_api.h"
 #include "scene/camera.h"
 #include "game/screen_shake/screen_shake_system.h"
 
@@ -23,6 +27,14 @@
 //enum : uint16_t {
 	//ScreenShakerComponentTypeId
 //};
+
+// TODO: move these render assets to the renderer_gl.h file
+namespace render {
+	struct RenderAssets {
+		Texture2D_HandleMap			textures2D;
+		TextureCubeMap_HandleMap	texturesCubeMap;
+	};
+}
 
 /**
 * The Game structure contains all memory for the game state other than data stored in the
@@ -33,18 +45,18 @@
 struct Game {
 	// Core Systems
 
-	FixedTimestep		simulationUpdate = {};
+	FixedTimestep				simulationUpdate = {};
 
 	//ThreadPoolPtr					threadPool		= nullptr;
-	input::GameInput	gameInput;
-	//resource::ResourceLoaderPtr		resourceLoader	= nullptr;
-	//render::RenderSystemPtr			renderSystem	= nullptr;
+	input::GameInput			gameInput;
+	AssetStore					assetStore;
+	render::RenderAssets		renderAssets;
 	//render::ShaderManagerPtr		shaderManager	= nullptr;
 	//render::ModelManagerPtr			modelManager	= nullptr;
 	//scene::SceneManagerPtr			sceneManager	= nullptr;
 	// TODO: SparseHandleMap16WithBuffer for scenes
 	
-	Scene				gameScene;
+	Scene						gameScene;
 
 
 	//Id_t							engineLuaState	= NullId_t;
