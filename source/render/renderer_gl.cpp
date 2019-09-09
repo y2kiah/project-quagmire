@@ -542,6 +542,7 @@ namespace render
 				viewport.renderQueue.clearRenderEntries();
 			}
 		}
+		// TODO: glFlush and glFinish here??
 	}
 
 
