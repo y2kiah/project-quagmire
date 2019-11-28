@@ -459,7 +459,7 @@ void DenseHandleMap16::deinit()
 // Macro for defining a DenseHandleMap16 storage buffer
 #define DenseHandleMap16Buffer(Type, Name, capacity) \
 	u8 Name[(sizeof(Type)*(capacity+1)) + (sizeof(h32)*capacity) + (sizeof(u16)*capacity)];\
-	static_assert(is_aligned(sizeof(Type)*(capacity+1),4), "sizeof items array must be a multiple of 4");\
+	static_assert(is_aligned(sizeof(Type)*(capacity+1), 4), "sizeof items array must be a multiple of 4");\
 	static_assert(capacity <= USHRT_MAX-1, "capacity must be <= USHRT_MAX-1");
 
 

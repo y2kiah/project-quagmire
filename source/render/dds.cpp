@@ -310,7 +310,7 @@ namespace render
 		bool sRGB)
 	{
 		FILE* fp = nullptr;
-		if (fopen_s(&fp, filename, "rb")) {
+		if (_fopen_s(&fp, filename, "rb")) {
 			// read in file
 			fseek(fp, 0, SEEK_END);
 			

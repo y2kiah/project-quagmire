@@ -2,7 +2,7 @@
 #define _PLATFORM_INPUT_H
 
 #include <SDL_events.h>
-#include "utility/concurrent_queue.h"
+#include "../utility/concurrent_queue.h"
 
 namespace input {
 

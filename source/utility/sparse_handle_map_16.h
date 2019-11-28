@@ -347,7 +347,6 @@ void SparseHandleMap16::deinit()
 	u8 Name[(sizeof(Type) + sizeof(SparseHandleMap16::Header)) * capacity];\
 	static_assert(is_aligned(sizeof(Name),8),"sizeof items array must be a multiple of 8");
 
-
 // Macro for defining a type-safe SparseHandleMap16 wrapper that avoids void* and elementSizeB in the api
 #define SparseHandleMap16Typed(Type, Name, HndType, TypeId) \
 	struct Name {\
@@ -386,7 +385,7 @@ void SparseHandleMap16::deinit()
 		struct Item { SparseHandleMap16::Header* header; Type* data; };\
 		SparseHandleMap16 _map;\
 		u8 _buffer[(sizeof(Type) + sizeof(SparseHandleMap16::Header)) * _capacity];\
-		static_assert(is_aligned(sizeof(Name::_buffer),8),"sizeof items array must be a multiple of 8");\
+		static_assert(is_aligned(sizeof(Name::_buffer), 8) ,"sizeof items array must be a multiple of 8");\
 		static size_t getTotalBufferSize(u16 capacity) {\
 			return sizeof(_buffer);\
 		}\

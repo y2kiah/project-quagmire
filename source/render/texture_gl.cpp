@@ -1,7 +1,7 @@
 #include <GL/glew.h>
 #include "texture_gl.h"
-#include "utility/logger.h"
-#include "platform/platform_api.h"
+#include "../utility/logger.h"
+#include "../platform/platform_api.h"
 
 namespace render
 {
@@ -313,13 +313,14 @@ namespace render
 		AssetHnd hnd,
 		Asset* asset)
 	{
-		Texture2D_GL tex = 
-		initFromDDS(
-			tex,
-			DDSImage& dds,
-			asset->sizeBytes,
-			hnd);
-		
+		//Texture2D_GL tex = 
+		//initFromDDS(
+		//	Texture2D_GL& tex,
+		//	DDSImage& dds,
+		//	asset->sizeBytes,
+		//	hnd,
+		//	u32 flags);
+		return Asset_Loading;
 	}
 
 	void removeTexture2D(
@@ -378,7 +379,7 @@ namespace render
 		AssetHnd hnd,
 		Asset* asset)
 	{
-
+		return Asset_Loading;
 	}
 
 	void removeTextureCubeMap(

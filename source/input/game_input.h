@@ -2,10 +2,10 @@
 #define _GAME_INPUT_H
 
 #include <SDL_events.h>
-#include "capacity.h"
-#include "utility/common.h"
-#include "utility/concurrent_queue.h"
-#include "utility/fixed_timestep.h"
+#include "../capacity.h"
+#include "../utility/common.h"
+#include "../utility/concurrent_queue.h"
+#include "../utility/fixed_timestep.h"
 #include "platform_input.h"
 
 namespace input {

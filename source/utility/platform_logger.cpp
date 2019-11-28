@@ -113,7 +113,7 @@ namespace logger {
 		if (c == _Category_Default) { c = defaultCategory; }
 		if (p == _Priority_Default) { p = categoryDefaultPriority[c]; }
 
-		static std::atomic<u64> id = 0;
+		static std::atomic<u64> id{0};
 		if (categoryDefaultPriority[c] >= p) {
 			// write formatted string
 			int len = _vscprintf(s, args);

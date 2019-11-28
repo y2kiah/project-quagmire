@@ -1,5 +1,5 @@
 #include "game_input.h"
-#include "utility/logger.h"
+#include "../utility/logger.h"
 
 
 #define JOYSTICK_INVERSE_MAX_RAW	1.0f / 32768.0f

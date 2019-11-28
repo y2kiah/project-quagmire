@@ -1,11 +1,11 @@
 #ifndef _ASSET_H
 #define _ASSET_H
 
-#include "utility/common.h"
-#include "utility/memory.h"
-#include "utility/dense_queue.h"
-#include "utility/sparse_handle_map_16.h"
-#include "capacity.h"
+#include "../utility/common.h"
+#include "../utility/memory.h"
+#include "../utility/dense_queue.h"
+#include "../utility/sparse_handle_map_16.h"
+#include "../capacity.h"
 
 /**
  * Assets are streamed in from AssetPacks, which are single .pak files in a shipping build, and may

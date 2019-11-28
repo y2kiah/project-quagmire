@@ -1,8 +1,8 @@
 #ifndef _DDS_H
 #define _DDS_H
 
-#include "utility/common.h"
-#include "utility/memory.h"
+#include "../utility/common.h"
+#include "../utility/memory.h"
 
 namespace render
 {

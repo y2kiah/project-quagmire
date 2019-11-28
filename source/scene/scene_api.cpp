@@ -400,7 +400,7 @@ EntityId scene_createCamera(
 	cam.entityId = newIds.entityId;
 	cam.data.sceneNodeId = newIds.sceneNodeId;
 	cam.data.movementId = newIds.movementId;
-	strcpy_s(cam.data.name, sizeof(cam.data.name), name);
+	_strcpy_s(cam.data.name, sizeof(cam.data.name), name);
 
 	if (params.cameraType == Camera_Perspective) {
 		cam.data.camera = makePerspectiveCamera(

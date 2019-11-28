@@ -778,9 +778,9 @@ void getForwardUpRight(
 	dvec3& u,
 	dvec3& r)
 { 
-	r = {  view[0][0],  view[1][0],  view[2][0] };
-	u = {  view[0][1],  view[1][1],  view[2][1] };
-	f = { -view[0][2], -view[1][2], -view[2][2] };
+	r = dvec3{  view[0][0],  view[1][0],  view[2][0] };
+	u = dvec3{  view[0][1],  view[1][1],  view[2][1] };
+	f = dvec3{ -view[0][2], -view[1][2], -view[2][2] };
 }
 
 

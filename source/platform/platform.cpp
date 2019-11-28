@@ -2,8 +2,8 @@
 #include "../capacity.h"
 #include "platform.h"
 #include "platform_api.h"
-#include "input/platform_input.h"
-#include "utility/logger.h"
+#include "../input/platform_input.h"
+#include "../utility/logger.h"
 #include <SDL_filesystem.h>
 #include <SDL_cpuinfo.h>
 
@@ -109,10 +109,21 @@ bool loadGameDLL(
 {
 	gameCode.gameDLL = LoadLibraryA(gameDLLPath);
 	if (gameCode.gameDLL) {
-		gameCode.updateAndRender = (GameUpdateAndRenderFunc*)GetProcAddress(gameCode.gameDLL, "gameUpdateAndRender");
-		gameCode.onLoad   = (GameOnLoadFunc*)GetProcAddress(gameCode.gameDLL, "onLoad");
-		gameCode.onUnload = (GameOnUnloadFunc*)GetProcAddress(gameCode.gameDLL, "onUnload");
-		gameCode.onExit   = (GameOnExitFunc*)GetProcAddress(gameCode.gameDLL, "onExit");
+		gameCode.updateAndRender =
+			(GameUpdateAndRenderFunc*)GetProcAddress(
+				gameCode.gameDLL, "gameUpdateAndRender");
+
+		gameCode.onLoad =
+			(GameOnLoadFunc*)GetProcAddress(
+				gameCode.gameDLL, "onLoad");
+
+		gameCode.onUnload =
+			(GameOnUnloadFunc*)GetProcAddress(
+				gameCode.gameDLL, "onUnload");
+
+		gameCode.onExit =
+			(GameOnExitFunc*)GetProcAddress(
+				gameCode.gameDLL, "onExit");
 
 		gameCode.isValid = (gameCode.updateAndRender);
 	}
@@ -438,18 +449,17 @@ int platformRunDirectoryWatchLoop(
 }
 
 
-PlatformApi& platformApi()
-{
-	assert(_platformApi);
-	return *_platformApi;
-}
-
-
-
 // NOT _WIN32
 #else
 
 #include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/resource.h>
+#include <sys/mman.h>
+#include <dlfcn.h>
+#include <ctime>
+
 #ifdef _SC_PRIORITY_SCHEDULING
 #include <sched.h>
 
@@ -468,6 +478,12 @@ void yieldThread()
 
 #endif
 
+void platformSleep(
+	unsigned long ms)
+{
+	usleep(ms * 1000);
+}
+
 void showErrorBox(const char* text, const char* caption)
 {
 	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, caption, text, nullptr);
@@ -475,92 +491,280 @@ void showErrorBox(const char* text, const char* caption)
 
 void setWindowIcon(WindowData *windowData)
 {
-	assert("use SDL here");
-	//	SDL_Surface* icon = IMG_Load(const char *file);
-	//	SDL_SetWindowIcon(window, icon);
-	//	SDL_FreeSurface(icon);
+	// TODO: enable this
+	//SDL_Surface* icon = IMG_Load(const char *file);
+	//SDL_SetWindowIcon(window, icon);
+	//SDL_FreeSurface(icon);
 }
 
-GameCode
-loadGameCode(
-	GameCode& gameCode)
-{	
-	struct stat fileStatus;
-	if (stat(gameDLLName, &fileStatus) == 0) {
-		gameCode.dllLastWriteTime = fileStatus.st_mtime;
-	}
-		
-	// 	while (State->TempDLLNumber < 1024)
-	// 	{
-	// 		Win32BuildEXEPathFileName(State, "game.dll", State->TempDLLNumber,
-	// 								  sizeof(tempDLLName), tempDLLName);
-			
-	// 		if (CopyFileA(gameDLLName, tempDLLName, FALSE)) {
-	// 			break;
-	// 		}
-	// 		else {
-	// 			++State->TempDLLNumber;
-	// 		}
-	// 	}
-
-	if (gameCode.dllLastWriteTime) {
-	//	gameCode.gameDLL = dlopen(gameDLLName, RTLD_LAZY);
-		gameCode.gameDLL = dlopen("game.so", RTLD_LAZY);
-		if (gameCode.gameDLL) {
-			gameCode.updateAndRender = (GameUpdateAndRender*)dlsym(gameCode.gameDLL, "gameUpdateAndRender");
-			
-			gameCode.isValid = (gameCode.updateAndRender);
-		}
-	}
-	
-	if (!gameCode.isValid) {
-		gameCode.updateAndRender = nullptr;
-	}
-	
-	return gameCode;
-}
-
-void
-unloadGameCode(GameCode& gameCode)
+time_t fileGetLastWriteTime(
+	const char *filename)
 {
-	if (gameCode.gameDLL) {
-		dlclose(gameCode.gameDLL);
-		gameCode.gameDLL = 0;
+	time_t lastWriteTime = time(nullptr);
+	struct stat fileStatus;
+	if (stat(filename, &fileStatus) == 0) {
+		lastWriteTime = fileStatus.st_mtime;
+	}
+
+	return lastWriteTime;
+}
+
+void unloadGameCode(
+	GameCode& gameCode)
+{
+	if (gameCode.gameModule) {
+		gameContext.gameCode.onUnload(
+			&gameContext.gameMemory,
+			_platformApi,
+			gameContext.app);
+
+		//dlclose(gameCode.gameModule);
+		SDL_UnloadObject(gameCode.gameModule);
+		gameCode.gameModule = 0;
 	}
 	
 	gameCode.isValid = false;
 	gameCode.updateAndRender = nullptr;
 }
 
+bool loadGameModule(
+	GameCode& gameCode,
+	const char* gameModulePath)
+{
+	//gameCode.gameModule = dlopen(gameModulePath, RTLD_LAZY);
+	gameCode.gameModule = SDL_LoadObject(gameModulePath);
+	if (gameCode.gameModule) {
+		//gameCode.updateAndRender = (GameUpdateAndRenderFunc*)dlsym(gameCode.gameModule, "gameUpdateAndRender");
+		//gameCode.onLoad   = (GameOnLoadFunc*)dlsym(gameCode.gameModule, "onLoad");
+		//gameCode.onUnload = (GameOnUnloadFunc*)dlsym(gameCode.gameModule, "onUnload");
+		//gameCode.onExit   = (GameOnExitFunc*)dlsym(gameCode.gameModule, "onExit");
+		gameCode.updateAndRender =
+			(GameUpdateAndRenderFunc*)SDL_LoadFunction(
+				gameCode.gameModule, "gameUpdateAndRender");
+
+		gameCode.onLoad =
+			(GameOnLoadFunc*)SDL_LoadFunction(
+				gameCode.gameModule, "onLoad");
+
+		gameCode.onUnload =
+			(GameOnUnloadFunc*)SDL_LoadFunction(
+				gameCode.gameModule, "onUnload");
+
+		gameCode.onExit =
+			(GameOnExitFunc*)SDL_LoadFunction(
+				gameCode.gameModule, "onExit");
+
+		gameCode.isValid = (gameCode.updateAndRender);
+	}
+	return gameCode.isValid;
+}
+
+bool loadGameCode(
+	GameCode& gameCode)
+{
+	bool loaded = false;
+	const char *gameModulePath    = "game.so";
+	const char *newGameModulePath = "./build/game.so";
+	const char *lockFilePath      = "./build/lock.tmp";
+	
+	// load on startup
+	if (!gameCode.isValid) {
+		if (loadGameModule(gameCode, gameModulePath)) {
+			gameCode.moduleLastWriteTime = fileGetLastWriteTime(gameModulePath);
+			loaded = true;
+		}
+	}
+	// try reload from new .so in build directory
+	else {
+		time_t lockFileTime = fileGetLastWriteTime(lockFilePath);
+		if (lockFileTime == time(nullptr))
+		{
+			time_t newModuleFileTime = fileGetLastWriteTime(newGameModulePath);
+
+			if (newModuleFileTime != time(nullptr)
+				&& difftime(newModuleFileTime, gameCode.moduleLastWriteTime) != 0)
+			{
+				logger::info("new game.so detected...");
+				unloadGameCode(gameCode);
+				
+				execl("/bin/cp", "-p", newGameModulePath, gameModulePath, (char*)0);
+
+				if (loadGameModule(gameCode, gameModulePath)) {
+					gameCode.moduleLastWriteTime = newModuleFileTime;
+					loaded = true;
+				}
+
+				logger::info(gameCode.isValid ? "loaded!" : "ERROR LOADING");
+			}
+		}
+	}
+
+	if (!gameCode.isValid) {
+		gameCode.updateAndRender = nullptr;
+		gameCode.onLoad = nullptr;
+		gameCode.onUnload = nullptr;
+		gameCode.onExit = nullptr;
+	}
+
+	return loaded;
+}
+
+void updateMemoryStatus(
+	SystemInfo& info)
+{
+	FILE* f = fopen("/proc/meminfo", "r");
+	if (f == nullptr) {
+		showErrorBox("Cannot access /proc/meminfo", "Error");
+		exit(EXIT_FAILURE);
+	}
+
+	const char* MEM_TOTAL_PREFIX  = "MemTotal:";
+	const char* MEM_FREE_PREFIX   = "MemFree:";
+	const char* MEM_CACHED_PREFIX = "Cached:";
+
+	info.availPhysBytes = 0;
+
+	char* linePtr = nullptr;
+	char lineBuf[256] = {};
+
+	while ((linePtr = fgets(lineBuf, sizeof(lineBuf), f)) != 0)
+	{
+		size_t value = 0;
+
+		if (sscanf(lineBuf, "%*s %lld kB", &value) != 1) {
+			continue;
+		}
+
+		if (strncmp(lineBuf, MEM_FREE_PREFIX, sizeof(MEM_FREE_PREFIX) - 1) == 0) {
+			info.availPhysBytes += (value * 1024);
+		}
+		else if (strncmp(lineBuf, MEM_CACHED_PREFIX, sizeof(MEM_CACHED_PREFIX) - 1) == 0) {
+			info.availPhysBytes += (value * 1024);
+		}
+	}
+
+	info.availVirtBytes = info.availPhysBytes;
+
+	fclose(f);
+}
+
 SystemInfo platformGetSystemInfo()
 {
 	SystemInfo info{};
-	/*SYSTEM_INFO si{};
-	GetSystemInfo(&si);
 
-	info.pageSize = si.dwPageSize;
-	info.allocationGranularity = si.dwAllocationGranularity;
+	info.pageSize = getpagesize();
+	info.allocationGranularity = info.pageSize;
 	
-	info.minimumApplicationAddress = si.lpMinimumApplicationAddress;
-	info.maximumApplicationAddress = si.lpMaximumApplicationAddress;
+	// get minimum mmap address
+	info.minimumApplicationAddress = 0;
+	FILE* f = fopen("/proc/sys/vm/mmap_min_addr", "r");
+	if (f == nullptr) {
+		showErrorBox("/proc/sys/vm/mmap_min_addr", "Error");
+		exit(EXIT_FAILURE);
+	}
+	char lineBuf[256] = {};
+	uintptr_t minAddr = 0;
+	if (fgets(lineBuf, sizeof(lineBuf), f) != 0) {
+		if (sscanf(lineBuf, "%lld", &minAddr) == 1) {
+			info.minimumApplicationAddress = (void*)minAddr;
+		}
+	}
+	fclose(f);
 	
-	info.activeProcessorMask = si.dwActiveProcessorMask;
-	info.logicalProcessorCount = si.dwNumberOfProcessors;
-	info.processorArchitecture = si.wProcessorArchitecture;
-	info.processorLevel = si.wProcessorLevel;
-	info.processorRevision = si.wProcessorRevision;
-	*/
-
+	// get max virtual address
+	rlimit addressSpace{};
+	if (getrlimit(RLIMIT_AS, &addressSpace) == 0) {
+		info.maximumApplicationAddress = (void*)((uintptr_t)addressSpace.rlim_cur + (uintptr_t)info.minimumApplicationAddress);
+	}
+	
+	info.activeProcessorMask = 0;
 	info.logicalProcessorCount = SDL_GetCPUCount();
+	info.processorArchitecture = 0;
+	info.processorLevel = 0;
+	info.processorRevision = 0;
+	
 	info.systemRAM = SDL_GetSystemRAM();
+	updateMemoryStatus(info);
 
-	// TODO: call IsProcessorFeaturePresent on features we need to check for
+	// TODO: get cpu features we need to check for
 
 	return info;
 }
 
+PlatformBlock* platformAllocate(
+	size_t minimumSize)
+{
+	assert(minimumSize < UINT_MAX); // we don't use 8 bytes to store size, no block should ever be larger than 4GB
 
+	size_t size = ((minimumSize / app.systemInfo.allocationGranularity) + 1) * app.systemInfo.allocationGranularity;
+	size_t minAllocSize = ((MEMORY_MIN_PLATFORM_ALLOC_SIZE / app.systemInfo.allocationGranularity) + 1) * app.systemInfo.allocationGranularity;
+	size = max(size, minAllocSize);
+	void* memory = mmap(
+					nullptr, // kernel chooses page-aligned address
+					size,    // length in bytes
+					PROT_READ | PROT_WRITE, // pages may be read and written
+					MAP_PRIVATE      // private copy-on-write mapping, not visible to other processes
+					| MAP_ANONYMOUS  // not backed by file, contents are initialized to zero
+					| MAP_NORESERVE, // do not reserve swap space for this mapping
+					-1, 0);
+	
+	// if we can't allocate memory, time to panic (for now)
+	if (memory == MAP_FAILED) {
+		// TODO: before exiting, we could try to detect and free up memory and retry the allocation
+		showErrorBox("Out of memory", "Error");
+		exit(EXIT_FAILURE);
+	}
 
+	PlatformBlock* block = (PlatformBlock*)memory;
+	block->memoryBlock.base = (void*)((uintptr_t)memory + sizeof(PlatformBlock));
+	block->memoryBlock.size = (u32)(size - sizeof(PlatformBlock));
+	block->next = &gameContext.platformMemory.sentinel;
+
+	SDL_LockMutex(gameContext.platformMemory.lock);
+	
+	block->prev = gameContext.platformMemory.sentinel.prev;
+	block->prev->next = block;
+	block->next->prev = block;
+
+	gameContext.platformMemory.totalSize += size;
+	++gameContext.platformMemory.numBlocks;
+
+	SDL_UnlockMutex(gameContext.platformMemory.lock);
+
+	return block;
+}
+
+void platformDeallocate(
+	PlatformBlock* block)
+{
+	SDL_LockMutex(gameContext.platformMemory.lock);
+
+	size_t size = block->memoryBlock.size + sizeof(PlatformBlock);
+	gameContext.platformMemory.totalSize -= size;
+	--gameContext.platformMemory.numBlocks;
+	
+	block->prev->next = block->next;
+	block->next->prev = block->prev;
+	
+	// check the integrity of the list
+	PlatformBlock& sentinel = gameContext.platformMemory.sentinel;
+	assert((gameContext.platformMemory.numBlocks > 0
+			&& sentinel.prev != &sentinel
+			&& sentinel.next == &sentinel
+			&& gameContext.platformMemory.totalSize > 0)
+		   ||
+		   (gameContext.platformMemory.numBlocks == 0
+			&& sentinel.prev == &sentinel
+			&& sentinel.next == &sentinel
+			&& gameContext.platformMemory.totalSize == 0));
+
+	SDL_UnlockMutex(gameContext.platformMemory.lock);
+	
+	int result = munmap(block, size);
+	assert(result == 0);
+}
+
+// END NOT WIN32
 #endif
 
 
@@ -648,8 +852,14 @@ PlatformApi createPlatformApi()
 	api.log = &logger::log;
 	api.allocate = &platformAllocate;
 	api.deallocate = &platformDeallocate;
-	api.findAllFiles = &platformFindAllFiles;
-	api.watchDirectory = &platformRunDirectoryWatchLoop;
+	api.findAllFiles = nullptr;//&platformFindAllFiles;
+	api.watchDirectory = nullptr;//&platformRunDirectoryWatchLoop;
 
 	return api;
+}
+
+PlatformApi& platformApi()
+{
+	assert(_platformApi);
+	return *_platformApi;
 }

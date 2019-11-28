@@ -5,18 +5,16 @@
 #include "swizzle.h"
 
 
-struct vec2
+union vec2
 {
-	union {
-		struct { r32 x, y; };
-		struct { r32 r, g; };
-		struct { r32 s, t; };
-		r32 E[2];
+	struct { r32 x, y; };
+	struct { r32 r, g; };
+	struct { r32 s, t; };
+	r32 E[2];
 
-		SWIZZLE_vec2(x, y)
-		SWIZZLE_vec2(r, g)
-		SWIZZLE_vec2(s, t)
-	};
+	SWIZZLE_vec2(x, y)
+	SWIZZLE_vec2(r, g)
+	SWIZZLE_vec2(s, t)
 
 	r32& operator[](size_t e) { assert(e < 2); return E[e]; }
 	r32  operator[](size_t e) const { assert(e < 2); return E[e]; }

@@ -940,7 +940,7 @@ r32 fBm(
 	}
 
 	r32 lv[4] = {};
-	memcpy_s(&lv, sizeof(lv), v, numDimensions * sizeof(r32));
+	_memcpy_s(&lv, sizeof(lv), v, numDimensions * sizeof(r32));
 
 	r32 amplitude = amplitudeStart;
 

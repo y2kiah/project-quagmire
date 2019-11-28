@@ -1,22 +1,23 @@
 #!/bin/sh
 
+# -Od or -O2 here
+# -v
 CommonCompilerFlags="-O2"
-CommonCompilerFlags="$CommonCompilerFlags -v -g -std=c++11"
-CommonCompilerFlags="$CommonCompilerFlags -I../vendor/SDL2 -I../vendor/glew/include -lSDL2 -lGL -lGLEW -L../vendor/glew/lib"
+CommonCompilerFlags="$CommonCompilerFlags -g -std=c++11 -fno-rtti -fext-numeric-literals"
+CommonCompilerFlags="$CommonCompilerFlags -I../vendor/SDL2 -I../vendor/glew/include"
 
 if ! [ -d ./build ]; then
     mkdir ./build
 fi
 cd ./build
 
-#rm *.pdb > NUL 2> NUL
+echo "waiting for pdb" > lock.tmp
+/bin/g++ $CommonCompilerFlags -fPIC -shared -rdynamic -nostartfiles -o game.so ../source/game.cpp  -lSDL2 -lGL
+rm lock.tmp
 
-# echo waiting for pdb > lock.tmp
-# cl %CommonCompilerFlags% -MTd -I..\iaca-win64\ ..\handmade\code\handmade.cpp ..\handmade\code\handmade_msvc.c -Fmhandmade.map -LD /link -incremental:no -opt:ref -PDB:handmade_%random%.pdb -EXPORT:GameGetSoundSamples -EXPORT:GameUpdateAndRender -EXPORT:DEBUGGameFrameEnd
-# del lock.tmp
-
-/bin/g++ $CommonCompilerFlags -o giggity.out ../source/main.cpp
+/bin/g++ $CommonCompilerFlags -o giggity.out ../source/main.cpp -lSDL2 -lGL -lGLEW -L../vendor/glew/lib
 
 cd ..
 
 cp ./build/giggity.out ./
+cp ./build/game.so ./

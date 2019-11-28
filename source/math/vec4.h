@@ -10,18 +10,16 @@
 #endif
 
 
-struct vec4
+union vec4
 {
-	union {
-		struct { r32 x, y, z, w; };
-		struct { r32 r, g, b, a; };
-		struct { r32 s, t, p, q; };
-		r32 E[4];
+	struct { r32 x, y, z, w; };
+	struct { r32 r, g, b, a; };
+	struct { r32 s, t, p, q; };
+	r32 E[4];
 
-		SWIZZLE_vec4(x, y, z, w)
-		SWIZZLE_vec4(r, g, b, a)
-		SWIZZLE_vec4(s, t, p, q)
-	};
+	SWIZZLE_vec4(x, y, z, w)
+	SWIZZLE_vec4(r, g, b, a)
+	SWIZZLE_vec4(s, t, p, q)
 
 	r32& operator[](size_t e) { assert(e < 4); return E[e]; }
 	r32  operator[](size_t e) const { assert(e < 4); return E[e]; }

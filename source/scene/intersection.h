@@ -1,9 +1,9 @@
 #ifndef _INTERSECTION_H
 #define _INTERSECTION_H
 
-#include "utility/types.h"
-#include "utility/intrinsics.h"
-#include "scene/geometry.h"
+#include "../utility/types.h"
+#include "../utility/intrinsics.h"
+#include "../scene/geometry.h"
 
 
 enum IntersectionResult : u8

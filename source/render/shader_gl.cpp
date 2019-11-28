@@ -219,7 +219,7 @@ namespace render
 		// read the program binary
 		FILE* inFile = nullptr;
 		
-		if (fopen_s(&inFile, filename, "rb")) {
+		if (_fopen_s(&inFile, filename, "rb")) {
 			fseek(inFile, 0, SEEK_END);
 			auto size = ftell(inFile);
 			auto dataPtr = std::make_unique<unsigned char[]>(size);
@@ -250,7 +250,7 @@ namespace render
 
 		// write the program binary file
 		FILE* outFile = nullptr;
-		if (!fopen_s(&outFile, filename, "wb")) {
+		if (!_fopen_s(&outFile, filename, "wb")) {
 			return false;
 		}
 

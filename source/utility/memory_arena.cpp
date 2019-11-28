@@ -1,5 +1,5 @@
 #include "memory.h"
-#include "platform/platform_api.h"
+#include "../platform/platform_api.h"
 
 
 MemoryBlock* pushBlock(

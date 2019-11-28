@@ -52,10 +52,13 @@ struct GameCode
 
 struct GameCode
 {
-	void*		gameDLL;
-	time_t		dllLastWriteTime;
+	void*		gameModule;
+	time_t		moduleLastWriteTime;
 
-	GameUpdateAndRender *updateAndRender;
+	GameUpdateAndRenderFunc*	updateAndRender;
+	GameOnLoadFunc*				onLoad;
+	GameOnUnloadFunc*			onUnload;
+	GameOnExitFunc*				onExit;
 	//game_get_sound_samples *getSoundSamples;
 
 	bool isValid;

@@ -2,7 +2,12 @@
 #define _INTRINSICS_H
 
 #include "types.h"
+#ifdef _MSC_VER
 #include <intrin.h>
+#else
+#include <x86intrin.h>
+#endif
+
 
 
 inline __m128 simd_set(float x, float y, float z, float w)

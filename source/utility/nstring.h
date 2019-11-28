@@ -32,9 +32,9 @@
 struct pstring {
 	typedef u32 size_type;
 
-	u32 sizeB = 0;		// current byte length of c_str, NOT including null terminating character
-	u32 capacity = 0;	// capacity of c_str buffer, including null terminating character
-	char* c_str = nullptr;
+	u32 sizeB;		// current byte length of c_str, NOT including null terminating character
+	u32 capacity;	// capacity of c_str buffer, including null terminating character
+	char* c_str;
 
 	STRING_ASSIGN_FROM_CONST_CHAR(pstring)
 };
@@ -162,7 +162,7 @@ inline pstring& operator+=(const char*s, pstring& pd) {
 	size_t slen = strlen(s);
 	assert(pd.sizeB + slen < pd.capacity && "string append buffer overflow");
 	memmove(pd.c_str+slen, pd.c_str, pd.sizeB+1);
-	memcpy_s(pd.c_str, pd.capacity, s, slen);
+	_memcpy_s(pd.c_str, pd.capacity, s, slen);
 	pd.sizeB += (u32)slen;
 	return pd;
 }
@@ -170,14 +170,14 @@ inline pstring& operator+=(const char*s, pstring& pd) {
 inline pstring& operator+=(pstring& pd, const char*s) {
 	size_t slen = strlen(s);
 	assert(pd.sizeB + slen < pd.capacity && "string append buffer overflow");
-	memcpy_s(pd.c_str+pd.sizeB, pd.capacity-pd.sizeB, s, slen+1);
+	_memcpy_s(pd.c_str+pd.sizeB, pd.capacity-pd.sizeB, s, slen+1);
 	pd.sizeB += (u32)slen;
 	return pd;
 }
 
 inline pstring& operator+=(pstring& pd, pstring& ps) {
 	assert(pd.sizeB + ps.sizeB < pd.capacity && "string append buffer overflow");
-	memcpy_s(pd.c_str+pd.sizeB, pd.capacity-pd.sizeB, ps.c_str, ps.sizeB+1);
+	_memcpy_s(pd.c_str+pd.sizeB, pd.capacity-pd.sizeB, ps.c_str, ps.sizeB+1);
 	pd.sizeB += ps.sizeB;
 	return pd;
 }

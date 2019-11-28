@@ -578,7 +578,7 @@ namespace render
 		modelData = std::make_unique<unsigned char[]>(totalSize);
 
 		// copy the header into the modelData buffer (this is how it would be using the resource loader)
-		memcpy_s(modelData.get(), headerSize, &header, headerSize);
+		_memcpy_s(modelData.get(), headerSize, &header, headerSize);
 
 		// read the model data buffer
 		in.read((char*)(modelData.get() + headerSize), header.bufferSize);

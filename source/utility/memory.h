@@ -3,7 +3,7 @@
 
 #include <SDL_mutex.h>
 #include <SDL_thread.h>
-#include "utility/common.h"
+#include "common.h"
 
 struct MemoryArena;
 struct MemoryHeap;

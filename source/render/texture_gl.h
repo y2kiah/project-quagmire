@@ -1,10 +1,10 @@
 #ifndef _TEXTURE_GL_H
 #define _TEXTURE_GL_H
 
-#include "utility/common.h"
-#include "utility/sparse_handle_map_16.h"
-#include "asset/asset.h"
-#include "render/dds.h"
+#include "../utility/common.h"
+#include "../utility/sparse_handle_map_16.h"
+#include "../asset/asset.h"
+#include "dds.h"
 
 
 typedef h32 TextureId;

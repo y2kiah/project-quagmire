@@ -5,18 +5,16 @@
 #include "swizzle.h"
 
 
-struct dvec2
+union dvec2
 {
-	union {
-		struct { r64 x, y; };
-		struct { r64 r, g; };
-		struct { r64 s, t; };
-		r64 E[2];
+	struct { r64 x, y; };
+	struct { r64 r, g; };
+	struct { r64 s, t; };
+	r64 E[2];
 
-		SWIZZLE_dvec2(x, y)
-		SWIZZLE_dvec2(r, g)
-		SWIZZLE_dvec2(s, t)
-	};
+	SWIZZLE_dvec2(x, y)
+	SWIZZLE_dvec2(r, g)
+	SWIZZLE_dvec2(s, t)
 
 	r64& operator[](size_t e) { assert(e < 2); return E[e]; }
 	r64  operator[](size_t e) const { assert(e < 2); return E[e]; }

@@ -30,14 +30,19 @@
 
 
 // Alignment macros, use only with pow2 alignments
+#ifdef _MSC_VER
 #define is_aligned(addr, bytes)     (((uintptr_t)(const void *)(addr)) % (bytes) == 0)
+#else
+#define is_aligned(addr, bytes)     (((uintptr_t)(addr)) % (bytes) == 0)
+#endif
 
 #define _align_mask(addr, mask)     (((uintptr_t)(addr)+(mask))&~(mask))
 #define _align(addr, bytes)          _align_mask(addr,(bytes)-1)
 
 // static assert macro for checking struct size to a base alignment when packed in an array
-#define static_assert_aligned_size(Type,bytes)	static_assert(sizeof(Type) % (bytes) == 0,\
-                                                              #Type " size is not a multiple of " xstr(bytes))
+#define static_assert_aligned_size(Type,bytes) \
+	static_assert(sizeof(Type) % (bytes) == 0, \
+                  #Type " size is not a multiple of " xstr(bytes))
 
 // size in bytes macros
 #define kilobytes(v)    v*1024
@@ -98,12 +103,17 @@ inline r64 max(r64 a, r64 b) { return (a > b ? a : b); }
     #define _strncpy_s(dest,destsz,src,count)			strncpy_s(dest,destsz,src,count)
     #define _strcat_s(dest,destsz,src)					strcat_s(dest,destsz,src)
 	#define _vsnprintf_s(dest,destsz,count,fmt,valist)	vsnprintf_s(dest,destsz,count,fmt,valist)
+	#define _memcpy_s(dest,destsz,src,count)			memcpy_s(dest,destsz,src,count)
+	#define _fopen_s(pFile,filename,mode)				fopen_s(pFile,filename,mode)
 #else
+	#define _TRUNCATE									0xFFFFFFFF
     #define _strcpy_s(dest,destsz,src)					strcpy(dest,src)
-    #define _strncpy_s(dest,destsz,src,count)			strncpy(dest,src,min(destsz,count))
+    #define _strncpy_s(dest,destsz,src,count)			strncpy((dest),(src),min((u64)(destsz),(u64)(count)))
     #define _strcat_s(dest,destsz,src)					strcat(dest,src)
-	#define _vsnprintf_s(dest,destsz,count,fmt,valist)	vsnprintf(dest,count,fmt,valist)
+	#define _vsnprintf_s(dest,destsz,count,fmt,valist)	vsnprintf(dest,min((u64)destsz,(u64)count),fmt,valist)
 	#define _vscprintf(fmt,valist)						vsnprintf(nullptr,0,fmt,valist)
+	#define _memcpy_s(dest,destsz,src,count)			memcpy(dest,src,count)
+	#define _fopen_s(pFile,filename,mode)				*pFile=fopen(filename,mode)
 #endif
 
 #endif

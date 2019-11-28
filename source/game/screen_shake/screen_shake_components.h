@@ -1,8 +1,8 @@
 #ifndef _SCREEN_SHAKE_COMPONENTS_H
 #define _SCREEN_SHAKE_COMPONENTS_H
 
-#include "scene/scene.h"
-#include "scene/entity.h"
+#include "../../scene/scene.h"
+#include "../../scene/entity.h"
 
 
 /**

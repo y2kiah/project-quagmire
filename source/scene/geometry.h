@@ -1,8 +1,8 @@
 #ifndef _GEOMETRY_H
 #define _GEOMETRY_H
 
-#include "utility/types.h"
-#include "math/conversions.h"
+#include "../utility/types.h"
+#include "../math/conversions.h"
 
 
 // Sphere
@@ -29,7 +29,7 @@ struct Plane {
 	// put another way, n*p - d = 0  where p is any point on the plane
 	union {
 		struct { r32 nx, ny, nz, d; };
-		struct { vec3 n; r32 d; };
+		struct { vec3 n; r32 _d; };
 	};
 };
 

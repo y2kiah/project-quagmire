@@ -4,18 +4,16 @@
 #include "dvec3.h"
 
 
-struct dvec4
+union dvec4
 {
-	union {
-		struct { r64 x, y, z, w; };
-		struct { r64 r, g, b, a; };
-		struct { r64 s, t, p, q; };
-		r64 E[4];
+	struct { r64 x, y, z, w; };
+	struct { r64 r, g, b, a; };
+	struct { r64 s, t, p, q; };
+	r64 E[4];
 
-		SWIZZLE_dvec4(x, y, z, w)
-		SWIZZLE_dvec4(r, g, b, a)
-		SWIZZLE_dvec4(s, t, p, q)
-	};
+	SWIZZLE_dvec4(x, y, z, w)
+	SWIZZLE_dvec4(r, g, b, a)
+	SWIZZLE_dvec4(s, t, p, q)
 
 	r64& operator[](size_t e) { assert(e < 4); return E[e]; }
 	r64  operator[](size_t e) const { assert(e < 4); return E[e]; }

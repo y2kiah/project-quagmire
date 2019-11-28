@@ -1,11 +1,11 @@
 #ifndef _SCENE_H_
 #define _SCENE_H_
 
-#include "capacity.h"
-#include "utility/common.h"
-#include "math/math_core.h"
-#include "math/vec3.h"
-#include "utility/dense_handle_map_16.h"
+#include "../capacity.h"
+#include "../utility/common.h"
+#include "../math/math_core.h"
+#include "../math/vec3.h"
+#include "../utility/dense_handle_map_16.h"
 #include "geometry.h"
 #include "entity.h"
 #include "scene_components.h"

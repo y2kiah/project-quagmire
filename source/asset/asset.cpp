@@ -1,6 +1,6 @@
 #include "asset.h"
-#include "platform/platform_api.h"
-#include "utility/hash.h"
+#include "../platform/platform_api.h"
+#include "../utility/hash.h"
 #include <cstdio>
 
 
@@ -85,7 +85,7 @@ AssetPack* buildAssetPackFromDirectory(
 	u16 n = (u16)ffr.numFiles;
 	FILE* pakFile = nullptr;
 	const char* pakFilename = "assets/test.pak";
-	fopen_s(&pakFile, pakFilename, "w+b");
+	_fopen_s(&pakFile, pakFilename, "w+b");
 	
 	if (n > 0 && pakFile)
 	{
@@ -167,7 +167,7 @@ AssetPack* buildAssetPackFromDirectory(
 			assert(pack.assetInfo[index[i].originalIndex].offset == offsetCheck);
 
 			FILE* fAsset = nullptr;
-			fopen_s(&fAsset, ca.pathString, "rb");
+			_fopen_s(&fAsset, ca.pathString, "rb");
 			if (fAsset) {
 				u32 b = ca.sizeBytes;
 				while (b > 0) {
@@ -215,7 +215,7 @@ h32 openAssetPackFile(
 
 	loadedPack.filename = filename;
 
-	fopen_s(&loadedPack.pakFile, filename, "rb");
+	_fopen_s(&loadedPack.pakFile, filename, "rb");
 	
 	if (loadedPack.pakFile)
 	{
@@ -517,7 +517,7 @@ void maintainAssetCache(
 	size_t availBytes = min(info.availPhysBytes, info.availVirtBytes)
 						+ store.assetHeap.totalSize;
 	
-	size_t usableBytes = (availBytes > margin ? availBytes - margin : 0Ui64);
+	size_t usableBytes = (availBytes > margin ? availBytes - margin : 0ULL);
 	// don't let usableBytes go below the minimum initial heap size
 	usableBytes = max(usableBytes, (size_t)INIT_MIN_ASSETHEAP_BLOCK_MEGABYTES);
 
