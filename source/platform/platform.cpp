@@ -563,7 +563,7 @@ bool loadGameCode(
 	GameCode& gameCode)
 {
 	bool loaded = false;
-	const char *gameModulePath    = "game.so";
+	const char *gameModulePath    = "./game.so";
 	const char *newGameModulePath = "./build/game.so";
 	const char *lockFilePath      = "./build/lock.tmp";
 	
@@ -750,7 +750,7 @@ void platformDeallocate(
 	PlatformBlock& sentinel = gameContext.platformMemory.sentinel;
 	assert((gameContext.platformMemory.numBlocks > 0
 			&& sentinel.prev != &sentinel
-			&& sentinel.next == &sentinel
+			&& sentinel.next != &sentinel
 			&& gameContext.platformMemory.totalSize > 0)
 		   ||
 		   (gameContext.platformMemory.numBlocks == 0
@@ -768,11 +768,13 @@ void platformDeallocate(
 #endif
 
 
-void initGameContext()
+bool initGameContext()
 {
 	gameContext.app = &app;
 	
-	loadGameCode(gameContext.gameCode);
+	if (!loadGameCode(gameContext.gameCode)) {
+		return false;
+	}
 	
 	// Note: not asserting on full for the event concurrent queues, if the game stops processing
 	// events, the queue will fill up quickly. We will simply ignore inputs in that case.
@@ -795,6 +797,8 @@ void initGameContext()
 	// contained within, to prevent possible false sharing
 	assert(is_aligned(&gameContext.input.eventsQueue, 64) && "ConcurrentQueue not stored on a cache line boundary");
 	assert(is_aligned(&gameContext.input.motionEventsQueue, 64) && "ConcurrentQueue not stored on a cache line boundary");
+	
+	return true;
 }
 
 

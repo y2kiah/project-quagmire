@@ -361,10 +361,12 @@ void shrinkHeap(
     MemoryBlock* block = heap.firstBlock;
 	while (block)
 	{
+		MemoryBlock* next = block->next;
 		if (block->numAllocs == 1 && block->used == sizeof(HeapAllocation))
 		{
 			removeHeapBlock(block);
 		}
+		block = next;
 	}
 }
 

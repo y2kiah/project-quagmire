@@ -2,7 +2,7 @@
 #define _NSTRING_H
 // TODO: keep calling this nstring?
 
-#include "types.h"
+#include "common.h"
 
 #define STRING_CONSTRUCTORS(name) \
 	name() {}\

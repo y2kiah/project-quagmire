@@ -57,7 +57,8 @@ struct MemoryArena {
 
 	size_t			totalSize;		// total available capacity in all blocks (not including space for PlatformBlock headers)
 	u32				numBlocks;
-	u32				threadID;		// threadID is tracked to later assert the threadID matches on allocations
+	u32				_padding;
+	u64				threadID;		// threadID is tracked to later assert the threadID matches on allocations
 	// TODO: store debug flags like readonly, over/underflow protection, etc.?
 };
 
@@ -95,7 +96,7 @@ struct MemoryHeap {
 	u32				numBlocks : 31;
 	u32				freeTable : 1;
 
-	u32				threadID;		// threadID is tracked to later assert the threadID matches on allocations
+	u64				threadID;		// threadID is tracked to later assert the threadID matches on allocations
 };
 
 

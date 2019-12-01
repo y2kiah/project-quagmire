@@ -110,6 +110,9 @@ namespace logger {
 	 */
     void log(Category c, Priority p, const char* s, va_list args)
 	{
+		va_list argsCopy;
+		va_copy(argsCopy, args);
+
 		if (c == _Category_Default) { c = defaultCategory; }
 		if (p == _Priority_Default) { p = categoryDefaultPriority[c]; }
 
@@ -118,7 +121,7 @@ namespace logger {
 			// write formatted string
 			int len = _vscprintf(s, args);
 			LogMessage msg = { c, p, id++, {}, {} };
-			_vsnprintf_s(msg.message.c_str, 254, _TRUNCATE, s, args);
+			_vsnprintf_s(msg.message.c_str, 254, _TRUNCATE, s, argsCopy);
 			msg.message.sizeB = (u8)min(len, 254);
 			if (loggingMode == Mode_Deferred_Thread_Safe) {
 				if (!messageQueue.push(&msg)) {
@@ -130,6 +133,7 @@ namespace logger {
 				write(msg);
 			}
 		}
+		va_end(argsCopy);
 	}
 
 	static_assert(Category_Application == (u8)SDL_LOG_CATEGORY_APPLICATION
