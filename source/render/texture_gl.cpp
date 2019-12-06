@@ -370,7 +370,7 @@ namespace render
 		AssetHnd hnd,
 		Asset* asset)
 	{
-		DDSImage dds;
+		//DDSImage dds;
 		//dds.loadFromMemory(asset->assetData, true, sRGB)
 
 	}

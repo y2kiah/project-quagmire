@@ -13,7 +13,7 @@ del *.pdb > NUL 2> NUL
 
 echo waiting for pdb > lock.tmp
 rem  -EXPORT:GameGetSoundSamples -EXPORT:GameUpdateAndRender -EXPORT:DEBUGGameFrameEnd
-cl %CommonCompilerFlags% ../source/game.cpp -Fmgame.map -LD -link -out:game.dll -pdb:game_%random%.pdb %CommonLinkerFlags% user32.lib gdi32.lib SDL2.lib opengl32.lib -libpath:../vendor/SDL2-2.0.9/VisualC/x64/Release
+cl %CommonCompilerFlags% ../source/game.cpp -Fmgame.map -LD -link -out:game.dll -pdb:game_%random%.pdb %CommonLinkerFlags% user32.lib gdi32.lib SDL2.lib glew32s.lib opengl32.lib -libpath:../vendor/SDL2-2.0.9/VisualC/x64/Release -libpath:../vendor/glew-2.1.0/lib/Release/x64
 del lock.tmp
 
 cl %CommonCompilerFlags% ../source/main.cpp -Fmgiggity.map -link -out:giggity.exe -pdb:giggity_%random%.pdb -subsystem:windows %CommonLinkerFlags% user32.lib gdi32.lib winmm.lib kernel32.lib SDL2.lib SDL2main.lib glew32s.lib opengl32.lib -libpath:../vendor/SDL2-2.0.9/VisualC/x64/Release -libpath:../vendor/glew-2.1.0/lib/Release/x64
