@@ -110,10 +110,32 @@ inline r64 max(r64 a, r64 b) { return (a > b ? a : b); }
     #define _strcpy_s(dest,destsz,src)					strcpy(dest,src)
     #define _strncpy_s(dest,destsz,src,count)			strncpy((dest),(src),min((u64)(destsz),(u64)(count)))
     #define _strcat_s(dest,destsz,src)					strcat(dest,src)
-	#define _vsnprintf_s(dest,destsz,count,fmt,valist)	vsnprintf(dest,min((u64)destsz,(u64)count),fmt,valist)
 	#define _vscprintf(fmt,valist)						vsnprintf(nullptr,0,fmt,valist)
 	#define _memcpy_s(dest,destsz,src,count)			memcpy(dest,src,count)
 	#define _fopen_s(pFile,filename,mode)				*pFile=fopen(filename,mode)
+
+	#include <cstdarg>
+	#include <cstdio>
+
+	int _vsnprintf_s(
+		char* buffer,
+		size_t sizeOfBuffer,
+		size_t count,
+		const char* format,
+   		va_list args)
+	{
+		if ((count != _TRUNCATE) && (count < sizeOfBuffer)) {
+			sizeOfBuffer = count;
+		}
+
+		int result = vsnprintf(buffer, sizeOfBuffer, format, args);
+
+		if ((0 <= result) && (sizeOfBuffer <= (size_t)result)) {
+			result = -1;
+		}
+
+		return result;
+	}
 #endif
 
 #endif

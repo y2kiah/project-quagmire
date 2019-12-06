@@ -330,13 +330,12 @@ int main(int argc, char *argv[])
 	if (!initApplication() ||
 		!initWindow(PROGRAM_NAME) ||
 		!input::initPlatformInput() ||
-		!initOpenGL())
+		!initOpenGL() ||
+		!initGameContext())
 	{
 		quitApplication();
 		return 1;
 	}
-
-	initGameContext();
 
 	// run tests at startup
 	TemporaryMemory tkn = beginTemporaryMemory(platformMemory);
